@@ -1,0 +1,15 @@
+node_modules/
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+!backend/.env.example
+dist/
+build/
+logs/
+*.log
+*.err.log
+*.out.log
+coverage/
+.vite/
+.vscode/

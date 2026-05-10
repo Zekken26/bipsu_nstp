@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  INSTRUCTOR
+  STUDENT
+}
+
+enum NSTPComponentType {
+  CWTS
+  LTS
+  MTS_ARMY
+  MTS_NAVY
+}
+
+enum EnrollmentStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  DROPPED
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  GRADED
+  RETURNED
+}
+
+model User {
+  id                String             @id @default(cuid())
+  name              String
+  email             String             @unique
+  passwordHash      String
+  role              UserRole           @default(STUDENT)
+  studentProfile    StudentProfile?
+  instructorProfile InstructorProfile?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([role])
+}
+
+model StudentProfile {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  studentNumber  String       @unique
+  yearLevel      String?
+  course         String?
+  sectionId      String?
+  componentId    String?
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  section        Section?     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  component      NSTPComponent? @relation(fields: [componentId], references: [id], onDelete: SetNull)
+  enrollments    Enrollment[]
+  submissions    Submission[]
+  grades         Grade[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([sectionId])
+  @@index([componentId])
+}
+
+model InstructorProfile {
+  id             String     @id @default(cuid())
+  userId         String     @unique
+  employeeNumber String?    @unique
+  department     String?
+  title          String?
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sections       Section[]
+  modules        Module[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model Section {
+  id            String              @id @default(cuid())
+  code          String              @unique
+  name          String
+  schoolYear    String
+  semester      String
+  componentId   String
+  instructorId  String?
+  component     NSTPComponent       @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  instructor    InstructorProfile?  @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  students      StudentProfile[]
+  enrollments   Enrollment[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([componentId])
+  @@index([instructorId])
+}
+
+model NSTPComponent {
+  id          String            @id @default(cuid())
+  type        NSTPComponentType @unique
+  name        String
+  description String?
+  sections    Section[]
+  modules     Module[]
+  students    StudentProfile[]
+  enrollments Enrollment[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model Module {
+  id           String             @id @default(cuid())
+  title        String
+  description  String?
+  order        Int                @default(0)
+  hours        Int?
+  isPublished  Boolean            @default(false)
+  componentId  String?
+  instructorId String?
+  component    NSTPComponent?     @relation(fields: [componentId], references: [id], onDelete: SetNull)
+  instructor   InstructorProfile? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  lessons      Lesson[]
+  quizzes      Quiz[]
+  assignments  Assignment[]
+  exams        Exam[]
+  grades       Grade[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([componentId])
+  @@index([instructorId])
+}
+
+model Lesson {
+  id          String       @id @default(cuid())
+  moduleId    String
+  title       String
+  content     String?
+  order       Int          @default(0)
+  module      Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([moduleId])
+}
+
+model Quiz {
+  id          String       @id @default(cuid())
+  moduleId    String
+  title       String
+  instructions String?
+  totalPoints Int          @default(0)
+  module      Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  submissions Submission[]
+  grades      Grade[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([moduleId])
+}
+
+model Question {
+  id          String    @id @default(cuid())
+  quizId      String?
+  examId      String?
+  prompt      String
+  options     Json?
+  answer      Json?
+  points      Int       @default(1)
+  quiz        Quiz?     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  exam        Exam?     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([quizId])
+  @@index([examId])
+}
+
+model Assignment {
+  id          String       @id @default(cuid())
+  moduleId    String
+  title       String
+  instructions String?
+  dueDate     DateTime?
+  totalPoints Int          @default(100)
+  module      Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+  grades      Grade[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([moduleId])
+}
+
+model Exam {
+  id          String       @id @default(cuid())
+  moduleId    String?
+  title       String
+  instructions String?
+  totalPoints Int          @default(100)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  module      Module?      @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  questions   Question[]
+  submissions Submission[]
+  grades      Grade[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([moduleId])
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  studentId    String
+  lessonId     String?
+  quizId       String?
+  assignmentId String?
+  examId       String?
+  content      Json?
+  score        Float?
+  status       SubmissionStatus @default(SUBMITTED)
+  submittedAt  DateTime         @default(now())
+  gradedAt     DateTime?
+  student      StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lesson       Lesson?          @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  quiz         Quiz?            @relation(fields: [quizId], references: [id], onDelete: SetNull)
+  assignment   Assignment?      @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  exam         Exam?            @relation(fields: [examId], references: [id], onDelete: SetNull)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([studentId])
+  @@index([lessonId])
+  @@index([quizId])
+  @@index([assignmentId])
+  @@index([examId])
+}
+
+model Enrollment {
+  id          String           @id @default(cuid())
+  studentId   String
+  componentId String
+  sectionId   String?
+  status      EnrollmentStatus @default(PENDING)
+  enrolledAt  DateTime         @default(now())
+  student     StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  component   NSTPComponent    @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  section     Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([studentId, componentId, sectionId])
+  @@index([componentId])
+  @@index([sectionId])
+}
+
+model Grade {
+  id           String          @id @default(cuid())
+  studentId    String
+  moduleId     String?
+  quizId       String?
+  assignmentId String?
+  examId       String?
+  score        Float
+  remarks      String?
+  isReleased   Boolean         @default(false)
+  student      StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  module       Module?         @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  quiz         Quiz?           @relation(fields: [quizId], references: [id], onDelete: SetNull)
+  assignment   Assignment?     @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  exam         Exam?           @relation(fields: [examId], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([studentId])
+  @@index([moduleId])
+  @@index([quizId])
+  @@index([assignmentId])
+  @@index([examId])
+}

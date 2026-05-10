@@ -1,0 +1,16 @@
+export type {
+  BiliranMunicipality,
+  ComponentApplicationState,
+  NstpAccount,
+  NstpAssessment,
+  NstpComponent,
+  NstpGradeRecord,
+  NstpModule,
+  NstpModuleSection,
+  NstpQuestion,
+  NstpRole,
+  NstpStudent,
+  NstpTrainingGroup,
+  PendingStudentRegistration,
+  QualifyingExamResult,
+} from '../data/nstpData';

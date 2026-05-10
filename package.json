@@ -1,0 +1,17 @@
+{
+  "name": "nstp-final-main",
+  "private": true,
+  "version": "1.0.0",
+  "description": "NSTP Management System monorepo workspace",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "backend:dev": "npm run dev --workspace backend",
+    "frontend:dev": "npm run dev --workspace frontend",
+    "frontend:build": "npm run build --workspace frontend",
+    "prisma:migrate": "npm run prisma:migrate --workspace backend",
+    "prisma:studio": "npm run prisma:studio --workspace backend"
+  }
+}
