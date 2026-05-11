@@ -49,15 +49,17 @@ export default function RoleShell({
   return (
     <div className="min-h-screen bg-[#eef4fb] text-slate-900 dark:bg-[#0b1426] dark:text-slate-100">
       <div className="min-h-screen flex flex-col lg:flex-row p-2 md:p-3 gap-2 md:gap-3">
-        <aside className="lg:w-80 xl:w-88 border border-slate-200/80 bg-white/85 backdrop-blur-xl p-3 md:p-4 dark:border-slate-700 dark:bg-slate-950/75 rounded-xl overflow-hidden">
+        <aside className="lg:w-80 xl:w-88 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/75 md:p-4">
           <div className="flex items-center justify-between mb-4 gap-3">
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 overflow-hidden rounded-2xl border border-blue-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                <img src="/bipsu-logo.svg" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
+                <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
               </div>
               <div>
-                <h1 className="text-lg font-bold tracking-tight dark:text-slate-100">NSTP Command Center</h1>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300">{user.role}</p>
+                <h1 className="text-lg font-bold tracking-tight dark:text-slate-100">BiPSU NSTP Portal</h1>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300">
+                  {user.role === 'admin' ? 'Admin Portal' : user.role === 'facilitator' ? 'Facilitator Portal' : user.role === 'student' ? 'Student Portal' : 'NSTP Management System'}
+                </p>
               </div>
             </div>
             <button
@@ -109,7 +111,7 @@ export default function RoleShell({
 
         <main className="flex-1 min-h-0 overflow-hidden">
           <div className="size-full rounded-xl border border-slate-200/80 bg-white/75 shadow-[0_20px_60px_-32px_rgba(15,23,42,0.35)] overflow-hidden dark:border-slate-700 dark:bg-slate-950/70 dark:shadow-[0_20px_60px_-32px_rgba(2,6,23,0.8)]">
-            <div className="px-4 md:px-6 py-4 border-b border-slate-200/80 bg-gradient-to-r from-white to-blue-50/60 flex flex-col md:flex-row md:items-center md:justify-between gap-3 dark:border-slate-700 dark:from-slate-950 dark:to-slate-900">
+            <div className="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900 md:flex-row md:items-center md:justify-between md:px-6">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] font-semibold text-blue-700 dark:text-blue-300">{eyebrow}</p>
                 <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-100">{title}</h2>

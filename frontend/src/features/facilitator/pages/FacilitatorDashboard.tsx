@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
+  Menu,
   Moon,
   Search,
   Settings,
@@ -57,11 +58,14 @@ export default function FacilitatorDashboard({
   user,
   onLogout,
   onNavigate,
+  embedded = false,
 }: {
   user: any;
   onLogout?: () => void;
   onNavigate?: (target: string) => void;
+  embedded?: boolean;
 }) {
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [lectures, setLectures] = useState<FacilitatorLecture[]>([]);
   const [students, setStudents] = useState<NstpStudent[]>([]);
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingStudentRegistration[]>([]);
@@ -228,7 +232,7 @@ export default function FacilitatorDashboard({
       label: 'Students',
       items: [
         { label: 'My Students', icon: Users, active: false, badge: null, target: 'grade-book' },
-        { label: 'Enrollment Requests', icon: UserCheck, active: false, badge: scopedPending.length || null, target: 'enrollment-requests' },
+        { label: 'Student Approvals', icon: UserCheck, active: false, badge: scopedPending.length || null, target: 'enrollment-requests' },
         { label: 'Attendance', icon: CalendarCheck, active: false, badge: null, target: 'class-overview' },
         { label: 'Grades', icon: ClipboardList, active: false, badge: null, target: 'grade-book' },
       ],
@@ -245,7 +249,7 @@ export default function FacilitatorDashboard({
       label: 'Reports',
       items: [
         { label: 'Grade Book', icon: ClipboardList, active: false, badge: null, target: 'grade-book' },
-        { label: 'Analytics', icon: BarChart3, active: false, badge: null, target: 'facilitator-analytics' },
+        { label: 'Reports', icon: BarChart3, active: false, badge: null, target: 'facilitator-analytics' },
       ],
     },
   ];
@@ -268,7 +272,7 @@ export default function FacilitatorDashboard({
       toneClass: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-200',
     },
     {
-      label: 'Enrollment Requests',
+      label: 'Student Approvals',
       value: scopedPending.length,
       detail: 'Pending approval',
       action: 'View requests',
@@ -294,70 +298,99 @@ export default function FacilitatorDashboard({
   ];
 
   return (
-    <div className="min-h-dvh bg-[#f4f8fd] text-slate-950 dark:bg-slate-950 dark:text-slate-100">
-      <div className="mx-auto grid min-h-dvh max-w-[1800px] gap-4 p-3 lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <aside className="rounded-[2rem] bg-[#031d49] p-4 text-white shadow-2xl shadow-blue-950/20 lg:sticky lg:top-3 lg:h-[calc(100dvh-1.5rem)] lg:overflow-y-auto">
-          <div className="flex items-center gap-3">
-            <div className="grid h-14 w-14 place-items-center rounded-2xl border border-white/20 bg-white/10 text-sm font-semibold">
-              NSTP
+    <div className={`${embedded ? 'min-h-0 bg-transparent' : 'min-h-dvh overflow-x-hidden bg-[#f4f8fd]'} text-slate-950 dark:bg-slate-950 dark:text-slate-100`}>
+      <div className={embedded ? 'min-h-0' : 'min-h-dvh'}>
+        {!embedded && mobileSidebarOpen && (
+          <button
+            type="button"
+            aria-label="Close facilitator navigation"
+            onClick={() => setMobileSidebarOpen(false)}
+            className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-sm lg:hidden"
+          />
+        )}
+        {!embedded && (
+        <aside className={`fixed left-0 top-0 z-50 flex h-screen w-[280px] max-w-[86vw] flex-col overflow-hidden rounded-r-[28px] bg-[#061E3D] text-white shadow-[0_20px_60px_rgba(0,0,0,0.25)] transition-transform duration-300 lg:translate-x-0 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          <div className="shrink-0 px-4 pb-4 pt-5">
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 place-items-center overflow-hidden rounded-xl border border-[#E5B73B]/50 bg-white p-1 text-sm font-semibold shadow-sm">
+                <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-base font-semibold leading-tight">BiPSU NSTP Portal</p>
+                <p className="truncate text-xs uppercase tracking-[0.18em] text-white/65">Facilitator Portal</p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-lg font-semibold leading-tight">NSTP Portal</p>
-              <p className="text-xs uppercase tracking-[0.22em] text-blue-100">Facilitator</p>
-            </div>
-            <button className="ml-auto rounded-xl border border-white/15 bg-white/10 p-2 text-blue-100">
-              <ChevronDown className="h-4 w-4" />
-            </button>
           </div>
 
-          <nav className="mt-8 space-y-6">
-            {navGroups.map((group) => (
-              <div key={group.label}>
-                <p className="mb-2 px-2 text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-blue-200/70">{group.label}</p>
-                <div className="space-y-1">
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={item.label}
-                        onClick={() => handleSidebarAction(item.target)}
-                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
-                          item.active ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' : 'text-blue-50 hover:bg-white/10'
-                        }`}
-                      >
-                        <Icon className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                        {item.badge ? <span className="rounded-full bg-blue-500 px-2 py-0.5 text-xs font-semibold text-white">{item.badge}</span> : null}
-                      </button>
-                    );
-                  })}
+          <nav className="sidebar-nav-scroll min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            <div className="space-y-5">
+              {navGroups.map((group) => (
+                <div key={group.label}>
+                  <p className="mb-2 px-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/50">{group.label}</p>
+                  <div className="space-y-1">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          key={item.label}
+                          onClick={() => {
+                            handleSidebarAction(item.target);
+                            setMobileSidebarOpen(false);
+                          }}
+                          className={`relative flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${
+                            item.active ? 'bg-white/10 text-white' : 'text-white/74 hover:bg-white/[0.07] hover:text-white'
+                          }`}
+                        >
+                          {item.active ? <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-[#E5B73B]" /> : null}
+                          <Icon className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                          {item.badge ? <span className="rounded-full bg-blue-500 px-2 py-0.5 text-xs font-semibold text-white">{item.badge}</span> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </nav>
 
-          <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-4">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-blue-200">Assigned Municipality</p>
-            <div className="mt-3 flex items-start gap-2 text-sm font-semibold">
-              <MapPin className="mt-0.5 h-4 w-4 text-blue-200" />
-              <span>{assignedMunicipalities.length ? `${assignedMunicipalities.join(', ')}, Biliran` : 'Awaiting assignment'}</span>
+          <div className="shrink-0 border-t border-white/10 p-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55">Assigned Municipality</p>
+              <div className="mt-3 flex items-start gap-2 text-sm font-semibold">
+                <MapPin className="mt-0.5 h-4 w-4 text-[#E5B73B]" />
+                <span className="min-w-0 break-words">{assignedMunicipalities.length ? `${assignedMunicipalities.join(', ')}, Biliran` : 'Awaiting assignment'}</span>
+              </div>
+              <button onClick={onLogout} className="mt-3 flex w-full items-center gap-2 border-t border-white/10 pt-3 text-sm font-medium text-white/78 hover:text-white">
+                <LogOut className="h-4 w-4" />
+                Logout
+              </button>
             </div>
-            <button onClick={onLogout} className="mt-4 flex w-full items-center gap-2 border-t border-white/10 pt-4 text-sm font-medium text-blue-50 hover:text-white">
-              <LogOut className="h-4 w-4" />
-              Logout
-            </button>
           </div>
         </aside>
+        )}
 
-        <main className="min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/50 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none">
+        <main className={`min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/50 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none ${embedded ? '' : 'm-3 lg:ml-[280px]'}`}>
           <header className="flex flex-col gap-4 border-b border-slate-200 px-5 py-5 dark:border-slate-800 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-700 dark:text-blue-300">Facilitator Portal</p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white md:text-3xl">Good morning, {user.name}</h1>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Facilitator - {assignedMunicipalities[0] || 'Unassigned'}, Biliran</p>
+            <div className="flex min-w-0 items-start gap-3">
+              {!embedded && (
+                <button
+                  type="button"
+                  onClick={() => setMobileSidebarOpen(true)}
+                  className="mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 lg:hidden"
+                  aria-label="Open facilitator navigation"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+              )}
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-700 dark:text-blue-300">Facilitator Portal</p>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white md:text-3xl">Good morning, {user.name}</h1>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Facilitator - {assignedMunicipalities[0] || 'Unassigned'}, Biliran</p>
+              </div>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="flex min-h-12 flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-950 xl:w-[24rem]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+              <label className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:min-w-[16rem] xl:w-[24rem]">
                 <Search className="h-4 w-4 text-slate-400" />
                 <input
                   value={search}
@@ -406,7 +439,7 @@ export default function FacilitatorDashboard({
             <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
               <article id="enrollment-requests" className="scroll-mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Enrollment Requests</h2>
+                  <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Student Approvals</h2>
                   <span className="text-sm font-medium text-blue-700 dark:text-blue-300">View all</span>
                 </div>
                 <div className="overflow-x-auto">

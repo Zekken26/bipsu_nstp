@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, Award, Clock, Target, CheckCircle, BookOpen, Flame, Activity, ArrowLeft } from 'lucide-react';
 import { loadAssessments, loadModules } from '../../../data/nstpData';
+import { PortalStatCard } from '../../../components/ui/portal';
 
 type AssessmentResult = {
   score: number;
@@ -81,70 +82,61 @@ export default function ProgressTracker({ user, onBack }: { user: any; onBack?: 
 
         {/* Overview Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="posh-kpi p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <BookOpen className="w-5 h-5 text-amber-600" />
-              <span className="text-sm text-slate-600">Modules</span>
-            </div>
-            <p className="text-3xl font-bold text-slate-900">
-              {completedModules}<span className="text-xl text-slate-600">/{totalModules}</span>
-            </p>
+          <PortalStatCard
+            title="Modules"
+            value={<>{completedModules}<span className="text-xl text-slate-600 dark:text-slate-300">/{totalModules}</span></>}
+            icon={<BookOpen className="h-5 w-5" />}
+            tone="gold"
+          >
             <div className="mt-3 bg-slate-100 rounded-full h-2">
               <div
                 className="bg-blue-600 h-2 rounded-full transition-all"
                 style={{ width: `${moduleCompletionRatio * 100}%` }}
               />
             </div>
-          </div>
+          </PortalStatCard>
 
-          <div className="posh-kpi p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <Clock className="w-5 h-5 text-green-600" />
-              <span className="text-sm text-slate-600">Contact Hours</span>
-            </div>
-            <p className="text-3xl font-bold text-slate-900">
-              {estimatedHours}
-              <span className="text-xl text-slate-600">/{totalContactHours}</span>
-            </p>
+          <PortalStatCard
+            title="Contact Hours"
+            value={<>{estimatedHours}<span className="text-xl text-slate-600 dark:text-slate-300">/{totalContactHours}</span></>}
+            icon={<Clock className="h-5 w-5" />}
+            tone="green"
+          >
             <div className="mt-3 bg-slate-100 rounded-full h-2">
               <div
                 className="bg-green-600 h-2 rounded-full transition-all"
                 style={{ width: `${moduleCompletionRatio * 100}%` }}
               />
             </div>
-          </div>
+          </PortalStatCard>
 
-          <div className="posh-kpi p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <CheckCircle className="w-5 h-5 text-blue-600" />
-              <span className="text-sm text-slate-600">Assessments</span>
-            </div>
-            <p className="text-3xl font-bold text-slate-900">
-              {completedAssessments}<span className="text-xl text-slate-600">/{publishedAssessments.length}</span>
-            </p>
+          <PortalStatCard
+            title="Assessments"
+            value={<>{completedAssessments}<span className="text-xl text-slate-600 dark:text-slate-300">/{publishedAssessments.length}</span></>}
+            icon={<CheckCircle className="h-5 w-5" />}
+            tone="blue"
+          >
             <div className="mt-3 bg-slate-100 rounded-full h-2">
               <div
                 className="bg-purple-600 h-2 rounded-full transition-all"
                 style={{ width: `${publishedAssessments.length > 0 ? (completedAssessments / publishedAssessments.length) * 100 : 0}%` }}
               />
             </div>
-          </div>
+          </PortalStatCard>
 
-          <div className="posh-kpi p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <Award className="w-5 h-5 text-orange-600" />
-              <span className="text-sm text-slate-600">Avg Score</span>
-            </div>
-            <p className="text-3xl font-bold text-slate-900">
-              {averageScore}<span className="text-xl text-slate-600">%</span>
-            </p>
+          <PortalStatCard
+            title="Avg Score"
+            value={<>{averageScore}<span className="text-xl text-slate-600 dark:text-slate-300">%</span></>}
+            icon={<Award className="h-5 w-5" />}
+            tone="slate"
+          >
             <div className="mt-3 bg-slate-100 rounded-full h-2">
               <div
                 className="bg-orange-600 h-2 rounded-full transition-all"
                 style={{ width: `${averageScore}%` }}
               />
             </div>
-          </div>
+          </PortalStatCard>
         </div>
 
         {/* Milestones */}

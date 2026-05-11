@@ -45,28 +45,28 @@ const componentColors: Record<string, string> = {
 
 const roleCopy = {
   admin: {
-    eyebrow: 'Full System Authority',
-    title: 'Administrative Command Center',
+    eyebrow: 'Admin Portal',
+    title: 'NSTP Management Portal',
     body: 'Monitor enrollment, publish learning content, assign components, manage facilitator outputs, release grades, and keep program reporting ready.',
-    tone: 'from-[#06245c] via-[#0b4ea2] to-[#155eb8]',
+    tone: 'from-[#061A3A] via-[#0B3D91] to-[#0B3D91]',
     soft: 'bg-blue-50 text-blue-800 border-blue-100',
     actionTitle: 'Admin Operations',
     chartTitle: 'Component Distribution',
   },
   student: {
-    eyebrow: 'Learner Workspace',
+    eyebrow: 'Student Portal',
     title: 'Student NSTP Portal',
     body: 'Track your common module, assessment readiness, component assignment, official grade status, and notices in one focused workspace.',
-    tone: 'from-[#0b4ea2] via-[#1d72d2] to-[#0f9fc7]',
-    soft: 'bg-sky-50 text-sky-800 border-sky-100',
+    tone: 'from-[#061A3A] via-[#0B3D91] to-[#0B3D91]',
+    soft: 'bg-blue-50 text-blue-800 border-blue-100',
     actionTitle: 'Student Tasks',
     chartTitle: 'Your NSTP Context',
   },
   facilitator: {
-    eyebrow: 'Restricted Facilitator Access',
-    title: 'Lecture and Assessment Studio',
+    eyebrow: 'Facilitator Portal',
+    title: 'NSTP Facilitator Workspace',
     body: 'Upload lecture video details, create owned assessments, and maintain answer keys. Student records, grades, reports, and account controls remain admin-only.',
-    tone: 'from-[#4f2b06] via-[#7c3f13] to-[#6d4aa8]',
+    tone: 'from-[#061A3A] via-[#0B3D91] to-[#0B3D91]',
     soft: 'bg-amber-50 text-amber-900 border-amber-100',
     actionTitle: 'Facilitator Actions',
     chartTitle: 'Owned Assessment Status',
@@ -224,9 +224,9 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
   ];
 
   return (
-    <div className="h-full overflow-auto rounded-[1.25rem] bg-[#f4f7fb] p-3 text-[#071733] dark:bg-slate-950 md:p-5">
+    <div className="h-full overflow-auto bg-[#f4f7fb] p-3 text-[#071733] dark:bg-slate-950 md:p-5">
       <div className="mx-auto max-w-7xl space-y-4">
-        <section className={`overflow-hidden rounded-[1.35rem] bg-gradient-to-br ${copy.tone} text-white shadow-[0_22px_55px_-32px_rgba(15,23,42,0.85)]`}>
+        <section className={`overflow-hidden rounded-2xl bg-gradient-to-br ${copy.tone} text-white shadow-[0_18px_42px_-34px_rgba(15,23,42,0.75)]`}>
           <div className="grid gap-5 p-4 md:p-7 xl:grid-cols-[1.1fr_0.9fr] xl:items-center">
             <div>
               <div className="mb-4 inline-grid h-14 w-14 place-items-center rounded-2xl border border-white/25 bg-white/12 backdrop-blur-md">
@@ -267,7 +267,7 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
           </div>
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <section className={`grid gap-3 sm:grid-cols-2 ${role === 'admin' ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
           {kpis.map((card) => {
             const Icon = card.icon;
             return (

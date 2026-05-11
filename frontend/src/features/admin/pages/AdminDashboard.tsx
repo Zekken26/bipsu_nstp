@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Users, BookOpen, TrendingUp, Award, Search, ClipboardList, TriangleAlert, Siren, Target, Plus, Save, Pencil, Trash2, Mail, BarChart3, GraduationCap, BadgeCheck, X, UserRoundPlus, Eye, FileDown, FileUp, History, ArrowLeft, Bell, Building2, CalendarDays, Check, ChevronDown, Home, LogOut, Settings, SunMedium, UserCheck, Printer, GripVertical } from 'lucide-react';
+import { Users, BookOpen, TrendingUp, Award, Search, ClipboardList, TriangleAlert, Siren, Target, Plus, Save, Pencil, Trash2, Mail, BarChart3, GraduationCap, BadgeCheck, X, UserRoundPlus, Eye, FileDown, FileUp, History, ArrowLeft, Bell, Building2, CalendarDays, Check, ChevronDown, Home, LogOut, Settings, SunMedium, UserCheck, Printer, GripVertical, Menu } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, CartesianGrid, XAxis, YAxis, Bar, LineChart, Line, Legend } from 'recharts';
 import ComponentAssignment from '../components/ComponentAssignment';
 import AssessmentManager from '../../assessments/components/AssessmentManager';
@@ -128,10 +128,12 @@ type AdminDashboardProps = {
   initialView?: AdminDashboardView;
   onNavigateApp?: (target: string) => void;
   onLogout?: () => void;
+  embedded?: boolean;
 };
 
-export default function AdminDashboard({ initialView = 'overview', onNavigateApp, onLogout }: AdminDashboardProps) {
+export default function AdminDashboard({ initialView = 'overview', onNavigateApp, onLogout, embedded = false }: AdminDashboardProps) {
   const [view, setView] = useState<AdminDashboardView>(initialView);
+  const [adminMobileSidebarOpen, setAdminMobileSidebarOpen] = useState(false);
   const [students, setStudents] = useState<NstpStudent[]>([]);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [studentForm, setStudentForm] = useState<NstpStudent | null>(null);
@@ -158,7 +160,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const [adminTheme, setAdminTheme] = useState<'light' | 'dark'>(() => document.documentElement.classList.contains('dark') ? 'dark' : 'light');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [adminSidebarCollapsed, setAdminSidebarCollapsed] = useState(false);
   const [noticeDigest, setNoticeDigest] = useState(true);
   const [autoAssignMunicipality, setAutoAssignMunicipality] = useState(true);
   const [compactAdminCards, setCompactAdminCards] = useState(false);
@@ -1869,77 +1870,106 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
 
   if (['overview', 'enrollment', 'students', 'facilitators', 'municipalities', 'modules', 'assessments', 'tools', 'assignments', 'exports', 'settings'].includes(view)) {
     return (
-      <div className="min-h-dvh bg-[#f4f8fd] text-slate-950 dark:bg-slate-950 dark:text-slate-100">
-        <div className={`mx-auto grid min-h-dvh max-w-[1800px] gap-4 p-3 ${adminSidebarCollapsed ? 'lg:grid-cols-[5.25rem_minmax(0,1fr)]' : 'lg:grid-cols-[19.5rem_minmax(0,1fr)]'}`}>
-          <aside className={`rounded-[2rem] bg-[#031d49] text-white shadow-2xl shadow-blue-950/20 lg:sticky lg:top-3 lg:h-[calc(100dvh-1.5rem)] lg:overflow-y-auto ${adminSidebarCollapsed ? 'p-2.5' : 'p-4'}`}>
-            <div className={`flex items-center gap-3 ${adminSidebarCollapsed ? 'flex-col' : ''}`}>
-              <div className={`${adminSidebarCollapsed ? 'h-12 w-12 rounded-2xl' : 'h-14 w-14 rounded-2xl'} shrink-0 overflow-hidden border border-white/20 bg-white/10 p-1.5`}>
-                <img src="/bipsu-logo.svg" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
+      <div className={`${embedded ? 'min-h-0 bg-transparent' : 'min-h-dvh overflow-x-hidden bg-[#f4f8fd]'} text-slate-950 dark:bg-slate-950 dark:text-slate-100`}>
+        <div className={embedded ? 'min-h-0' : 'min-h-dvh'}>
+          {!embedded && adminMobileSidebarOpen && (
+            <button
+              type="button"
+              aria-label="Close admin navigation"
+              onClick={() => setAdminMobileSidebarOpen(false)}
+              className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-sm lg:hidden"
+            />
+          )}
+          {!embedded && (
+          <aside className={`fixed left-0 top-0 z-50 flex h-screen w-[280px] max-w-[86vw] flex-col overflow-hidden rounded-r-[28px] bg-[#061E3D] text-white shadow-[0_20px_60px_rgba(0,0,0,0.25)] transition-transform duration-300 lg:translate-x-0 ${adminMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <div className="shrink-0 px-4 pb-4 pt-5">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-[#E5B73B]/35 bg-white p-1.5 shadow-sm">
+                  <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-semibold leading-tight">BiPSU NSTP Portal</p>
+                  <p className="truncate text-xs uppercase tracking-[0.18em] text-white/65">Admin Portal</p>
+                </div>
               </div>
-              <div className={`${adminSidebarCollapsed ? 'lg:hidden' : ''} min-w-0 flex-1`}>
-                <p className="text-base font-semibold leading-tight">NSTP Command Center</p>
-                <p className="text-xs uppercase tracking-[0.18em] text-blue-100">Admin (NSTP Director)</p>
-              </div>
-              <button onClick={() => setAdminSidebarCollapsed((collapsed) => !collapsed)} className={`${adminSidebarCollapsed ? '' : 'ml-auto'} grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-white/10 text-blue-100 hover:bg-white/15`} title={adminSidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}>
-                <ChevronDown className={`h-4 w-4 transition ${adminSidebarCollapsed ? '-rotate-90' : 'rotate-90'}`} />
-              </button>
             </div>
 
-            {!adminSidebarCollapsed && <p className="mb-3 mt-8 px-2 text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-blue-200/70">Main Navigation</p>}
-            <nav className="space-y-1">
-              {[
-                { label: 'Dashboard', icon: Home, action: () => setView('overview'), active: view === 'overview' },
-                { label: 'Enrollment', icon: UserCheck, action: () => setView('enrollment'), active: view === 'enrollment' },
-                { label: 'Facilitators', icon: Users, action: () => setView('facilitators'), active: view === 'facilitators' },
-                { label: 'Municipalities', icon: Building2, action: () => setView('municipalities'), active: view === 'municipalities' },
-                { label: 'Students', icon: GraduationCap, action: () => setView('students'), active: view === 'students' },
-                { label: 'Common Modules', icon: BookOpen, action: () => setView('modules'), active: view === 'modules' },
-                { label: 'Assessments', icon: ClipboardList, action: () => setView('assessments'), active: view === 'assessments' },
-                { label: 'Grades', icon: Award, action: () => setView('assignments'), active: view === 'assignments' },
-                { label: 'Reports & Analytics', icon: BarChart3, action: () => setView('tools'), active: view === 'tools' },
-                { label: 'Export Layout', icon: FileDown, action: () => setView('exports'), active: view === 'exports' },
-                { label: 'System Settings', icon: Settings, action: () => setView('settings'), active: view === 'settings' },
-              ].map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.label}
-                    onClick={item.action}
-                    className={`flex w-full items-center gap-3 rounded-2xl text-left text-sm transition ${adminSidebarCollapsed ? 'mx-auto h-14 w-14 justify-center p-0' : 'px-4 py-3.5'} ${
-                      item.active ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' : 'text-blue-50 hover:bg-white/10'
-                    }`}
-                  >
-                    <Icon className={`${adminSidebarCollapsed ? 'h-8 w-8' : 'h-6 w-6'} shrink-0`} />
-                    {!adminSidebarCollapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
-                  </button>
-                );
-              })}
+            <nav className="sidebar-nav-scroll min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <p className="mb-2 px-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/50">Main Navigation</p>
+              <div className="space-y-1">
+                {[
+                  { label: 'Dashboard', icon: Home, action: () => setView('overview'), active: view === 'overview' },
+                  { label: 'Student Approvals', icon: UserCheck, action: () => setView('enrollment'), active: view === 'enrollment' },
+                  { label: 'Facilitators', icon: Users, action: () => setView('facilitators'), active: view === 'facilitators' },
+                  { label: 'NSTP Components', icon: Building2, action: () => setView('municipalities'), active: view === 'municipalities' },
+                  { label: 'Students', icon: GraduationCap, action: () => setView('students'), active: view === 'students' },
+                  { label: 'Modules', icon: BookOpen, action: () => setView('modules'), active: view === 'modules' },
+                  { label: 'Assessments', icon: ClipboardList, action: () => setView('assessments'), active: view === 'assessments' },
+                  { label: 'Grades', icon: Award, action: () => setView('assignments'), active: view === 'assignments' },
+                  { label: 'Reports', icon: BarChart3, action: () => setView('tools'), active: view === 'tools' },
+                  { label: 'Export Templates', icon: FileDown, action: () => setView('exports'), active: view === 'exports' },
+                  { label: 'Settings', icon: Settings, action: () => setView('settings'), active: view === 'settings' },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() => {
+                        item.action();
+                        setAdminMobileSidebarOpen(false);
+                      }}
+                      className={`relative flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${
+                        item.active ? 'bg-white/10 text-white' : 'text-white/74 hover:bg-white/[0.07] hover:text-white'
+                      }`}
+                    >
+                      {item.active && <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-[#E5B73B]" />}
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </nav>
 
-            <div className={`mt-8 rounded-2xl border border-white/10 bg-white/5 p-4 ${adminSidebarCollapsed ? 'lg:hidden' : ''}`}>
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-blue-200">Account</p>
-              <p className="mt-4 break-words text-sm font-semibold leading-snug text-white">Dr. Maria Elena Santos</p>
-              <p className="text-xs text-blue-100">NSTP Director</p>
-              <button onClick={onLogout} className="mt-4 flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-medium text-blue-50 hover:bg-white/10 hover:text-white">
-                <LogOut className="h-4 w-4" />
-                Logout
-              </button>
+            <div className="shrink-0 border-t border-white/10 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55">Account</p>
+                <p className="mt-3 break-words text-sm font-semibold leading-snug text-white">Dr. Maria Elena Santos</p>
+                <p className="text-xs text-blue-100">NSTP Director</p>
+                <button onClick={onLogout} className="mt-3 flex w-full items-center gap-2 rounded-xl border border-white/10 bg-transparent px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/[0.08] hover:text-white">
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </button>
+              </div>
             </div>
           </aside>
+          )}
 
-          <main className="min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white/90 shadow-xl shadow-slate-200/50 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none">
+          <main className={`min-w-0 overflow-auto rounded-[2rem] border border-slate-200 bg-white/90 shadow-xl shadow-slate-200/50 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none ${embedded ? '' : 'm-3 lg:ml-[280px]'}`}>
             <header className="relative flex flex-col gap-4 border-b border-slate-200 px-5 py-5 dark:border-slate-800 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-300">Administration</p>
-                <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">
-                  {view === 'exports' ? 'Export Layout' : view === 'settings' ? 'System Settings' : 'Dashboard'}
-                </h1>
+              <div className="flex min-w-0 items-start gap-3">
+                {!embedded && (
+                  <button
+                    type="button"
+                    onClick={() => setAdminMobileSidebarOpen(true)}
+                    className="mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 lg:hidden"
+                    aria-label="Open admin navigation"
+                  >
+                    <Menu className="h-5 w-5" />
+                  </button>
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-300">Administration</p>
+                  <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
+                    {view === 'exports' ? 'Export Layout' : view === 'settings' ? 'System Settings' : 'Dashboard'}
+                  </h1>
+                </div>
               </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
                 <select value={schoolYear} onChange={(event) => setSchoolYear(event.target.value)} className="min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm outline-none hover:border-blue-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                   {SCHOOL_YEARS.map((year) => <option key={year}>{year}</option>)}
                 </select>
-                <label className="flex min-h-12 flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-950 xl:w-[24rem]">
+                <label className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:min-w-[16rem] xl:w-[24rem]">
                   <Search className="h-4 w-4 text-slate-400" />
                   <input value={adminSearch} onChange={(event) => setAdminSearch(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && runAdminSearch()} placeholder="Search anything..." className="w-full bg-transparent text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100" />
                 </label>
@@ -1983,7 +2013,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Enrollment Module</p>
-                        <h2 className="text-2xl font-semibold text-slate-950 dark:text-white">Enrollment Requests</h2>
+                        <h2 className="text-2xl font-semibold text-slate-950 dark:text-white">Student Approvals</h2>
                         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Approve, reject, and monitor student enrollment from the main admin body.</p>
                       </div>
                       <div className="rounded-2xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{pendingRegistrations.length} pending request{pendingRegistrations.length === 1 ? '' : 's'}</div>
@@ -2503,7 +2533,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 ) : view === 'modules' ? (
                   <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                     <div className="border-b border-slate-200 p-5 dark:border-slate-800">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Common Modules</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Modules</p>
                       <h2 className="text-2xl font-semibold text-slate-950 dark:text-white">Module Library</h2>
                     </div>
                     <div className="overflow-visible">
@@ -2741,7 +2771,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                       <div className="grid gap-3 md:grid-cols-2">
                         {[
                           { label: 'Theme', value: adminTheme === 'dark' ? 'Dark mode' : 'Light mode', icon: SunMedium, action: setTheme },
-                          { label: 'Sidebar', value: adminSidebarCollapsed ? 'Collapsed navigation' : 'Expanded navigation', icon: Settings, action: () => setAdminSidebarCollapsed((state) => !state) },
                           { label: 'Notification Digest', value: noticeDigest ? 'Director alerts enabled' : 'Digest disabled', icon: Bell, action: () => setNoticeDigest((state) => !state) },
                           { label: 'Auto Municipality Routing', value: autoAssignMunicipality ? 'Students route by municipality' : 'Manual review required', icon: Building2, action: () => setAutoAssignMunicipality((state) => !state) },
                           { label: 'Compact Cards', value: compactAdminCards ? 'Dense dashboard cards' : 'Comfortable dashboard spacing', icon: BarChart3, action: () => setCompactAdminCards((state) => !state) },
@@ -2953,7 +2982,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     { label: 'Total Students', value: totalStudents.toLocaleString(), detail: 'Enrolled students', icon: Users, tone: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-200' },
                     { label: 'Facilitators', value: facilitatorAccounts.length, detail: 'Active facilitators', icon: Users, tone: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-200' },
                     { label: 'Municipalities', value: BILIRAN_MUNICIPALITIES.length, detail: 'With assigned facilitators', icon: Building2, tone: 'bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-200' },
-                    { label: 'Enrollment Requests', value: pendingRegistrations.length, detail: 'Pending approval', icon: UserCheck, tone: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-200' },
+                    { label: 'Student Approvals', value: pendingRegistrations.length, detail: 'Pending approval', icon: UserCheck, tone: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-200' },
                   ].map((stat) => {
                     const Icon = stat.icon;
                     return (
@@ -3048,7 +3077,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <div className="mb-4 flex items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Pending Enrollment Requests</h2>
+                    <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Pending Student Approvals</h2>
                     <button onClick={() => setView('enrollment')} className="text-sm font-medium text-blue-700 dark:text-blue-300">View all requests</button>
                   </div>
                   <div className="overflow-x-auto">
@@ -3106,7 +3135,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     {[
                       { label: 'Create Facilitator', detail: 'Add new facilitator account', icon: Plus, action: () => openQuickAction('facilitator') },
                       { label: 'Assign Municipalities', detail: 'Manage facilitator assignments', icon: Users, action: () => openQuickAction('municipality') },
-                      { label: 'Enrollment Requests', detail: 'Review pending requests', icon: ClipboardList, action: () => openQuickAction('enrollment'), badge: pendingRegistrations.length },
+                      { label: 'Student Approvals', detail: 'Review pending requests', icon: ClipboardList, action: () => openQuickAction('enrollment'), badge: pendingRegistrations.length },
                       { label: 'Generate Reports', detail: 'Download system reports', icon: FileDown, action: () => openQuickAction('reports') },
                     ].map((action) => {
                       const Icon = action.icon;

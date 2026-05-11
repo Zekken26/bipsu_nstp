@@ -518,8 +518,8 @@ export default function ReportsCenter({ user }: { user: any }) {
               <h3 className="font-semibold text-slate-950 dark:text-white">{studentReportTab === 'academic' ? 'Academic Report Items' : 'Recent Assessments'}</h3>
               <button className="text-sm font-semibold text-blue-700 dark:text-blue-300">View all</button>
             </div>
-            <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+              <table className="w-full min-w-[680px] text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                   <tr><th className="px-4 py-3">Assessment</th><th className="px-4 py-3">Module</th><th className="px-4 py-3">Score</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Date Passed</th></tr>
                 </thead>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { BookOpen, Users, BarChart3, LogOut, CalendarDays, LayoutGrid, ClipboardList, MoonStar, SunMedium, Mic2, PanelLeftClose, PanelLeftOpen, Bell, Maximize2, Search, ChevronDown, TrendingUp, Award, Menu, X, UserRound, Settings, ShieldCheck, SlidersHorizontal, History, CircleHelp, LockKeyhole, CheckCircle2, Download, Send, Save, Mail, RotateCcw } from 'lucide-react';
+import { BookOpen, Users, BarChart3, LogOut, CalendarDays, LayoutGrid, ClipboardList, MoonStar, SunMedium, Mic2, Bell, Maximize2, Search, ChevronDown, TrendingUp, Award, Menu, X, UserRound, Settings, ShieldCheck, SlidersHorizontal, History, CircleHelp, LockKeyhole, CheckCircle2, Download, Send, Save, Mail, RotateCcw } from 'lucide-react';
 import LoginPage from './pages/LoginPage';
 import GeneralEducation from './features/enrollment/GeneralEducation';
 import EnrollmentPage from './pages/EnrollmentPage';
@@ -90,7 +90,7 @@ function AuthSplash({ mode, userName }: { mode: 'login' | 'logout' | 'boot'; use
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <div className="relative h-16 w-16 overflow-hidden rounded-2xl border border-blue-200 bg-white p-1.5 shadow-sm dark:border-blue-400/30 dark:bg-slate-950">
-              <img src="/bipsu-logo.svg" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
+              <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
               <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-2 border-white bg-[#f2b705] dark:border-slate-900" />
             </div>
             <div>
@@ -136,15 +136,18 @@ const NAV_ITEMS: Record<string, Array<{ id: ShellSection; label: string; icon: a
     { id: 'announcements', label: 'Announcements', icon: Bell },
   ],
   admin: [
-    { id: 'overview', label: 'Home', icon: LayoutGrid },
-    { id: 'admin', label: 'Enrollment', icon: Users },
-    { id: 'modules', label: 'Common Modules', icon: BookOpen },
-    { id: 'assessments', label: 'Major Exams', icon: ClipboardList },
-    { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
+    { id: 'overview', label: 'Dashboard', icon: LayoutGrid },
+    { id: 'admin', label: 'Students & Enrollment', icon: Users },
+    { id: 'modules', label: 'Modules', icon: BookOpen },
+    { id: 'assessments', label: 'Assessments', icon: ClipboardList },
+    { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'announcements', label: 'Announcements', icon: Bell },
   ],
   facilitator: [
-    { id: 'facilitator', label: 'Facilitator Dashboard', icon: Mic2 },
+    { id: 'facilitator', label: 'Dashboard', icon: Mic2 },
+    { id: 'modules', label: 'Modules', icon: BookOpen },
     { id: 'assessments', label: 'Assessments', icon: ClipboardList },
+    { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'announcements', label: 'Announcements', icon: Bell },
   ],
 };
@@ -165,13 +168,6 @@ export default function App() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     const savedTheme = localStorage.getItem('nstp-theme') as 'light' | 'dark' | null;
     return savedTheme === 'dark' ? 'dark' : 'light';
-  });
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
-    const savedUser = localStorage.getItem('nstpUser');
-    const parsedUser = savedUser ? safeJsonParse<any>(savedUser, null) : null;
-    if (parsedUser?.role === 'admin') return false;
-    const saved = localStorage.getItem('nstp-sidebar-collapsed');
-    return saved ? safeJsonParse<boolean>(saved, false) : false;
   });
   const [headerSearch, setHeaderSearch] = useState('');
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
@@ -222,7 +218,6 @@ export default function App() {
         localStorage.setItem('nstpUser', JSON.stringify(nextUser));
         if (nextUser.role === 'admin') {
           setActiveSection('overview');
-          setIsSidebarCollapsed(false);
         } else if (nextUser.role === 'facilitator') {
           setActiveSection('facilitator');
         } else {
@@ -318,10 +313,6 @@ export default function App() {
       window.removeEventListener('nstp-current-user-updated', handleCurrentUserUpdate);
     };
   }, [user]);
-
-  useEffect(() => {
-    localStorage.setItem('nstp-sidebar-collapsed', JSON.stringify(isSidebarCollapsed));
-  }, [isSidebarCollapsed]);
 
   useEffect(() => {
     const onOutsideClick = (event: MouseEvent) => {
@@ -571,7 +562,7 @@ export default function App() {
   const workspaceActions = user.role === 'admin'
     ? [
       { label: 'Dashboard Overview', detail: 'Program metrics and operations', run: () => openAdminView('overview', 'Dashboard Overview') },
-      { label: 'Enrollment Requests', detail: 'Approve new student access', run: () => openAdminView('enrollment', 'Enrollment Requests') },
+      { label: 'Student Approvals', detail: 'Approve new student access', run: () => openAdminView('enrollment', 'Student Approvals') },
       { label: 'Student Records', detail: 'Roster, progress, and student data', run: () => openAdminView('students', 'Student Records') },
       { label: 'Facilitator Accounts', detail: 'Manage facilitators and ownership', run: () => openAdminView('facilitators', 'Facilitator Accounts') },
       { label: 'Component Assignment', detail: 'Classify students into NSTP tracks', run: () => openAdminView('assignments', 'Component Assignment') },
@@ -587,7 +578,7 @@ export default function App() {
       ]
       : [
         { label: 'Student Dashboard', detail: 'Progress and student tasks', run: () => { setActiveSection('overview'); setHeaderHint('Opened Student Dashboard'); setWorkspaceMenuOpen(false); } },
-        { label: 'Common Modules', detail: 'Study materials and completion', run: () => { setActiveSection('modules'); setHeaderHint('Opened Common Modules'); setWorkspaceMenuOpen(false); } },
+        { label: 'Modules', detail: 'Study materials and completion', run: () => { setActiveSection('modules'); setHeaderHint('Opened Modules'); setWorkspaceMenuOpen(false); } },
         { label: 'Assessments', detail: 'Quizzes and exams', run: () => { setActiveSection('assessments'); setHeaderHint('Opened Assessments'); setWorkspaceMenuOpen(false); } },
         { label: 'Grades', detail: 'Released official standing', run: () => { setActiveSection('grades'); setHeaderHint('Opened Grades'); setWorkspaceMenuOpen(false); } },
         { label: 'Notice Center', detail: 'Program announcements', run: () => { setActiveSection('announcements'); setHeaderHint('Opened Notice Center'); setWorkspaceMenuOpen(false); } },
@@ -734,7 +725,7 @@ export default function App() {
       keywords: [item.label, item.id],
       run: () => {
         if (user.role === 'admin' && item.id === 'admin') {
-          openAdminView('enrollment', 'Enrollment');
+          openAdminView('enrollment', 'Student Approvals');
           return;
         }
         setActiveSection(item.id);
@@ -744,7 +735,7 @@ export default function App() {
     })),
     ...(user.role === 'admin'
       ? [
-        { label: 'Enrollment Requests', keywords: ['approval', 'approvals', 'enrollment', 'request', 'requests'], run: () => openAdminView('enrollment', 'Enrollment Requests') },
+        { label: 'Student Approvals', keywords: ['approval', 'approvals', 'enrollment', 'request', 'requests'], run: () => openAdminView('enrollment', 'Student Approvals') },
         { label: 'Student Records', keywords: ['student', 'students', 'roster', 'records', 'grade release', 'grades'], run: () => openAdminView('students', 'Student Records') },
         { label: 'Admin Tools', keywords: ['admin tools', 'tools', 'bulk', 'audit', 'export', 'import', 'presets'], run: () => openAdminView('tools', 'Admin Tools') },
         { label: 'Facilitator Accounts', keywords: ['facilitator', 'facilitators', 'lecturer', 'teacher', 'accounts', 'ownership'], run: () => openAdminView('facilitators', 'Facilitator Accounts') },
@@ -763,7 +754,7 @@ export default function App() {
       : []),
     ...(user.role === 'student'
       ? [
-        { label: 'Common Modules', keywords: ['module', 'modules', 'lesson', 'study', 'learning'], run: () => { setActiveSection('modules'); setHeaderHint('Opened Common Modules'); } },
+        { label: 'Modules', keywords: ['module', 'modules', 'lesson', 'study', 'learning'], run: () => { setActiveSection('modules'); setHeaderHint('Opened Modules'); } },
         { label: 'Grades', keywords: ['grade', 'grades', 'standing', 'score', 'completion'], run: () => { setActiveSection('grades'); setHeaderHint('Opened Grades'); } },
         { label: 'Progress', keywords: ['progress', 'classification', 'component', 'cwts', 'lts', 'mts'], run: () => { setActiveSection('progress'); setHeaderHint('Opened Progress'); } },
       ]
@@ -819,7 +810,7 @@ export default function App() {
       if (activeSection === 'announcements') return <AnnouncementsCenter user={user} />;
       if (activeSection === 'modules') return <ModulesPage user={user} role="admin" onBack={goBackToOverview} />;
       if (activeSection === 'assessments') return <AssessmentsPage user={user} onBack={goBackToOverview} />;
-      return <AdminDashboard initialView={activeSection === 'admin' ? adminInitialView : 'overview'} onNavigateApp={(target) => setActiveSection(target as ShellSection)} onLogout={handleLogout} />;
+      return <AdminDashboard embedded initialView={activeSection === 'admin' ? adminInitialView : 'overview'} onNavigateApp={(target) => setActiveSection(target as ShellSection)} onLogout={handleLogout} />;
     }
 
     if (user.role === 'facilitator') {
@@ -827,7 +818,7 @@ export default function App() {
       if (activeSection === 'announcements') return <AnnouncementsCenter user={user} />;
       if (activeSection === 'modules') return <ModulesPage user={user} role="student" onBack={() => setActiveSection('facilitator')} />;
       if (activeSection === 'assessments') return <AssessmentsPage user={user} onBack={() => setActiveSection('facilitator')} />;
-      return <FacilitatorDashboard user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} />;
+      return <FacilitatorDashboard embedded user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} />;
     }
 
     if (activeSection === 'reports') return <ReportsCenter user={user} />;
@@ -918,17 +909,7 @@ export default function App() {
     );
   };
 
-  if (user.role === 'facilitator' && ['facilitator', 'reports', 'assessments'].includes(activeSection)) {
-    return (
-      <>
-        <FacilitatorDashboard user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} />
-        {isBootSplashVisible && <AuthSplash mode="boot" userName={user?.name} />}
-        {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
-      </>
-    );
-  }
-
-  if (user.role === 'admin' && ['overview', 'admin', 'modules', 'assessments', 'reports', 'announcements'].includes(activeSection)) {
+  if (user.role === 'admin') {
     const adminView =
       activeSection === 'admin' ? adminInitialView :
       activeSection === 'modules' ? 'modules' :
@@ -936,6 +917,7 @@ export default function App() {
       activeSection === 'reports' ? 'tools' :
       activeSection === 'announcements' ? 'settings' :
       'overview';
+
     return (
       <>
         <AdminDashboard initialView={adminView as any} onNavigateApp={(target) => setActiveSection(target as ShellSection)} onLogout={handleLogout} />
@@ -945,161 +927,137 @@ export default function App() {
     );
   }
 
+  if (user.role === 'facilitator') {
+    return (
+      <>
+        <FacilitatorDashboard user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} />
+        {isBootSplashVisible && <AuthSplash mode="boot" userName={user?.name} />}
+        {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
+      </>
+    );
+  }
+
   return (
     <>
-      <div className="min-h-screen bg-[#eef2f8] text-slate-900 dark:bg-[#0b1426] dark:text-slate-100 lg:h-screen lg:overflow-hidden">
-        <div className="nstp-app-shell min-h-screen flex flex-col lg:h-screen lg:flex-row gap-3 p-2 md:p-3">
-        {mobileSidebarOpen && (
-          <button
-            type="button"
-            aria-label="Close menu backdrop"
-            onClick={() => setMobileSidebarOpen(false)}
-            className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-sm lg:hidden"
-          />
-        )}
-        <aside className={`nstp-sidebar ${mobileSidebarOpen ? 'translate-x-0 opacity-100' : '-translate-x-[110%] opacity-0 pointer-events-none'} ${isSidebarCollapsed ? 'lg:w-28 lg:px-3 lg:py-3.5' : 'lg:w-[20rem] lg:p-5'} flex min-h-0 flex-col overflow-hidden transition-all duration-300 rounded-[1.75rem] border border-[#123a75]/70 bg-[radial-gradient(circle_at_top_left,rgba(31,92,187,0.34),transparent_36%),linear-gradient(180deg,#071f49_0%,#061633_48%,#050c23_100%)] text-white shadow-[0_28px_60px_-34px_rgba(7,12,33,0.9)] lg:pointer-events-auto lg:sticky lg:top-3 lg:h-[calc(100dvh-1.5rem)] lg:shrink-0 lg:translate-x-0 lg:opacity-100`}>
-          <div className={`mb-4 flex items-center ${isSidebarCollapsed ? 'justify-between lg:justify-center' : 'justify-between'} gap-2`}>
-            <div className="min-w-0 flex items-center gap-3">
-              <div className={`${user.role === 'student' ? 'h-14 w-14 rounded-full border-[#e5b73b]/80 bg-white' : 'h-11 w-11 rounded-xl border-white/20 bg-white/10'} shrink-0 overflow-hidden border p-1 shadow-sm`}>
-                <img src="/bipsu-logo.svg" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
-              </div>
-              <div className={`${isSidebarCollapsed ? 'lg:hidden' : ''} min-w-0`}>
-                <h1 className="truncate text-[1.05rem] font-semibold tracking-tight text-white">NSTP Command Center</h1>
-                <p className="truncate text-[11px] font-medium text-white/70 uppercase tracking-[0.22em]">{user.role === 'student' ? 'Student Portal' : user.role}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setMobileSidebarOpen(false)}
-                title="Close menu"
-                className="clickable-button inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white lg:hidden"
-                aria-label="Close menu"
-              >
-                <X className="h-5 w-5" />
-              </button>
-              <button
-                onClick={() => setIsSidebarCollapsed((state) => !state)}
-                title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                className="clickable-button hidden h-10 w-10 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white lg:inline-flex"
-                aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              >
-                {isSidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
-              </button>
-            </div>
-          </div>
-
-          {!isSidebarCollapsed && user.role === 'student' && (
-            <>
-              <div className="mb-6 rounded-2xl border border-white/15 bg-white/8 p-4 backdrop-blur-md">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-white/65">Signed In</p>
-                <div className="flex items-center gap-3">
-                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-blue-600 text-base font-semibold text-white shadow-lg shadow-blue-950/40">{initials}</span>
+      <div className="min-h-screen overflow-x-hidden bg-[#f4f8fd] text-slate-900 dark:bg-slate-950 dark:text-slate-100 lg:h-screen">
+        <div className="min-h-screen lg:h-screen">
+          {mobileSidebarOpen && (
+            <button
+              type="button"
+              aria-label="Close menu backdrop"
+              onClick={() => setMobileSidebarOpen(false)}
+              className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-sm lg:hidden"
+            />
+          )}
+          <aside className={`fixed left-0 top-0 z-50 flex h-screen w-[280px] max-w-[86vw] flex-col overflow-hidden rounded-r-[28px] bg-[#061E3D] text-white shadow-[0_20px_60px_rgba(0,0,0,0.25)] transition-transform duration-300 lg:translate-x-0 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <div className="shrink-0 px-4 pb-4 pt-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-[#E5B73B]/50 bg-white p-1 text-sm font-semibold shadow-sm">
+                    <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
+                  </div>
                   <div className="min-w-0">
-                    <p className="truncate font-semibold leading-tight text-white">{user.name}</p>
-                    <p className="truncate text-sm text-white/70">{user.email}</p>
+                    <h1 className="truncate text-base font-semibold leading-tight text-white">BiPSU NSTP Portal</h1>
+                    <p className="truncate text-xs uppercase tracking-[0.18em] text-white/65">Student Portal</p>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-sm text-white/75">
-                  <CalendarDays className="h-4 w-4 text-cyan-300" />
+                <button
+                  onClick={() => setMobileSidebarOpen(false)}
+                  title="Close menu"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white lg:hidden"
+                  aria-label="Close menu"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <nav className="sidebar-nav-scroll min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <p className="mb-2 px-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/50">Navigation</p>
+              <div className="space-y-1">
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = activeSection === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => navigateToSection(item.id)}
+                      title={item.label}
+                      className={`relative flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${active ? 'bg-white/10 text-white' : 'text-white/74 hover:bg-white/[0.07] hover:text-white'}`}
+                    >
+                      {active ? <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-[#E5B73B]" /> : null}
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </nav>
+
+            <div className="shrink-0 border-t border-white/10 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-white/65">Signed In</p>
+                <div className="flex items-center gap-3">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-sm font-semibold text-white shadow-lg shadow-blue-950/40">{initials}</span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold leading-tight text-white">{user.name}</p>
+                    <p className="truncate text-xs text-white/70">{user.email}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-2 text-xs text-white/75">
+                  <CalendarDays className="h-4 w-4 text-[#E5B73B]" />
                   {today}
                 </div>
-              </div>
-            </>
-          )}
-
-          {!isSidebarCollapsed && user.role !== 'admin' && user.role !== 'student' && (
-            <div className="mb-3 rounded-2xl border border-white/15 bg-white/8 p-3 backdrop-blur-md">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Signed In</p>
-              <p className="font-semibold leading-tight text-white">{user.name}</p>
-              <p className="text-sm text-white/70">{user.email}</p>
-              <div className="mt-4 flex items-center gap-2 text-xs text-white/75">
-                <CalendarDays className="h-3.5 w-3.5 text-cyan-300" />
-                {today}
-              </div>
-            </div>
-          )}
-
-          {!isSidebarCollapsed && (
-            <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/55">Navigation</p>
-          )}
-
-          <nav className={`nstp-nav min-h-0 flex-1 overflow-y-auto pr-1 ${isSidebarCollapsed ? 'flex flex-col items-center gap-3.5 py-3' : 'space-y-2.5'}`}>
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = activeSection === item.id;
-              return (
                 <button
-                  key={item.id}
-                  onClick={() => navigateToSection(item.id)}
-                  title={item.label}
-                  className={`clickable-button ${isSidebarCollapsed ? 'lg:h-14 lg:w-14 lg:justify-center lg:px-0 lg:rounded-[1.1rem]' : 'lg:w-full lg:gap-3.5 lg:px-4 lg:py-3.5'} flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left transition-all border ${active ? 'border-blue-400/40 bg-blue-600 text-white shadow-lg shadow-blue-950/30' : 'border-transparent bg-transparent text-white/78 hover:bg-white/10 hover:text-white'}`}
+                  type="button"
+                  onClick={handleLogout}
+                  className="mt-3 flex w-full items-center gap-2 border-t border-white/10 pt-3 text-sm font-medium text-white/78 hover:text-white"
                 >
-                  <Icon className={isSidebarCollapsed ? 'h-5 w-5 lg:h-6 lg:w-6' : 'h-5 w-5'} />
-                  <span className={`${isSidebarCollapsed ? 'lg:hidden' : ''} font-semibold tracking-tight`}>{item.label}</span>
+                  <LogOut className="h-4 w-4" />
+                  Logout
                 </button>
-              );
-            })}
-          </nav>
-
-          <div className="shrink-0 pt-3">
-            <div className="rounded-2xl border border-white/15 bg-white/8 p-2.5">
-              {!isSidebarCollapsed && <p className="text-xs font-semibold uppercase tracking-[0.15em] text-white/65 mb-2">Account</p>}
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="clickable-button flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-3 text-sm font-semibold text-white hover:bg-white/20 transition-colors"
-                title="Logout"
-              >
-                <LogOut className="w-4 h-4" />
-                {!isSidebarCollapsed && 'Logout'}
-              </button>
+              </div>
             </div>
-          </div>
-        </aside>
+          </aside>
 
-        <main className="nstp-main flex-1 min-h-0 overflow-visible lg:h-[calc(100dvh-1.5rem)] lg:overflow-hidden">
-          <div className="nstp-workspace flex w-full flex-col overflow-visible rounded-[1.75rem] border border-slate-200/90 bg-[#f8fafc] shadow-[0_28px_70px_-34px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-950/85 lg:h-full lg:overflow-hidden">
-            <div className="shrink-0 border-b border-slate-200/90 bg-white/90 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/80 md:px-5">
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <div className="flex items-start gap-3">
+          <main className="m-3 min-h-0 min-w-0 overflow-auto rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/50 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none lg:ml-[280px]">
+            <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-5 py-5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
                   <button
-                    type="button"
                     onClick={() => setMobileSidebarOpen(true)}
-                    className="clickable-button mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 lg:hidden"
+                    className="mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm lg:hidden dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                     aria-label="Open menu"
-                    title="Open menu"
                   >
                     <Menu className="h-5 w-5" />
                   </button>
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] font-semibold text-blue-700 dark:text-blue-300">{user.role === 'admin' ? 'Administration' : user.role === 'facilitator' ? 'Facilitator Workspace' : 'Student Portal'}</p>
-                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 md:text-3xl">
-                    {activeSection === 'overview'
-                      ? 'Dashboard'
-                      : activeSection === 'modules'
-                        ? 'Modules'
-                        : activeSection === 'assessments'
-                          ? 'Assessments'
-                          : activeSection === 'progress'
-                            ? 'Progress'
-                            : activeSection === 'grades'
-                              ? 'Grades'
-                            : activeSection === 'facilitator'
-                              ? 'Facilitator Dashboard'
-                              : activeSection === 'reports'
-                                ? 'Reports'
-                                : activeSection === 'announcements'
-                                ? 'Notice Center'
-                                : 'Enrollment'}
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-700 dark:text-blue-300">Student Portal</p>
+                    <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white md:text-3xl">
+                      {activeSection === 'overview'
+                        ? 'Dashboard'
+                        : activeSection === 'modules'
+                          ? 'Modules'
+                          : activeSection === 'assessments'
+                            ? 'Assessments'
+                            : activeSection === 'progress'
+                              ? 'Progress'
+                              : activeSection === 'grades'
+                                ? 'Grades'
+                                : activeSection === 'reports'
+                                  ? 'Reports'
+                                  : activeSection === 'announcements'
+                                    ? 'Notice Center'
+                                    : 'Student Portal'}
                     </h2>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-2 sm:flex sm:flex-wrap xl:justify-end">
+                <div className="flex min-w-0 flex-wrap items-center gap-3 xl:justify-end">
                   <div className="relative" ref={workspaceMenuRef}>
                     <button
                       onClick={() => setWorkspaceMenuOpen((open) => !open)}
-                      className="clickable-button inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      className="inline-flex h-12 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                     >
                       Actions
                       <ChevronDown className="h-3.5 w-3.5" />
@@ -1118,7 +1076,7 @@ export default function App() {
                               setWorkspaceLabel(action.label);
                               action.run();
                             }}
-                            className="clickable-button mb-1 w-full rounded-xl px-3 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
+                            className="mb-1 w-full rounded-xl px-3 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
                           >
                             <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">{action.label}</span>
                             <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{action.detail}</span>
@@ -1128,7 +1086,7 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="relative min-w-0 max-w-none sm:min-w-[180px] sm:max-w-[240px] sm:flex-1 xl:flex-none">
+                  <div className="relative order-last min-w-0 max-w-none basis-full sm:order-none sm:min-w-[180px] sm:max-w-[240px] sm:flex-1 xl:flex-none">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
@@ -1136,13 +1094,13 @@ export default function App() {
                       value={headerSearch}
                       onChange={(event) => setHeaderSearch(event.target.value)}
                       onKeyDown={handleSearchKeyDown}
-                      className="w-full rounded-full border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                     />
                   </div>
 
                   <button
                     onClick={() => setThemeMode((mode) => (mode === 'dark' ? 'light' : 'dark'))}
-                    className="clickable-button inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                    className="inline-flex h-12 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                     aria-label="Toggle theme"
                     title="Toggle theme"
                   >
@@ -1151,19 +1109,8 @@ export default function App() {
                   </button>
 
                   <button
-                    onClick={() => {
-                      setActiveSection('reports');
-                      setAdminInitialView('overview');
-                      setHeaderHint('Opened Reports workspace');
-                    }}
-                    className="clickable-button hidden rounded-full bg-[#0b1233] px-4 py-2 text-sm font-semibold text-white dark:bg-blue-700 sm:inline-flex"
-                  >
-                    New Report
-                  </button>
-
-                  <button
                     onClick={toggleFullscreen}
-                    className="clickable-button hidden h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:inline-flex"
+                    className="hidden h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 sm:inline-flex"
                     title="Toggle fullscreen"
                   >
                     <Maximize2 className="h-4 w-4" />
@@ -1172,7 +1119,7 @@ export default function App() {
                   <div className="relative" ref={notificationsRef}>
                     <button
                       onClick={() => setNotificationsOpen((open) => !open)}
-                      className="clickable-button relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                      className="relative inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                       title="Open notifications"
                     >
                       <Bell className="h-4 w-4" />
@@ -1192,9 +1139,9 @@ export default function App() {
                               setActiveSection('announcements');
                               setNotificationsOpen(false);
                             }}
-                            className="clickable-button rounded-lg px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-500/10"
+                            className="rounded-lg px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-500/10"
                           >
-                            Open Notice Center
+                            Notice Center
                           </button>
                         </div>
 
@@ -1204,7 +1151,6 @@ export default function App() {
                               No notifications yet.
                             </div>
                           )}
-
                           {visibleNotifications.slice(0, 6).map((notice) => {
                             const unread = !readNoticeIds.includes(notice.id);
                             return (
@@ -1227,7 +1173,7 @@ export default function App() {
                   <div className="relative" ref={profileMenuRef}>
                     <button
                       onClick={() => setProfileMenuOpen((open) => !open)}
-                      className="clickable-button inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                      className="inline-flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                       title="Profile menu"
                     >
                       <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-700 text-xs font-semibold text-white">{initials}</span>
@@ -1246,69 +1192,43 @@ export default function App() {
                           {accountUtilities.map((action) => {
                             const Icon = action.icon;
                             return (
-                            <button
-                              key={action.id}
-                              onClick={() => openAccountUtility(action.id)}
-                              className="clickable-button flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
-                            >
-                              <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
-                                <Icon className="h-4 w-4" />
-                              </span>
-                              <span>
-                                <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">{action.label}</span>
-                                <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{action.detail}</span>
-                              </span>
-                            </button>
-                          );
+                              <button
+                                key={action.id}
+                                onClick={() => openAccountUtility(action.id)}
+                                className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800"
+                              >
+                                <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                                  <Icon className="h-4 w-4" />
+                                </span>
+                                <span>
+                                  <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">{action.label}</span>
+                                  <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{action.detail}</span>
+                                </span>
+                              </button>
+                            );
                           })}
                         </div>
                         <div className="my-2 h-px bg-slate-200 dark:bg-slate-800" />
                         <button
-                          onClick={() => {
-                            setThemeMode((mode) => (mode === 'dark' ? 'light' : 'dark'));
-                            setProfileMenuOpen(false);
-                          }}
-                          className="clickable-button w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                        >
-                          Switch to {themeMode === 'dark' ? 'light' : 'dark'} mode
-                        </button>
-                        <button
-                          onClick={() => {
-                            setIsSidebarCollapsed((state) => !state);
-                            setProfileMenuOpen(false);
-                          }}
-                          className="clickable-button hidden w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 lg:block"
-                        >
-                          {isSidebarCollapsed ? 'Expand sidebar' : 'Use compact sidebar'}
-                        </button>
-                        <button
                           type="button"
                           onClick={handleLogout}
-                          className="clickable-button sticky bottom-0 mt-1 flex w-full items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-left text-sm font-semibold text-rose-700 shadow-sm hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200 dark:hover:bg-rose-500/15"
+                          className="mt-1 flex w-full items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-left text-sm font-semibold text-rose-700 shadow-sm hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200"
                         >
-                          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-rose-600 dark:bg-rose-500/10 dark:text-rose-200">
-                            <LogOut className="h-4 w-4" />
-                          </span>
-                          <span>
-                            <span className="block">Logout</span>
-                            <span className="block text-xs font-medium text-rose-500 dark:text-rose-200/80">End this portal session</span>
-                          </span>
+                          <LogOut className="h-4 w-4" />
+                          Logout
                         </button>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-              {headerHint && (
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{headerHint}</p>
-              )}
+              {headerHint && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{headerHint}</p>}
             </div>
 
-            <div className="nstp-content min-h-0 flex-1 overflow-visible p-3 md:p-4 lg:overflow-auto lg:p-4">
+            <div className="p-3 md:p-4">
               {renderSection()}
             </div>
-          </div>
-        </main>
+          </main>
         </div>
       </div>
       {accountUtility && selectedAccountUtility && (
@@ -1411,17 +1331,6 @@ export default function App() {
                   >
                     <span className="flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-white">{themeMode === 'dark' ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />} Display mode</span>
                     <span className="mt-2 block text-sm text-slate-600 dark:text-slate-300">Currently using {themeMode} mode. Switch for the lighting condition of your device.</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSidebarCollapsed((state) => !state);
-                      recordAccountActivity('Sidebar density changed', isSidebarCollapsed ? 'Expanded sidebar labels.' : 'Enabled compact sidebar.');
-                    }}
-                    className="clickable-button hidden rounded-2xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:hover:bg-slate-800 lg:block"
-                  >
-                    <span className="flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-white">{isSidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />} Sidebar density</span>
-                    <span className="mt-2 block text-sm text-slate-600 dark:text-slate-300">{isSidebarCollapsed ? 'Expanded navigation will show full labels.' : 'Compact navigation gives the workspace more horizontal room.'}</span>
                   </button>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950">
                     <p className="text-sm font-semibold text-slate-950 dark:text-white">Notification preferences</p>

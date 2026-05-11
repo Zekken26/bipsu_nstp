@@ -478,7 +478,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         <div className="mx-auto flex max-w-[1540px] items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-5 lg:px-12">
           <button onClick={() => showPublicView('home')} className="flex min-w-0 items-center gap-2 text-left sm:gap-4">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1 shadow-sm sm:h-14 sm:w-14 sm:rounded-2xl sm:p-1.5">
-              <img src="/bipsu-logo.svg" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
+              <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
             </span>
             <span className="flex min-w-0 items-center gap-3 sm:gap-4">
               <span className="font-brand hidden border-r border-white/40 pr-5 text-3xl font-semibold tracking-tight sm:block">BiPSU</span>
@@ -571,7 +571,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
           <div className="absolute bottom-0 left-[42%] h-12 w-[38%] rounded-t-[100%] bg-[#0b4ea2]" />
 
           <div className="relative mx-auto flex min-h-[calc(100svh-5rem)] max-w-5xl flex-col items-center justify-center px-5 pb-32 pt-10 text-center sm:px-8">
-            <img src="/bipsu-logo.svg" alt="Biliran Province State University logo" className="h-24 w-24 rounded-full bg-white/90 p-2 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.55)] ring-1 ring-blue-100 dark:bg-white dark:ring-blue-300/30 sm:h-32 sm:w-32" />
+            <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-24 w-24 rounded-full bg-white/90 p-2 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.55)] ring-1 ring-blue-100 dark:bg-white dark:ring-blue-300/30 sm:h-32 sm:w-32" />
             <p className="mt-6 text-xs font-semibold uppercase tracking-[0.42em] text-[#0b4ea2] dark:text-blue-200 sm:text-sm">
               Biliran Province State University
             </p>
@@ -692,16 +692,20 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
       {showAuth && (
         <div className="fixed inset-0 z-50 overflow-auto bg-slate-950/70 p-3 backdrop-blur-sm md:p-6">
           <div className="mx-auto grid min-h-full max-w-6xl items-center">
-            <div className="grid overflow-hidden rounded-2xl border border-blue-200/70 bg-white shadow-[0_25px_65px_-28px_rgba(11,78,162,0.45)] dark:border-slate-700 dark:bg-slate-950 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="grid overflow-hidden rounded-2xl border border-blue-200/70 bg-white shadow-[0_25px_65px_-28px_rgba(11,78,162,0.45)] dark:border-slate-700 dark:bg-slate-950 lg:grid-cols-[0.86fr_1.14fr]">
               <section className="relative hidden bg-[#06245c] p-8 text-white lg:block">
-                <div className="absolute inset-0 bg-[linear-gradient(145deg,#06245c,#0b4ea2_60%,#f2b705)] opacity-95" />
+                <div className="absolute inset-0 bg-[#06245c]" />
+                <div className="absolute inset-x-0 top-0 h-1 bg-[#f2b705]" />
                 <div className="relative">
-                  <img src="/bipsu-logo.svg" alt="Biliran Province State University logo" className="mb-6 h-16 w-16 rounded-2xl bg-white p-2" />
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-100">Secure BiPSU NSTP Access</p>
-                  <h2 className="mt-2 text-3xl font-semibold">Verified accounts, official records, clearer outcomes.</h2>
+                  <div className="mb-6 flex items-center gap-3">
+                    <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-16 w-16 rounded-2xl bg-white p-2" />
+                    <img src="/nstp-logo.svg" alt="NSTP logo" className="h-16 w-16 rounded-2xl bg-white p-2" />
+                  </div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-100">Official BiPSU NSTP Portal</p>
+                  <h2 className="mt-2 text-3xl font-semibold">Secure access for enrollment, learning records, and NSTP administration.</h2>
                   <div className="mt-8 space-y-3">
                     {['Student ID approval before access', 'Role-based dashboards for students, facilitators, and admins', 'Grades, reports, modules, and exams in one portal'].map((item) => (
-                      <div key={item} className="flex items-center gap-3 rounded-xl border border-white/18 bg-white/12 p-3 text-sm font-semibold backdrop-blur-md">
+                      <div key={item} className="flex items-center gap-3 rounded-xl border border-white/18 bg-white/10 p-3 text-sm font-semibold">
                         <CheckCircle className="h-4 w-4 text-[#ffd24d]" />
                         {item}
                       </div>
@@ -712,7 +716,11 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
 
               <section className="p-6 md:p-10">
                 <div className="mb-6 flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
+                    <div className="mb-3 flex items-center gap-2 lg:hidden">
+                      <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-11 w-11 rounded-xl border border-blue-100 bg-white p-1" />
+                      <img src="/nstp-logo.svg" alt="NSTP logo" className="h-11 w-11 rounded-xl border border-blue-100 bg-white p-1" />
+                    </div>
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Portal Access</p>
                     <h2 className="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">{mode === 'login' ? 'Sign in to continue' : 'Request student access'}</h2>
                     <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
@@ -742,11 +750,13 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                   ))}
                 </div>
 
-                <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <DemoButton icon={UserRound} label="Student" onClick={() => useDemo('student')} />
-                  <DemoButton icon={ShieldCheck} label="Admin" onClick={() => useDemo('admin')} />
-                  <DemoButton icon={GraduationCap} label="Facilitator" onClick={() => useDemo('facilitator')} />
-                </div>
+                {mode === 'login' && (
+                  <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <DemoButton icon={UserRound} label="Student" onClick={() => useDemo('student')} />
+                    <DemoButton icon={ShieldCheck} label="Admin" onClick={() => useDemo('admin')} />
+                    <DemoButton icon={GraduationCap} label="Facilitator" onClick={() => useDemo('facilitator')} />
+                  </div>
+                )}
 
                 {notice && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">{notice}</div>}
                 {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100">{error}</div>}
@@ -832,18 +842,20 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                     </>
                   )}
 
-                  <button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-700 to-[#f2b705] py-3 font-semibold text-white shadow-sm hover:brightness-105">
+                  <button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 py-3 font-semibold text-white shadow-sm ring-1 ring-blue-800/10 hover:bg-blue-800">
                     {mode === 'login' ? 'Continue to Dashboard' : 'Submit Registration'}
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </form>
 
-                <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                  <p className="font-bold text-slate-800 dark:text-slate-100">Demo Credentials</p>
-                  <p>Admin: admin@nstp.edu / admin</p>
-                  <p>Facilitator: facilitator@nstp.edu / facilitator</p>
-                  <p>Student: juan.dela-cruz@student.edu / student / ID 2024-0001</p>
-                </div>
+                {mode === 'login' && (
+                  <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                    <p className="font-bold text-slate-800 dark:text-slate-100">Demo Credentials</p>
+                    <p>Admin: admin@nstp.edu / admin</p>
+                    <p>Facilitator: facilitator@nstp.edu / facilitator</p>
+                    <p>Student: juan.dela-cruz@student.edu / student / ID 2024-0001</p>
+                  </div>
+                )}
               </section>
             </div>
           </div>
@@ -898,7 +910,7 @@ function DashboardPreview() {
             <p className="text-sm font-semibold text-slate-500">Welcome back, <span className="text-slate-900">Juan Dela Cruz</span></p>
             <p className="mt-1 text-xs font-semibold text-slate-400">Student</p>
 
-            <div className="mt-5 grid grid-cols-4 gap-3">
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {dashboardStats.map((stat) => {
                 const Icon = stat.icon;
                 return (

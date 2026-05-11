@@ -181,14 +181,14 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
           </button>
         )}
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Assessments & Examinations</h2>
           <span className="posh-tag border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200">
             Bento View
           </span>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="posh-kpi">
             <div className="flex items-center gap-3 mb-2"><FileText className="w-5 h-5 text-blue-700" /><span className="text-sm text-slate-600 dark:text-slate-300">Available Assessments</span></div>
             <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{library.length}</p>
