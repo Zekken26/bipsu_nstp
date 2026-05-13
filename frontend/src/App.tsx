@@ -14,6 +14,7 @@ import AnnouncementsCenter from './features/announcements/pages/AnnouncementsCen
 import ReportsCenter from './pages/ReportsPage';
 import GradesPage from './pages/GradesPage';
 import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
+import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
 import { ensureNstpSeedData, safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents } from './data/nstpData';
 
 type ShellSection = 'overview' | 'modules' | 'assessments' | 'progress' | 'grades' | 'admin' | 'facilitator' | 'announcements' | 'reports';
@@ -941,86 +942,36 @@ export default function App() {
     <>
       <div className="min-h-screen overflow-x-hidden bg-[#f4f8fd] text-slate-900 dark:bg-slate-950 dark:text-slate-100 lg:h-screen">
         <div className="min-h-screen lg:h-screen">
-          {mobileSidebarOpen && (
-            <button
-              type="button"
-              aria-label="Close menu backdrop"
-              onClick={() => setMobileSidebarOpen(false)}
-              className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-sm lg:hidden"
-            />
-          )}
-          <aside className={`fixed left-0 top-0 z-50 flex h-screen w-[280px] max-w-[86vw] flex-col overflow-hidden rounded-r-[28px] bg-[#061E3D] text-white shadow-[0_20px_60px_rgba(0,0,0,0.25)] transition-transform duration-300 lg:translate-x-0 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-            <div className="shrink-0 px-4 pb-4 pt-5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-[#E5B73B]/50 bg-white p-1 text-sm font-semibold shadow-sm">
-                    <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
-                  </div>
-                  <div className="min-w-0">
-                    <h1 className="truncate text-base font-semibold leading-tight text-white">BiPSU NSTP Portal</h1>
-                    <p className="truncate text-xs uppercase tracking-[0.18em] text-white/65">Student Portal</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setMobileSidebarOpen(false)}
-                  title="Close menu"
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white lg:hidden"
-                  aria-label="Close menu"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+          <CollapsibleRoleSidebar
+            open={mobileSidebarOpen}
+            onClose={() => setMobileSidebarOpen(false)}
+            portalLabel="Student Portal"
+            closeLabel="Close student navigation"
+            groups={[
+              {
+                label: 'Navigation',
+                items: navItems.map((item) => ({
+                  label: item.label,
+                  icon: item.icon,
+                  active: activeSection === item.id,
+                  onClick: () => navigateToSection(item.id),
+                })),
+              },
+            ]}
+            avatarLabel={initials}
+            accountLabel="Student"
+            accountTitle={user.name}
+            accountSubtitle={user.email}
+            accountMeta={
+              <div className="flex items-center gap-2 text-xs text-white/75">
+                <CalendarDays className="h-4 w-4 text-[#E5B73B]" />
+                {today}
               </div>
-            </div>
+            }
+            onLogout={handleLogout}
+          />
 
-            <nav className="sidebar-nav-scroll min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              <p className="mb-2 px-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/50">Navigation</p>
-              <div className="space-y-1">
-                {navItems.map((item) => {
-                  const Icon = item.icon;
-                  const active = activeSection === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => navigateToSection(item.id)}
-                      title={item.label}
-                      className={`relative flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${active ? 'bg-white/10 text-white' : 'text-white/74 hover:bg-white/[0.07] hover:text-white'}`}
-                    >
-                      {active ? <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-[#E5B73B]" /> : null}
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </nav>
-
-            <div className="shrink-0 border-t border-white/10 p-4">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-white/65">Signed In</p>
-                <div className="flex items-center gap-3">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-sm font-semibold text-white shadow-lg shadow-blue-950/40">{initials}</span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold leading-tight text-white">{user.name}</p>
-                    <p className="truncate text-xs text-white/70">{user.email}</p>
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center gap-2 text-xs text-white/75">
-                  <CalendarDays className="h-4 w-4 text-[#E5B73B]" />
-                  {today}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="mt-3 flex w-full items-center gap-2 border-t border-white/10 pt-3 text-sm font-medium text-white/78 hover:text-white"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Logout
-                </button>
-              </div>
-            </div>
-          </aside>
-
-          <main className="m-3 min-h-0 min-w-0 overflow-auto rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/50 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none lg:ml-[280px]">
+          <main className="m-3 min-h-0 min-w-0 overflow-auto rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/50 backdrop-blur transition-all duration-300 dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none lg:ml-[76px]">
             <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-5 py-5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div className="flex min-w-0 items-start gap-3">

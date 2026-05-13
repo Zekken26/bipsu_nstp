@@ -11,7 +11,6 @@ import {
   FileQuestion,
   FileVideo,
   LayoutDashboard,
-  LogOut,
   MapPin,
   Menu,
   Moon,
@@ -24,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import AssessmentManager from '../../assessments/components/AssessmentManager';
+import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import {
   createEmptyStudent,
   loadAccounts,
@@ -300,77 +300,37 @@ export default function FacilitatorDashboard({
   return (
     <div className={`${embedded ? 'min-h-0 bg-transparent' : 'min-h-dvh overflow-x-hidden bg-[#f4f8fd]'} text-slate-950 dark:bg-slate-950 dark:text-slate-100`}>
       <div className={embedded ? 'min-h-0' : 'min-h-dvh'}>
-        {!embedded && mobileSidebarOpen && (
-          <button
-            type="button"
-            aria-label="Close facilitator navigation"
-            onClick={() => setMobileSidebarOpen(false)}
-            className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-sm lg:hidden"
+        {!embedded && (
+          <CollapsibleRoleSidebar
+            open={mobileSidebarOpen}
+            onClose={() => setMobileSidebarOpen(false)}
+            portalLabel="Facilitator Portal"
+            closeLabel="Close facilitator navigation"
+            groups={navGroups.map((group) => ({
+              label: group.label,
+              items: group.items.map((item) => ({
+                label: item.label,
+                icon: item.icon,
+                active: item.active,
+                badge: item.badge,
+                onClick: () => handleSidebarAction(item.target),
+              })),
+            }))}
+            avatarLabel={initials(user.name)}
+            accountLabel="Facilitator"
+            accountTitle={user.name}
+            accountSubtitle={assignedMunicipalities.length ? `${assignedMunicipalities.join(', ')}, Biliran` : 'Awaiting assignment'}
+            accountMeta={
+              <div className="flex items-start gap-2 text-xs font-semibold text-white/75">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#E5B73B]" />
+                <span className="min-w-0 truncate">{assignedMunicipalities.length ? `${assignedMunicipalities.join(', ')}, Biliran` : 'Awaiting assignment'}</span>
+              </div>
+            }
+            onLogout={onLogout}
           />
         )}
-        {!embedded && (
-        <aside className={`fixed left-0 top-0 z-50 flex h-screen w-[280px] max-w-[86vw] flex-col overflow-hidden rounded-r-[28px] bg-[#061E3D] text-white shadow-[0_20px_60px_rgba(0,0,0,0.25)] transition-transform duration-300 lg:translate-x-0 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-          <div className="shrink-0 px-4 pb-4 pt-5">
-            <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center overflow-hidden rounded-xl border border-[#E5B73B]/50 bg-white p-1 text-sm font-semibold shadow-sm">
-                <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-base font-semibold leading-tight">BiPSU NSTP Portal</p>
-                <p className="truncate text-xs uppercase tracking-[0.18em] text-white/65">Facilitator Portal</p>
-              </div>
-            </div>
-          </div>
 
-          <nav className="sidebar-nav-scroll min-h-0 flex-1 overflow-y-auto px-4 py-3">
-            <div className="space-y-5">
-              {navGroups.map((group) => (
-                <div key={group.label}>
-                  <p className="mb-2 px-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/50">{group.label}</p>
-                  <div className="space-y-1">
-                    {group.items.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <button
-                          key={item.label}
-                          onClick={() => {
-                            handleSidebarAction(item.target);
-                            setMobileSidebarOpen(false);
-                          }}
-                          className={`relative flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${
-                            item.active ? 'bg-white/10 text-white' : 'text-white/74 hover:bg-white/[0.07] hover:text-white'
-                          }`}
-                        >
-                          {item.active ? <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-[#E5B73B]" /> : null}
-                          <Icon className="h-4 w-4 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                          {item.badge ? <span className="rounded-full bg-blue-500 px-2 py-0.5 text-xs font-semibold text-white">{item.badge}</span> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </nav>
-
-          <div className="shrink-0 border-t border-white/10 p-4">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55">Assigned Municipality</p>
-              <div className="mt-3 flex items-start gap-2 text-sm font-semibold">
-                <MapPin className="mt-0.5 h-4 w-4 text-[#E5B73B]" />
-                <span className="min-w-0 break-words">{assignedMunicipalities.length ? `${assignedMunicipalities.join(', ')}, Biliran` : 'Awaiting assignment'}</span>
-              </div>
-              <button onClick={onLogout} className="mt-3 flex w-full items-center gap-2 border-t border-white/10 pt-3 text-sm font-medium text-white/78 hover:text-white">
-                <LogOut className="h-4 w-4" />
-                Logout
-              </button>
-            </div>
-          </div>
-        </aside>
-        )}
-
-        <main className={`min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/50 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none ${embedded ? '' : 'm-3 lg:ml-[280px]'}`}>
+        <main className={`min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/50 backdrop-blur transition-all duration-300 dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none ${embedded ? '' : 'm-3 lg:ml-[76px]'}`}>
           <header className="flex flex-col gap-4 border-b border-slate-200 px-5 py-5 dark:border-slate-800 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               {!embedded && (

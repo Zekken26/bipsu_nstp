@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Users, BookOpen, TrendingUp, Award, Search, ClipboardList, TriangleAlert, Siren, Target, Plus, Save, Pencil, Trash2, Mail, BarChart3, GraduationCap, BadgeCheck, X, UserRoundPlus, Eye, FileDown, FileUp, History, ArrowLeft, Bell, Building2, CalendarDays, Check, ChevronDown, Home, LogOut, Settings, SunMedium, UserCheck, Printer, GripVertical, Menu } from 'lucide-react';
+import { Users, BookOpen, TrendingUp, Award, Search, ClipboardList, TriangleAlert, Siren, Target, Plus, Save, Pencil, Trash2, Mail, BarChart3, GraduationCap, BadgeCheck, X, UserRoundPlus, Eye, FileDown, FileUp, History, ArrowLeft, Bell, Building2, CalendarDays, Check, ChevronDown, Home, Settings, SunMedium, UserCheck, Printer, GripVertical, Menu } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, CartesianGrid, XAxis, YAxis, Bar, LineChart, Line, Legend } from 'recharts';
 import ComponentAssignment from '../components/ComponentAssignment';
 import AssessmentManager from '../../assessments/components/AssessmentManager';
 import ModulesPage from '../../../pages/ModulesPage';
 import FacilitatorManagement from '../components/FacilitatorManagement';
+import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups } from '../../../data/nstpData';
 
 type AdminAuditEntry = {
@@ -1872,80 +1873,39 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     return (
       <div className={`${embedded ? 'min-h-0 bg-transparent' : 'min-h-dvh overflow-x-hidden bg-[#f4f8fd]'} text-slate-950 dark:bg-slate-950 dark:text-slate-100`}>
         <div className={embedded ? 'min-h-0' : 'min-h-dvh'}>
-          {!embedded && adminMobileSidebarOpen && (
-            <button
-              type="button"
-              aria-label="Close admin navigation"
-              onClick={() => setAdminMobileSidebarOpen(false)}
-              className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-sm lg:hidden"
+          {!embedded && (
+            <CollapsibleRoleSidebar
+              open={adminMobileSidebarOpen}
+              onClose={() => setAdminMobileSidebarOpen(false)}
+              portalLabel="Admin Portal"
+              closeLabel="Close admin navigation"
+              groups={[
+                {
+                  label: 'Main Navigation',
+                  items: [
+                    { label: 'Dashboard', icon: Home, onClick: () => setView('overview'), active: view === 'overview' },
+                    { label: 'Student Approvals', icon: UserCheck, onClick: () => setView('enrollment'), active: view === 'enrollment' },
+                    { label: 'Facilitators', icon: Users, onClick: () => setView('facilitators'), active: view === 'facilitators' },
+                    { label: 'NSTP Components', icon: Building2, onClick: () => setView('municipalities'), active: view === 'municipalities' },
+                    { label: 'Students', icon: GraduationCap, onClick: () => setView('students'), active: view === 'students' },
+                    { label: 'Modules', icon: BookOpen, onClick: () => setView('modules'), active: view === 'modules' },
+                    { label: 'Assessments', icon: ClipboardList, onClick: () => setView('assessments'), active: view === 'assessments' },
+                    { label: 'Grades', icon: Award, onClick: () => setView('assignments'), active: view === 'assignments' },
+                    { label: 'Reports', icon: BarChart3, onClick: () => setView('tools'), active: view === 'tools' },
+                    { label: 'Export Templates', icon: FileDown, onClick: () => setView('exports'), active: view === 'exports' },
+                    { label: 'Settings', icon: Settings, onClick: () => setView('settings'), active: view === 'settings' },
+                  ],
+                },
+              ]}
+              avatarLabel={adminInitials}
+              accountLabel="Administrator"
+              accountTitle="Dr. Maria Elena Santos"
+              accountSubtitle="NSTP Director"
+              onLogout={onLogout}
             />
           )}
-          {!embedded && (
-          <aside className={`fixed left-0 top-0 z-50 flex h-screen w-[280px] max-w-[86vw] flex-col overflow-hidden rounded-r-[28px] bg-[#061E3D] text-white shadow-[0_20px_60px_rgba(0,0,0,0.25)] transition-transform duration-300 lg:translate-x-0 ${adminMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-            <div className="shrink-0 px-4 pb-4 pt-5">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-[#E5B73B]/35 bg-white p-1.5 shadow-sm">
-                  <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-semibold leading-tight">BiPSU NSTP Portal</p>
-                  <p className="truncate text-xs uppercase tracking-[0.18em] text-white/65">Admin Portal</p>
-                </div>
-              </div>
-            </div>
 
-            <nav className="sidebar-nav-scroll min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              <p className="mb-2 px-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/50">Main Navigation</p>
-              <div className="space-y-1">
-                {[
-                  { label: 'Dashboard', icon: Home, action: () => setView('overview'), active: view === 'overview' },
-                  { label: 'Student Approvals', icon: UserCheck, action: () => setView('enrollment'), active: view === 'enrollment' },
-                  { label: 'Facilitators', icon: Users, action: () => setView('facilitators'), active: view === 'facilitators' },
-                  { label: 'NSTP Components', icon: Building2, action: () => setView('municipalities'), active: view === 'municipalities' },
-                  { label: 'Students', icon: GraduationCap, action: () => setView('students'), active: view === 'students' },
-                  { label: 'Modules', icon: BookOpen, action: () => setView('modules'), active: view === 'modules' },
-                  { label: 'Assessments', icon: ClipboardList, action: () => setView('assessments'), active: view === 'assessments' },
-                  { label: 'Grades', icon: Award, action: () => setView('assignments'), active: view === 'assignments' },
-                  { label: 'Reports', icon: BarChart3, action: () => setView('tools'), active: view === 'tools' },
-                  { label: 'Export Templates', icon: FileDown, action: () => setView('exports'), active: view === 'exports' },
-                  { label: 'Settings', icon: Settings, action: () => setView('settings'), active: view === 'settings' },
-                ].map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.label}
-                      onClick={() => {
-                        item.action();
-                        setAdminMobileSidebarOpen(false);
-                      }}
-                      className={`relative flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${
-                        item.active ? 'bg-white/10 text-white' : 'text-white/74 hover:bg-white/[0.07] hover:text-white'
-                      }`}
-                    >
-                      {item.active && <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-[#E5B73B]" />}
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </nav>
-
-            <div className="shrink-0 border-t border-white/10 p-4">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55">Account</p>
-                <p className="mt-3 break-words text-sm font-semibold leading-snug text-white">Dr. Maria Elena Santos</p>
-                <p className="text-xs text-blue-100">NSTP Director</p>
-                <button onClick={onLogout} className="mt-3 flex w-full items-center gap-2 rounded-xl border border-white/10 bg-transparent px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/[0.08] hover:text-white">
-                  <LogOut className="h-4 w-4" />
-                  Logout
-                </button>
-              </div>
-            </div>
-          </aside>
-          )}
-
-          <main className={`min-w-0 overflow-auto rounded-[2rem] border border-slate-200 bg-white/90 shadow-xl shadow-slate-200/50 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none ${embedded ? '' : 'm-3 lg:ml-[280px]'}`}>
+          <main className={`min-w-0 overflow-auto rounded-[2rem] border border-slate-200 bg-white/90 shadow-xl shadow-slate-200/50 backdrop-blur transition-all duration-300 dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none ${embedded ? '' : 'm-3 lg:ml-[76px]'}`}>
             <header className="relative flex flex-col gap-4 border-b border-slate-200 px-5 py-5 dark:border-slate-800 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex min-w-0 items-start gap-3">
                 {!embedded && (
