@@ -340,7 +340,7 @@ export default function ComponentAssignment() {
               Refresh
             </button>
             <button
-              onClick={assignComponents}
+              onClick={() => assignComponents()}
               className="bg-blue-700 text-white px-6 py-3 rounded-xl hover:bg-blue-800 hover:-translate-y-0.5 transition-all font-medium flex items-center gap-2 shadow-sm shadow-blue-900/20 cursor-pointer"
             >
               <CheckCircle className="w-5 h-5" />
@@ -348,7 +348,7 @@ export default function ComponentAssignment() {
             </button>
             {!applicationClosed ? (
               <button
-                onClick={closeApplicationsAndFillSlots}
+                onClick={() => closeApplicationsAndFillSlots()}
                 className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-emerald-300 bg-emerald-50 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 hover:-translate-y-0.5 transition-all dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100 dark:hover:bg-emerald-500/20 cursor-pointer"
               >
                 Close Application and Fill Slots

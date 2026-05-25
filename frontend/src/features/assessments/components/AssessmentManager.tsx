@@ -126,7 +126,7 @@ export default function AssessmentManager({ user, role }: Props) {
   };
 
   const togglePublished = (assessment: NstpAssessment) => {
-    const nextList = assessments.map((item) => item.id === assessment.id ? { ...item, status: item.status === 'published' ? 'draft' : 'published', updatedAt: new Date().toISOString() } : item);
+    const nextList: NstpAssessment[] = assessments.map((item) => item.id === assessment.id ? { ...item, status: item.status === 'published' ? 'draft' : 'published', updatedAt: new Date().toISOString() } : item);
     setAssessments(nextList);
     saveAssessments(nextList);
   };
@@ -165,7 +165,7 @@ export default function AssessmentManager({ user, role }: Props) {
   const upsertStudentFromAccount = (account: NstpAccount) => {
     const students = loadStudents();
     const existing = students.find((student) => student.id === account.id);
-    const nextStudents = existing
+    const nextStudents: NstpStudent[] = existing
       ? students.map((student) => student.id === account.id ? { ...student, name: account.name, email: account.email, updatedAt: new Date().toISOString() } : student)
       : [{ ...createEmptyStudent(), id: account.id, name: account.name, email: account.email, status: 'active' }, ...students];
     saveStudents(nextStudents);

@@ -122,6 +122,9 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
     { label: 'Classification', value: user.component ? 100 : 50 },
     { label: 'Grade Release', value: studentGrade?.released ? 100 : 35 },
   ];
+  const primaryBarData = role === 'facilitator'
+    ? facilitatorChartData
+    : studentMilestones.map((item) => ({ name: item.label, value: item.value, fill: '#2563eb' }));
   const facilitatorReadiness = [
     { label: 'Owned Content', value: Math.min(100, facilitatorOwned.length * 25) },
     { label: 'Published', value: facilitatorOwned.length ? Math.round((facilitatorOwned.filter((assessment) => assessment.status === 'published').length / facilitatorOwned.length) * 100) : 0 },
@@ -416,13 +419,13 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
                     <Area type="monotone" dataKey="pending" stroke="#f59e0b" fill="transparent" strokeWidth={2} />
                   </AreaChart>
                 ) : (
-                  <BarChart data={role === 'facilitator' ? facilitatorChartData.map((item) => ({ name: item.name, value: item.value, fill: item.fill })) : studentMilestones.map((item) => ({ name: item.label, value: item.value, fill: '#2563eb' }))} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                  <BarChart data={primaryBarData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
                     <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 11 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: 'currentColor', fontSize: 11 }} tickLine={false} axisLine={false} />
                     <Tooltip />
                     <Bar dataKey="value" radius={[8, 8, 4, 4]}>
-                      {(role === 'facilitator' ? facilitatorChartData : studentMilestones.map((item) => ({ ...item, fill: '#2563eb', name: item.label }))).map((entry) => (
-                        <Cell key={'name' in entry ? entry.name : entry.label} fill={'fill' in entry ? entry.fill : '#2563eb'} />
+                      {primaryBarData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
                       ))}
                     </Bar>
                   </BarChart>

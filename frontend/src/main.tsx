@@ -1,6 +1,6 @@
 
   import { createRoot } from "react-dom/client";
-  import App from "./App.tsx";
+  import App from "./App";
   import AppErrorBoundary from "./components/common/AppErrorBoundary";
   import "./styles/index.css";
 

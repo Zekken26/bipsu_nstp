@@ -15,6 +15,8 @@ export type NstpAccount = {
   school?: string;
   department?: string;
   degreeProgram?: string;
+  yearLevel?: string;
+  major?: string;
   gender?: string;
   birthdate?: string;
   houseStreetPurok?: string;
@@ -48,6 +50,8 @@ export type PendingStudentRegistration = {
   school?: string;
   department?: string;
   degreeProgram?: string;
+  yearLevel?: string;
+  major?: string;
   gender?: string;
   birthdate?: string;
   houseStreetPurok?: string;
@@ -118,6 +122,8 @@ export type NstpStudent = {
   school?: string;
   department?: string;
   degreeProgram?: string;
+  yearLevel?: string;
+  major?: string;
   gender?: string;
   birthdate?: string;
   houseStreetPurok?: string;
@@ -208,6 +214,128 @@ export const DEFAULT_COMPONENT_APPLICATION_STATE: ComponentApplicationState = {
 };
 
 const now = () => new Date().toISOString();
+
+const DUMMY_FIRST_NAMES = [
+  'Aira',
+  'Benjie',
+  'Christine',
+  'Daniel',
+  'Elaine',
+  'Francis',
+  'Grace',
+  'Harold',
+  'Ivy',
+  'Jerome',
+  'Kimberly',
+  'Lester',
+  'Mariel',
+  'Nathan',
+  'Olivia',
+  'Paolo',
+  'Queenie',
+  'Rafael',
+  'Shaira',
+  'Tristan',
+  'Ursula',
+  'Vincent',
+  'Wendy',
+  'Xander',
+  'Yasmine',
+  'Zachary',
+];
+
+const DUMMY_LAST_NAMES = [
+  'Abad',
+  'Bautista',
+  'Cabrera',
+  'Domingo',
+  'Espina',
+  'Flores',
+  'Gonzales',
+  'Hernandez',
+  'Ilagan',
+  'Javier',
+  'Lazaro',
+  'Mendoza',
+  'Navarro',
+  'Ocampo',
+  'Perez',
+  'Quintos',
+  'Ramos',
+  'Salazar',
+  'Tolentino',
+  'Villanueva',
+];
+
+const DUMMY_PROGRAMS = [
+  'BS Information Technology',
+  'BS Criminology',
+  'BS Hospitality Management',
+  'BS Business Administration',
+  'BS Civil Engineering',
+  'BS Education',
+  'BS Nursing',
+  'BS Computer Science',
+];
+
+function createDummyStudents(startNumber = 7, total = 50): NstpStudent[] {
+  return Array.from({ length: total }, (_, index) => {
+    const sequence = startNumber + index;
+    const firstName = DUMMY_FIRST_NAMES[index % DUMMY_FIRST_NAMES.length];
+    const lastName = DUMMY_LAST_NAMES[index % DUMMY_LAST_NAMES.length];
+    const component = NSTP_COMPONENTS[index % NSTP_COMPONENTS.length];
+    const municipality = BILIRAN_MUNICIPALITIES[index % BILIRAN_MUNICIPALITIES.length];
+    const progress = 54 + ((index * 7) % 45);
+    const status = progress < 65 ? 'pending' : index % 17 === 0 ? 'graduated' : 'active';
+
+    return {
+      id: `student-${sequence}`,
+      studentId: `2024-${String(1000 + sequence).padStart(4, '0')}`,
+      surname: lastName,
+      firstName,
+      name: `${firstName} ${lastName}`,
+      email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}${sequence}@student.bipsu.edu.ph`,
+      school: 'Biliran Province State University',
+      department: 'NSTP Department',
+      degreeProgram: DUMMY_PROGRAMS[index % DUMMY_PROGRAMS.length],
+      gender: index % 2 === 0 ? 'Female' : 'Male',
+      barangay: `Barangay ${1 + (index % 12)}`,
+      province: 'Biliran',
+      currentAddress: `${municipality}, Biliran`,
+      contactNumber: `09${String(170000000 + index).padStart(9, '0')}`,
+      component,
+      municipality,
+      programSection: `${DUMMY_PROGRAMS[index % DUMMY_PROGRAMS.length].replace(/^BS /, '')} 1${String.fromCharCode(65 + (index % 4))}`,
+      facilitatorId: 'facilitator-1',
+      facilitatorName: 'Dr. Maria Elena Santos',
+      progress,
+      assessments: 3 + (index % 7),
+      status,
+      notes: status === 'pending' ? 'Needs follow-up on pending NSTP requirements.' : 'Generated demo student for roster, reports, and grade testing.',
+      updatedAt: now(),
+    };
+  });
+}
+
+function createDummyGrades(startNumber = 7, total = 50): NstpGradeRecord[] {
+  return Array.from({ length: total }, (_, index) => {
+    const sequence = startNumber + index;
+    const prelim = 72 + ((index * 5) % 25);
+    const midterm = 70 + ((index * 7) % 27);
+    const final = index % 6 === 0 ? 0 : 71 + ((index * 9) % 26);
+    const average = final > 0 ? (prelim + midterm + final) / 3 : (prelim + midterm) / 2;
+
+    return {
+      studentId: `2024-${String(1000 + sequence).padStart(4, '0')}`,
+      prelim,
+      midterm,
+      final,
+      remarks: final === 0 ? 'In Progress' : average >= 75 ? 'Passed' : 'For Completion',
+      released: index % 4 !== 0,
+      updatedAt: now(),
+    };
+  });
+}
 
 export function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
@@ -694,6 +822,7 @@ const DEFAULT_STUDENTS: NstpStudent[] = [
     notes: 'Stable progress with a few pending submissions.',
     updatedAt: now(),
   },
+  ...createDummyStudents(7, 50),
 ];
 
 const DEFAULT_GRADES: NstpGradeRecord[] = [
@@ -701,6 +830,7 @@ const DEFAULT_GRADES: NstpGradeRecord[] = [
   { studentId: '2024-1001', prelim: 91, midterm: 87, final: 89, remarks: 'Passed', released: true, updatedAt: now() },
   { studentId: '2024-1002', prelim: 94, midterm: 95, final: 93, remarks: 'Passed', released: true, updatedAt: now() },
   { studentId: '2024-1003', prelim: 72, midterm: 70, final: 0, remarks: 'For Completion', released: false, updatedAt: now() },
+  ...createDummyGrades(7, 50),
 ];
 
 const DEFAULT_TRAINING_GROUPS: NstpTrainingGroup[] = [
@@ -1025,6 +1155,8 @@ export function createEmptyStudent(): NstpStudent {
     name: 'New Student',
     email: `student-${Math.random().toString(36).slice(2, 5)}@university.edu`,
     degreeProgram: '',
+    yearLevel: '',
+    major: '',
     gender: '',
     birthdate: '',
     houseStreetPurok: '',

@@ -228,7 +228,7 @@ const BIPSU_PROGRAMS = [
   },
   {
     school: 'School of Technology and Computer Studies',
-    programs: ['Bachelor of Science in Computer Science', 'Bachelor of Science in Information Systems', 'Bachelor of Science in Information Technology'],
+    programs: ['Bachelor of Science in Computer Science', 'Bachelor of Science in Information Systems', 'BS in Industrial Technology'],
   },
   {
     school: 'School of Teacher Education - Naval Campus',
@@ -252,6 +252,18 @@ const BIPSU_PROGRAMS = [
   },
 ];
 
+const YEAR_LEVEL_OPTIONS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+const INDUSTRIAL_TECHNOLOGY_PROGRAM = 'BS in Industrial Technology';
+const INDUSTRIAL_TECHNOLOGY_MAJORS = [
+  'Automotive Technology',
+  'Drafting Technology',
+  'Electricity Technology',
+  'Foods Technology',
+  'Garments Technology',
+  'Handicraft Technology',
+  'Refrigeration and Air-Conditioning Technology',
+];
+
 const buildOfficialName = (firstName: string, middleName: string, surname: string) => (
   `${firstName.trim()} ${middleName.trim()} ${surname.trim()}`.replace(/\s+/g, ' ').trim()
 );
@@ -273,6 +285,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
   const [studentId, setStudentId] = useState('');
   const [school, setSchool] = useState('');
   const [degreeProgram, setDegreeProgram] = useState('');
+  const [yearLevel, setYearLevel] = useState('');
+  const [major, setMajor] = useState('');
   const [gender, setGender] = useState('');
   const [birthdate, setBirthdate] = useState('');
   const [houseStreetPurok, setHouseStreetPurok] = useState('');
@@ -357,6 +371,16 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         return;
       }
 
+      if (!yearLevel) {
+        setError('Year Level is required.');
+        return;
+      }
+
+      if (degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM && !major) {
+        setError('Major is required for BS in Industrial Technology.');
+        return;
+      }
+
       if (!barangay.trim()) {
         setError('Barangay is required.');
         return;
@@ -410,6 +434,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         school,
         department: school,
         degreeProgram: degreeProgram.trim(),
+        yearLevel,
+        ...(degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM ? { major } : {}),
         gender,
         birthdate,
         houseStreetPurok: houseStreetPurok.trim(),
@@ -430,6 +456,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
       setStudentId('');
       setSchool('');
       setDegreeProgram('');
+      setYearLevel('');
+      setMajor('');
       setGender('');
       setBirthdate('');
       setHouseStreetPurok('');
@@ -780,6 +808,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                           onChange={(value) => {
                             setSchool(value);
                             setDegreeProgram('');
+                            setMajor('');
                           }}
                           required
                           options={BIPSU_PROGRAMS.map((item) => item.school)}
@@ -788,12 +817,33 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                         <SelectField
                           label="Degree Program"
                           value={degreeProgram}
-                          onChange={setDegreeProgram}
+                          onChange={(value) => {
+                            setDegreeProgram(value);
+                            if (value !== INDUSTRIAL_TECHNOLOGY_PROGRAM) setMajor('');
+                          }}
                           required
                           options={selectedSchoolPrograms}
                           placeholder={school ? 'Select your degree program' : 'Select a school first'}
                           disabled={!school}
                         />
+                        <SelectField
+                          label="Year Level"
+                          value={yearLevel}
+                          onChange={setYearLevel}
+                          required
+                          options={YEAR_LEVEL_OPTIONS}
+                          placeholder="Select year level"
+                        />
+                        {degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM && (
+                          <SelectField
+                            label="Major"
+                            value={major}
+                            onChange={setMajor}
+                            required
+                            options={INDUSTRIAL_TECHNOLOGY_MAJORS}
+                            placeholder="Select major"
+                          />
+                        )}
                       </FormSection>
 
                       <FormSection title="Contact and Address">
@@ -969,11 +1019,11 @@ function DashboardPreview() {
                   <span className="text-xs font-semibold text-blue-700">View all</span>
                 </div>
                 {[
-                  ['Common Module Schedule', 'May 24, 2026', CalendarDays],
-                  ['Assessment Guidelines', 'May 20, 2026', BookOpen],
-                  ['NSTP Orientation', 'May 15, 2026', Megaphone],
-                ].map(([title, date, Icon]) => {
-                  const ItemIcon = Icon as typeof CalendarDays;
+                  { title: 'Common Module Schedule', date: 'May 24, 2026', Icon: CalendarDays },
+                  { title: 'Assessment Guidelines', date: 'May 20, 2026', Icon: BookOpen },
+                  { title: 'NSTP Orientation', date: 'May 15, 2026', Icon: Megaphone },
+                ].map(({ title, date, Icon }) => {
+                  const ItemIcon = Icon;
                   return (
                     <div key={String(title)} className="flex items-center gap-3 border-t border-slate-100 py-3">
                       <span className="grid h-9 w-9 place-items-center rounded-lg bg-blue-50 text-blue-700">

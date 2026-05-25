@@ -61,6 +61,8 @@ const PROFILE_FIELD_DEFINITIONS = [
   { key: 'middleName', label: 'Middle Name' },
   { key: 'school', label: 'School / College / Department' },
   { key: 'degreeProgram', label: 'Degree Program' },
+  { key: 'yearLevel', label: 'Year Level' },
+  { key: 'major', label: 'Major' },
   { key: 'gender', label: 'Gender' },
   { key: 'birthdate', label: 'Birthdate' },
   { key: 'houseStreetPurok', label: 'House No. / Street / Purok' },
@@ -420,6 +422,8 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       school: registration.school,
       department: registration.department || registration.school,
       degreeProgram: registration.degreeProgram,
+      yearLevel: registration.yearLevel,
+      major: registration.major,
       gender: registration.gender,
       birthdate: registration.birthdate,
       houseStreetPurok: registration.houseStreetPurok,
@@ -449,6 +453,8 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       school: registration.school,
       department: registration.department || registration.school,
       degreeProgram: registration.degreeProgram,
+      yearLevel: registration.yearLevel,
+      major: registration.major,
       gender: registration.gender,
       birthdate: registration.birthdate,
       houseStreetPurok: registration.houseStreetPurok,
@@ -829,6 +835,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
             spacing: { after: 220 },
             children: [
               new ImageRun({
+                type: 'png',
                 data: dataUrlToUint8Array(template.headerImageDataUrl),
                 transformation: { width: 620, height: 96 },
               }),
@@ -1217,10 +1224,11 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     const nextStudents = students.map((student) => {
       if (!selectedStudentIds.includes(student.id)) return student;
       const nextProgress = Math.max(0, Math.min(100, student.progress + delta));
+      const nextStatus: NstpStudent['status'] = nextProgress === 100 ? 'graduated' : nextProgress >= 70 ? 'active' : 'pending';
       return {
         ...student,
         progress: nextProgress,
-        status: nextProgress === 100 ? 'graduated' : nextProgress >= 70 ? 'active' : 'pending',
+        status: nextStatus,
         updatedAt: new Date().toISOString(),
       };
     });
@@ -1320,11 +1328,11 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   };
 
   if (false && view === 'assessments') {
-    return <AssessmentManager user={{ id: 'admin-1', name: 'Administrator', role: 'admin' }} role="admin" />;
+    return <AssessmentManager user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" />;
   }
 
   if (false && view === 'modules') {
-    return <ModulesPage user={{ id: 'admin-1', name: 'Administrator', role: 'admin' }} role="admin" onBack={() => setView('overview')} />;
+    return <ModulesPage user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" onBack={() => setView('overview')} />;
   }
 
   if (false && view === 'assignments') {
@@ -1979,11 +1987,14 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                       <div className="rounded-2xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{pendingRegistrations.length} pending request{pendingRegistrations.length === 1 ? '' : 's'}</div>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[860px] text-sm">
+                      <table className="w-full min-w-[1120px] text-sm">
                         <thead>
                           <tr className="border-y border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
                             <th className="px-4 py-3">Student</th>
                             <th className="px-4 py-3">Email / ID</th>
+                            <th className="px-4 py-3">Program</th>
+                            <th className="px-4 py-3">Year Level</th>
+                            <th className="px-4 py-3">Major</th>
                             <th className="px-4 py-3">Municipality</th>
                             <th className="px-4 py-3">Assigned Facilitator</th>
                             <th className="px-4 py-3">Date</th>
@@ -1997,6 +2008,9 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                               <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
                                 <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{registration.name}</td>
                                 <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.studentId || registration.email}</td>
+                                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.degreeProgram || 'Not set'}</td>
+                                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.yearLevel || 'Not set'}</td>
+                                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.major || 'Not applicable'}</td>
                                 <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.municipality || 'Naval'}</td>
                                 <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{assignedFacilitator?.name || 'Unassigned'}</td>
                                 <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(registration.createdAt).toLocaleDateString()}</td>
@@ -2194,6 +2208,8 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                               ['Status', studentDetail.status],
                               ['Progress', `${studentDetail.progress}%`],
                               ['Degree Program', studentDetail.degreeProgram || 'Not set'],
+                              ['Year Level', studentDetail.yearLevel || 'Not set'],
+                              ['Major', studentDetail.major || 'Not set'],
                               ['Contact Number', studentDetail.contactNumber || 'Not set'],
                             ].map(([label, value]) => (
                               <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -2243,7 +2259,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     )}
                   </section>
                 ) : view === 'facilitators' ? (
-                  <FacilitatorManagement admin={{ id: 'admin-1', name: 'Administrator', role: 'admin' }} />
+                  <FacilitatorManagement admin={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} />
                 ) : view === 'municipalities' ? (
                   <section className="space-y-5">
                     <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 dark:border-slate-800 lg:flex-row lg:items-end lg:justify-between">
@@ -2497,14 +2513,14 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                       <h2 className="text-2xl font-semibold text-slate-950 dark:text-white">Module Library</h2>
                     </div>
                     <div className="overflow-visible">
-                      <ModulesPage user={{ id: 'admin-1', name: 'Administrator', role: 'admin' }} role="admin" onBack={() => setView('overview')} />
+                      <ModulesPage user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" onBack={() => setView('overview')} />
                     </div>
                   </section>
                 ) : view === 'assessments' ? (
                   <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Assessment Module</p>
                     <h2 className="mb-4 text-2xl font-semibold text-slate-950 dark:text-white">Assessment Bank</h2>
-                    <AssessmentManager user={{ id: 'admin-1', name: 'Administrator', role: 'admin' }} role="admin" />
+                    <AssessmentManager user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" />
                   </section>
                 ) : view === 'assignments' ? (
                   <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -3061,7 +3077,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                           <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
                             <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{registration.name}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.municipality || 'Naval'}</td>
-                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{['BSIT', 'BSEd', 'BSN', 'BSA', 'BECED'][index % 5]}</td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.degreeProgram || ['BSIT', 'BSEd', 'BSN', 'BSA', 'BECED'][index % 5]}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(registration.createdAt).toLocaleDateString()}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">Facilitator - {registration.municipality || 'Naval'}</td>
                             <td className="px-4 py-3">
