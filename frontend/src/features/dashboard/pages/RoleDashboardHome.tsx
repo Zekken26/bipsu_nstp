@@ -65,7 +65,7 @@ const roleCopy = {
   facilitator: {
     eyebrow: 'Facilitator Portal',
     title: 'NSTP Facilitator Workspace',
-    body: 'Upload lecture video details, create owned assessments, and maintain answer keys. Student records, grades, reports, and account controls remain admin-only.',
+    body: 'Publish educational resource links, create owned assessments, and maintain answer keys. Student records, grades, reports, and account controls remain admin-only.',
     tone: 'from-[#061A3A] via-[#0B3D91] to-[#0B3D91]',
     soft: 'bg-amber-50 text-amber-900 border-amber-100',
     actionTitle: 'Facilitator Actions',
@@ -146,7 +146,7 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
     ]
     : role === 'facilitator'
       ? [
-        { title: 'Lecture Upload', value: 'Ready', detail: 'Video metadata workspace', icon: Upload, target: 'lecture' },
+        { title: 'Resource Links', value: 'Ready', detail: 'Link-based material workspace', icon: Upload, target: 'lecture' },
         { title: 'Owned Assessments', value: String(facilitatorOwned.length), detail: 'Editable by facilitator', icon: ClipboardList, target: 'assessments' },
         { title: 'Answer Keys', value: 'Enabled', detail: 'Question-level keys', icon: CheckCircle, target: 'assessments' },
         { title: 'Access Level', value: 'Limited', detail: 'No records or grades', icon: ShieldCheck },
@@ -161,7 +161,7 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
   const workflow = role === 'admin'
     ? ['Approve enrollment', 'Publish modules', 'Assign facilitators', 'Classify students', 'Release grades']
     : role === 'facilitator'
-      ? ['Upload lecture', 'Build assessment', 'Set answer key', 'Publish', 'Review attempts']
+      ? ['Add resource link', 'Build assessment', 'Set answer key', 'Publish', 'Review attempts']
       : ['Study modules', 'Take quizzes', 'Check progress', 'Confirm component', 'View grade'];
 
   const actions = role === 'admin'
@@ -174,7 +174,7 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
     ]
     : role === 'facilitator'
       ? [
-        { label: 'Upload Lecture', target: 'lecture', icon: Upload },
+        { label: 'Add Resource Link', target: 'lecture', icon: Upload },
         { label: 'Create Assessment', target: 'assessments', icon: ClipboardList },
         { label: 'Edit Answer Key', target: 'assessments', icon: CheckCircle },
       ]
@@ -221,7 +221,7 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
       ];
 
   const announcements = [
-    { title: role === 'facilitator' ? 'Lecture Upload Window' : 'Common Module Schedule', date: 'May 24, 2026', icon: CalendarDays },
+    { title: role === 'facilitator' ? 'Resource Link Publishing' : 'Common Module Schedule', date: 'May 24, 2026', icon: CalendarDays },
     { title: role === 'admin' ? 'Enrollment Review Queue' : 'Assessment Guidelines', date: 'May 20, 2026', icon: BookOpen },
     { title: 'NSTP Orientation', date: 'May 15, 2026', icon: Megaphone },
   ];

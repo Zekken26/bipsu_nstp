@@ -6,6 +6,7 @@ import AssessmentManager from '../../assessments/components/AssessmentManager';
 import ModulesPage from '../../../pages/ModulesPage';
 import FacilitatorManagement from '../components/FacilitatorManagement';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
+import WorkflowOversight from '../components/WorkflowOversight';
 import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups } from '../../../data/nstpData';
 
 type AdminAuditEntry = {
@@ -125,7 +126,7 @@ const emptyLookup = () => ({
   graduated: 0,
 });
 
-type AdminDashboardView = 'overview' | 'enrollment' | 'students' | 'tools' | 'modules' | 'assessments' | 'facilitators' | 'municipalities' | 'assignments' | 'exports' | 'settings';
+type AdminDashboardView = 'overview' | 'oversight' | 'enrollment' | 'students' | 'tools' | 'modules' | 'assessments' | 'facilitators' | 'municipalities' | 'assignments' | 'exports' | 'settings';
 
 type AdminDashboardProps = {
   initialView?: AdminDashboardView;
@@ -1163,8 +1164,8 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
               ...account,
               generalEducationComplete: true,
               examTaken: account.examTaken ?? true,
-              preferredComponent: account.preferredComponent || updatedStudent.component,
-              component: updatedStudent.component,
+              preferredComponent: account.preferredComponent || (updatedStudent.component === 'Common Phase' ? undefined : updatedStudent.component),
+              component: updatedStudent.component === 'Common Phase' ? account.component : updatedStudent.component,
               componentAccessStatus: 'manual-approved',
               surname: updatedStudent.surname,
               firstName: updatedStudent.firstName,
@@ -1877,7 +1878,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     </section>
   );
 
-  if (['overview', 'enrollment', 'students', 'facilitators', 'municipalities', 'modules', 'assessments', 'tools', 'assignments', 'exports', 'settings'].includes(view)) {
+  if (['overview', 'oversight', 'enrollment', 'students', 'facilitators', 'municipalities', 'modules', 'assessments', 'tools', 'assignments', 'exports', 'settings'].includes(view)) {
     return (
       <div className={`${embedded ? 'min-h-0 bg-transparent' : 'min-h-dvh overflow-x-hidden bg-[#f4f8fd]'} text-slate-950 dark:bg-slate-950 dark:text-slate-100`}>
         <div className={embedded ? 'min-h-0' : 'min-h-dvh'}>
@@ -1892,6 +1893,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   label: 'Main Navigation',
                   items: [
                     { label: 'Dashboard', icon: Home, onClick: () => setView('overview'), active: view === 'overview' },
+                    { label: 'Common Phase Oversight', icon: CalendarDays, onClick: () => setView('oversight'), active: view === 'oversight' },
                     { label: 'Student Approvals', icon: UserCheck, onClick: () => setView('enrollment'), active: view === 'enrollment' },
                     { label: 'Facilitators', icon: Users, onClick: () => setView('facilitators'), active: view === 'facilitators' },
                     { label: 'NSTP Components', icon: Building2, onClick: () => setView('municipalities'), active: view === 'municipalities' },
@@ -1929,7 +1931,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-300">Administration</p>
                   <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
-                    {view === 'exports' ? 'Export Layout' : view === 'settings' ? 'System Settings' : 'Dashboard'}
+                    {view === 'exports' ? 'Export Layout' : view === 'settings' ? 'System Settings' : view === 'oversight' ? 'Workflow Oversight' : 'Dashboard'}
                   </h1>
                 </div>
               </div>
@@ -1976,7 +1978,9 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
 
             <div className={`grid gap-5 p-5 ${['exports', 'municipalities', 'facilitators'].includes(view) ? 'xl:grid-cols-1' : 'xl:grid-cols-[minmax(0,1fr)_14rem]'}`}>
               <div className="min-w-0 space-y-5">
-                {view === 'enrollment' ? (
+                {view === 'oversight' ? (
+                  <WorkflowOversight />
+                ) : view === 'enrollment' ? (
                   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                     <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>

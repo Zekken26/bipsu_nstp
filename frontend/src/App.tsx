@@ -10,6 +10,7 @@ import AssessmentsPage from './pages/AssessmentsPage';
 import ProgressTracker from './features/progress/pages/ProgressTracker';
 import AdminDashboard from './features/admin/pages/AdminDashboard';
 import FacilitatorDashboard from './features/facilitator/pages/FacilitatorDashboard';
+import StudentPortal from './features/student/pages/StudentPortal';
 import AnnouncementsCenter from './features/announcements/pages/AnnouncementsCenter';
 import ReportsCenter from './pages/ReportsPage';
 import GradesPage from './pages/GradesPage';
@@ -454,6 +455,15 @@ export default function App() {
     );
   }
 
+  if (user.role === 'student' && user.demoStage) {
+    return (
+      <>
+        <StudentPortal user={user} onLogout={handleLogout} />
+        {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
+      </>
+    );
+  }
+
   // Check student enrollment status
   const generalEducationComplete = user.generalEducationComplete || false;
   const preferredComponent = user.preferredComponent || null;
@@ -519,6 +529,15 @@ export default function App() {
     }} />;
   }
 
+  if (user.role === 'student') {
+    return (
+      <>
+        <StudentPortal user={user} onLogout={handleLogout} />
+        {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
+      </>
+    );
+  }
+
   const today = new Date().toLocaleDateString(undefined, {
     month: 'long',
     day: 'numeric',
@@ -573,7 +592,7 @@ export default function App() {
     ]
     : user.role === 'facilitator'
       ? [
-        { label: 'Facilitator Dashboard', detail: 'Lecture and assessment overview', run: () => { setActiveSection('facilitator'); setHeaderHint('Opened Facilitator Dashboard'); setWorkspaceMenuOpen(false); } },
+        { label: 'Facilitator Dashboard', detail: 'Learning materials and assessment overview', run: () => { setActiveSection('facilitator'); setHeaderHint('Opened Facilitator Dashboard'); setWorkspaceMenuOpen(false); } },
         { label: 'Assessment Studio', detail: 'Create questions and answer keys', run: () => { setActiveSection('assessments'); setHeaderHint('Opened Assessment Studio'); setWorkspaceMenuOpen(false); } },
         { label: 'Notice Center', detail: 'Read program updates', run: () => { setActiveSection('announcements'); setHeaderHint('Opened Notice Center'); setWorkspaceMenuOpen(false); } },
       ]
@@ -674,7 +693,7 @@ export default function App() {
     const roleSummary = user.role === 'admin'
       ? 'Full administrative permissions confirmed.'
       : user.role === 'facilitator'
-        ? 'Facilitator permissions confirmed for lecture and assessment publishing.'
+        ? 'Facilitator permissions confirmed for learning material links and assessment publishing.'
         : 'Student permissions confirmed for learning, assessments, progress, and grades.';
     setHeaderHint(roleSummary);
     recordAccountActivity('Permission check refreshed', roleSummary);
@@ -749,7 +768,7 @@ export default function App() {
       : []),
     ...(user.role === 'facilitator'
       ? [
-        { label: 'Lecture Upload', keywords: ['lecture', 'upload', 'video', 'lesson'], run: () => { setActiveSection('facilitator'); setHeaderHint('Opened Lecture Upload'); } },
+        { label: 'Learning Material Links', keywords: ['learning', 'material', 'link', 'video', 'lesson'], run: () => { setActiveSection('facilitator'); setHeaderHint('Opened Learning Materials'); } },
         { label: 'Answer Keys', keywords: ['answer', 'answer key', 'answers', 'keys', 'quiz', 'assessment'], run: () => { setActiveSection('assessments'); setHeaderHint('Opened Answer Key Manager'); } },
       ]
       : []),
@@ -1257,8 +1276,8 @@ export default function App() {
                   </div>
                   <div className="grid gap-3">
                     {[
-                      ['NSTP component', user.component || user.preferredComponent || (user.role === 'admin' ? 'Program administration' : user.role === 'facilitator' ? 'Lecture facilitator' : 'Pending assignment')],
-                      ['Portal access', user.role === 'admin' ? 'Full administrative workspace' : user.role === 'facilitator' ? 'Facilitator lecture and assessment tools' : 'Student learning and grade portal'],
+                      ['NSTP component', user.component || user.preferredComponent || (user.role === 'admin' ? 'Program administration' : user.role === 'facilitator' ? 'NSTP facilitator' : 'Pending assignment')],
+                      ['Portal access', user.role === 'admin' ? 'Full administrative workspace' : user.role === 'facilitator' ? 'Facilitator learning material and assessment tools' : 'Student learning and grade portal'],
                       ['Last portal view', navItems.find((item) => item.id === activeSection)?.label || activeSection],
                     ].map(([label, value]) => (
                       <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950">
@@ -1450,7 +1469,7 @@ export default function App() {
                     ['NSTP coordinator', 'nstp.coordinator@bipsu.edu.ph', 'Program requirements, component concerns, and schedules.'],
                     ['Technical support', 'support@nstp.edu', 'Login, device, accessibility, and portal issue assistance.'],
                     ['Registrar support', 'registrar@bipsu.edu.ph', 'Student records, enrollment verification, and official standing.'],
-                    ['Facilitator support', 'facilitator.support@nstp.edu', 'Lecture uploads, answer keys, and assessment publishing.'],
+                    ['Facilitator support', 'facilitator.support@nstp.edu', 'Learning material links, answer keys, and assessment publishing.'],
                   ].map(([title, email, detail]) => (
                     <a
                       key={title}

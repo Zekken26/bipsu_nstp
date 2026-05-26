@@ -109,7 +109,7 @@ const portalFeatures = [
     status: 'Post-tests and exams',
     audience: 'Students, facilitators, facilitators, and admins',
     preview: 'The assessment bank connects quizzes, major exams, answer keys, facilitator-uploaded materials, and readiness tracking.',
-    bullets: ['Facilitators can upload lecture-linked assessments and answer keys', 'Students can access available tests from their portal', 'Admins can monitor coverage and published assessment status'],
+    bullets: ['Facilitators can publish learning links and manage linked assessments', 'Students can access available tests from their portal', 'Admins can monitor coverage and published assessment status'],
     data: [
       { name: 'Published', score: 88 },
       { name: 'Drafts', score: 32 },
@@ -489,15 +489,22 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     setError('Invalid email or password.');
   };
 
-  const useDemo = (role: 'student' | 'admin' | 'facilitator') => {
-    const demo = {
-      student: ['juan.dela-cruz@student.edu', 'student'],
-      admin: ['admin@nstp.edu', 'admin'],
-      facilitator: ['facilitator@nstp.edu', 'facilitator'],
-    }[role];
-    setEmail(demo[0]);
-    setPassword(demo[1]);
-    openAuth('login');
+  const useDemo = (persona: 'admin' | 'facilitator' | 'common' | 'cwts' | 'lts' | 'mts') => {
+    ensureNstpSeedData();
+    const address = {
+      admin: 'admin@nstp.edu',
+      facilitator: 'facilitator@nstp.edu',
+      common: 'common.phase@student.edu',
+      cwts: 'cwts.student@student.edu',
+      lts: 'lts.student@student.edu',
+      mts: 'mts.student@student.edu',
+    }[persona];
+    const account = loadAccounts().find((value) => value.email === address);
+    if (!account) {
+      setError('Demo account seed could not be loaded. Please refresh and try again.');
+      return;
+    }
+    onLogin(account);
   };
 
   return (
@@ -779,10 +786,13 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                 </div>
 
                 {mode === 'login' && (
-                  <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <DemoButton icon={UserRound} label="Student" onClick={() => useDemo('student')} />
-                    <DemoButton icon={ShieldCheck} label="Admin" onClick={() => useDemo('admin')} />
-                    <DemoButton icon={GraduationCap} label="Facilitator" onClick={() => useDemo('facilitator')} />
+                  <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <DemoButton icon={ShieldCheck} badge="Admin" label="Demo Admin" description="System oversight and classification workflow" onClick={() => useDemo('admin')} />
+                    <DemoButton icon={GraduationCap} badge="Facilitator" label="Demo Facilitator" description="Sessions, attendance, grading, and reports" onClick={() => useDemo('facilitator')} />
+                    <DemoButton icon={UserRound} badge="Common Phase" label="Demo Student - Common Phase" description="18 / 25 contact hours completed" onClick={() => useDemo('common')} />
+                    <DemoButton icon={UserRound} badge="CWTS" label="Demo Student - CWTS" description="Classified with component records" onClick={() => useDemo('cwts')} />
+                    <DemoButton icon={UserRound} badge="LTS" label="Demo Student - LTS" description="Literacy service learner workflow" onClick={() => useDemo('lts')} />
+                    <DemoButton icon={UserRound} badge="MTS" label="Demo Student - MTS" description="Military training learner workflow" onClick={() => useDemo('mts')} />
                   </div>
                 )}
 
@@ -1079,11 +1089,15 @@ function TrustBand() {
   );
 }
 
-function DemoButton({ icon: Icon, label, onClick }: { icon: any; label: string; onClick: () => void }) {
+function DemoButton({ icon: Icon, badge, label, description, onClick }: { icon: any; badge: string; label: string; description: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
-      <Icon className="h-4 w-4 text-blue-700 dark:text-blue-300" />
-      {label}
+    <button type="button" onClick={onClick} className="group rounded-xl border border-blue-100 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
+      <span className="flex items-center justify-between gap-2">
+        <Icon className="h-4 w-4 text-blue-700 dark:text-blue-300" />
+        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{badge}</span>
+      </span>
+      <span className="mt-2 block text-sm font-bold text-slate-800 dark:text-slate-100">{label}</span>
+      <span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</span>
     </button>
   );
 }

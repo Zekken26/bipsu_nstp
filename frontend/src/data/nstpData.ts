@@ -36,6 +36,8 @@ export type NstpAccount = {
   examScore?: number;
   component?: NstpComponent;
   componentAccessStatus?: string;
+  demoStage?: 'common' | 'cwts' | 'lts' | 'mts';
+  commonPhaseStatus?: 'in-progress' | 'eligible' | 'approved';
 };
 
 export type PendingStudentRegistration = {
@@ -133,7 +135,7 @@ export type NstpStudent = {
   cityAddress?: string;
   provincialAddress?: string;
   contactNumber?: string;
-  component: NstpComponent;
+  component: NstpComponent | 'Common Phase';
   municipality?: BiliranMunicipality;
   programSection?: string;
   trainingGroupId?: string;
@@ -384,6 +386,60 @@ const DEFAULT_ACCOUNTS: NstpAccount[] = [
     examTaken: true,
     examScore: 92,
     component: 'MTS (Army)',
+    demoStage: 'mts',
+    commonPhaseStatus: 'approved',
+  },
+  {
+    id: 'student-demo-common',
+    studentId: '2026-C001',
+    name: 'Alyssa Mae Lim',
+    email: 'common.phase@student.edu',
+    password: 'student',
+    role: 'student',
+    demoStage: 'common',
+    commonPhaseStatus: 'in-progress',
+  },
+  {
+    id: 'student-demo-cwts',
+    studentId: '2026-CW01',
+    name: 'Nicole Ramos',
+    email: 'cwts.student@student.edu',
+    password: 'student',
+    role: 'student',
+    generalEducationComplete: true,
+    preferredComponent: 'CWTS',
+    examTaken: true,
+    component: 'CWTS',
+    demoStage: 'cwts',
+    commonPhaseStatus: 'approved',
+  },
+  {
+    id: 'student-demo-lts',
+    studentId: '2026-LT01',
+    name: 'Daniel Flores',
+    email: 'lts.student@student.edu',
+    password: 'student',
+    role: 'student',
+    generalEducationComplete: true,
+    preferredComponent: 'LTS',
+    examTaken: true,
+    component: 'LTS',
+    demoStage: 'lts',
+    commonPhaseStatus: 'approved',
+  },
+  {
+    id: 'student-demo-mts',
+    studentId: '2026-MT01',
+    name: 'Joshua Villanueva',
+    email: 'mts.student@student.edu',
+    password: 'student',
+    role: 'student',
+    generalEducationComplete: true,
+    preferredComponent: 'MTS (Army)',
+    examTaken: true,
+    component: 'MTS (Army)',
+    demoStage: 'mts',
+    commonPhaseStatus: 'approved',
   },
 ];
 
@@ -735,6 +791,66 @@ const DEFAULT_MODULES: NstpModule[] = [
 
 const DEFAULT_STUDENTS: NstpStudent[] = [
   {
+    id: 'student-demo-common',
+    studentId: '2026-C001',
+    name: 'Alyssa Mae Lim',
+    email: 'common.phase@student.edu',
+    component: 'Common Phase',
+    municipality: 'Naval',
+    facilitatorId: 'facilitator-1',
+    facilitatorName: 'Dr. Maria Elena Santos',
+    progress: 72,
+    assessments: 4,
+    status: 'active',
+    notes: 'Completing Common Phase contact-hour requirements.',
+    updatedAt: now(),
+  },
+  {
+    id: 'student-demo-cwts',
+    studentId: '2026-CW01',
+    name: 'Nicole Ramos',
+    email: 'cwts.student@student.edu',
+    component: 'CWTS',
+    municipality: 'Naval',
+    facilitatorId: 'facilitator-1',
+    facilitatorName: 'Dr. Maria Elena Santos',
+    progress: 88,
+    assessments: 8,
+    status: 'active',
+    notes: 'CWTS community immersion documentation in progress.',
+    updatedAt: now(),
+  },
+  {
+    id: 'student-demo-lts',
+    studentId: '2026-LT01',
+    name: 'Daniel Flores',
+    email: 'lts.student@student.edu',
+    component: 'LTS',
+    municipality: 'Naval',
+    facilitatorId: 'facilitator-1',
+    facilitatorName: 'Dr. Maria Elena Santos',
+    progress: 91,
+    assessments: 8,
+    status: 'active',
+    notes: 'LTS reading clinic facilitation completed.',
+    updatedAt: now(),
+  },
+  {
+    id: 'student-demo-mts',
+    studentId: '2026-MT01',
+    name: 'Joshua Villanueva',
+    email: 'mts.student@student.edu',
+    component: 'MTS (Army)',
+    municipality: 'Naval',
+    facilitatorId: 'facilitator-1',
+    facilitatorName: 'Dr. Maria Elena Santos',
+    progress: 86,
+    assessments: 7,
+    status: 'active',
+    notes: 'MTS field discipline exercise cleared.',
+    updatedAt: now(),
+  },
+  {
     id: 'student-1',
     studentId: '2024-1001',
     name: 'Maria Santos',
@@ -826,6 +942,9 @@ const DEFAULT_STUDENTS: NstpStudent[] = [
 ];
 
 const DEFAULT_GRADES: NstpGradeRecord[] = [
+  { studentId: '2026-CW01', prelim: 91, midterm: 89, final: 90, remarks: 'Passed', released: true, updatedAt: now() },
+  { studentId: '2026-LT01', prelim: 92, midterm: 94, final: 91, remarks: 'Passed', released: true, updatedAt: now() },
+  { studentId: '2026-MT01', prelim: 88, midterm: 90, final: 89, remarks: 'Passed', released: true, updatedAt: now() },
   { studentId: '2024-0001', prelim: 88, midterm: 90, final: 0, remarks: 'In Progress', released: true, updatedAt: now() },
   { studentId: '2024-1001', prelim: 91, midterm: 87, final: 89, remarks: 'Passed', released: true, updatedAt: now() },
   { studentId: '2024-1002', prelim: 94, midterm: 95, final: 93, remarks: 'Passed', released: true, updatedAt: now() },
@@ -966,6 +1085,7 @@ export function loadAssessments(): NstpAssessment[] {
 export function saveAssessments(assessments: NstpAssessment[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify(assessments));
+  window.dispatchEvent(new CustomEvent('nstp-assessments-updated'));
 }
 
 export function loadModules(): NstpModule[] {
