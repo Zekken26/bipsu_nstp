@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Save, Eye, EyeOff, UserPlus, BookOpen, Clock3, MessageSquareText, ChevronUp, ChevronDown, LayoutPanelLeft, Sparkles } from 'lucide-react';
 import { createEmptyAssessment, createEmptyStudent, loadAssessments, loadAccounts, loadStudents, saveAssessments, saveAccounts, saveStudents, NstpAccount, NstpAssessment, NstpQuestion, NstpRole, NstpStudent } from '../../../data/nstpData';
+import { Pager, useModalEscape } from '../../facilitator/components/FacilitatorUI';
 
 type Props = {
   user: NstpAccount;
@@ -49,6 +50,30 @@ export default function AssessmentManager({ user, role }: Props) {
   const [accountEditingId, setAccountEditingId] = useState<string | null>(null);
   const [accountForm, setAccountForm] = useState<NstpAccount | null>(null);
   const [attemptRefreshKey, setAttemptRefreshKey] = useState(0);
+  const [attemptPage, setAttemptPage] = useState(1);
+  const [attemptPageSize, setAttemptPageSize] = useState(25);
+  const [accountPage, setAccountPage] = useState(1);
+  const [accountPageSize, setAccountPageSize] = useState(25);
+
+  const closeAssessmentEditor = () => {
+    setEditingId(null);
+    setForm(null);
+  };
+  const closeAccountEditor = () => {
+    setAccountEditingId(null);
+    setAccountForm(null);
+  };
+
+  useModalEscape({
+    open: Boolean(editingId && form),
+    onClose: closeAssessmentEditor,
+    confirmClose: () => window.confirm('Close the assessment editor and discard unsaved changes?'),
+  });
+  useModalEscape({
+    open: Boolean(accountEditingId && accountForm),
+    onClose: closeAccountEditor,
+    confirmClose: () => window.confirm('Close the account editor and discard unsaved changes?'),
+  });
 
   useEffect(() => {
     const items = loadAssessments();
@@ -161,6 +186,10 @@ export default function AssessmentManager({ user, role }: Props) {
       });
     }).sort((a, b) => b.score - a.score);
   }, [assessments, selectedAttemptStudent, studentAccounts, attemptRefreshKey]);
+  useEffect(() => setAttemptPage(1), [selectedAttemptStudent, attemptPageSize, attemptRefreshKey]);
+  useEffect(() => setAccountPage(1), [accountPageSize, accounts.length]);
+  const displayedAttempts = attemptRows.slice((attemptPage - 1) * attemptPageSize, attemptPage * attemptPageSize);
+  const displayedAccounts = accounts.slice((accountPage - 1) * accountPageSize, accountPage * accountPageSize);
 
   const upsertStudentFromAccount = (account: NstpAccount) => {
     const students = loadStudents();
@@ -338,7 +367,7 @@ export default function AssessmentManager({ user, role }: Props) {
                 <p className="text-sm text-slate-600 dark:text-slate-300">Use this form to build the assessment and its questions.</p>
               </div>
               <button
-                onClick={() => { setEditingId(null); setForm(null); }}
+                onClick={closeAssessmentEditor}
                 className="text-sm text-slate-500 hover:text-slate-900"
               >
                 Close
@@ -535,7 +564,7 @@ export default function AssessmentManager({ user, role }: Props) {
 
             <div className="flex flex-col justify-end gap-3 sm:flex-row sm:flex-wrap">
               <button
-                onClick={() => { setEditingId(null); setForm(null); }}
+                onClick={closeAssessmentEditor}
                 className="rounded-xl border border-slate-300 px-5 py-3 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 Cancel
@@ -667,7 +696,7 @@ export default function AssessmentManager({ user, role }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {attemptRows.map((row) => (
+                    {displayedAttempts.map((row) => (
                       <tr key={`${row.studentId}-${row.assessmentId}`} className="border-b border-slate-100">
                         <td className="py-3 px-4">
                           <p className="font-medium text-slate-900">{row.studentName}</p>
@@ -696,6 +725,7 @@ export default function AssessmentManager({ user, role }: Props) {
                   </tbody>
                 </table>
               </div>
+              {attemptRows.length ? <Pager page={attemptPage} totalPages={Math.ceil(attemptRows.length / attemptPageSize)} onPage={setAttemptPage} total={attemptRows.length} pageSize={attemptPageSize} onPageSize={setAttemptPageSize} pageSizeOptions={[10, 25, 50, 100]} /> : null}
 
               {attemptRows.length === 0 && (
                 <div className="mt-4 text-center text-sm text-slate-500">No recorded student attempts yet.</div>
@@ -774,7 +804,7 @@ export default function AssessmentManager({ user, role }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {accounts.map((account) => (
+                    {displayedAccounts.map((account) => (
                       <tr key={account.id} className="border-b border-slate-100">
                         <td className="py-3 px-4 font-medium text-slate-900">{account.name}</td>
                         <td className="py-3 px-4 text-sm text-slate-600">{account.email}</td>
@@ -798,6 +828,7 @@ export default function AssessmentManager({ user, role }: Props) {
                   </tbody>
                 </table>
               </div>
+              {accounts.length ? <Pager page={accountPage} totalPages={Math.ceil(accounts.length / accountPageSize)} onPage={setAccountPage} total={accounts.length} pageSize={accountPageSize} onPageSize={setAccountPageSize} pageSizeOptions={[10, 25, 50, 100]} /> : null}
             </div>
           </div>
         )}

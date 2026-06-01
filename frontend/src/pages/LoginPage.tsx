@@ -32,52 +32,153 @@ import {
   UserRound,
   Users,
 } from 'lucide-react';
-import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, ensureNstpSeedData, loadAccounts, loadPendingStudentRegistrations, savePendingStudentRegistrations } from '../data/nstpData';
+import { addAudit } from '../data/workflowData';
 import splashImage from '../assets/images/splash.png';
+import { useModalEscape } from '../features/facilitator/components/FacilitatorUI';
 
 type LoginMode = 'login' | 'register';
-type PublicView = 'home' | 'nstp' | 'school' | 'portal' | 'feature' | 'preview';
+type ComponentKey = 'CWTS' | 'LTS' | 'MTS';
+type PublicView = 'home' | 'nstp' | 'school' | 'portal' | 'feature' | 'preview' | 'component';
 
 const componentCards = [
-  { label: 'CWTS', title: 'Civic Welfare Training Service', copy: 'Community development, health, environment, disaster readiness, and service-learning projects.', color: 'from-emerald-500 to-teal-500', fill: '#10b981', value: 34 },
-  { label: 'LTS', title: 'Literacy Training Service', copy: 'Literacy, numeracy, tutoring, and learning support for partner schools and communities.', color: 'from-blue-600 to-cyan-500', fill: '#2563eb', value: 28 },
-  { label: 'MTS Army', title: 'Military Training Service - Army', copy: 'Discipline, leadership, physical readiness, and national defense preparation.', color: 'from-amber-500 to-orange-600', fill: '#f59e0b', value: 22 },
-  { label: 'MTS Navy', title: 'Military Training Service - Navy', copy: 'Maritime awareness, coastal service, naval discipline, and emergency coordination.', color: 'from-indigo-500 to-violet-600', fill: '#6366f1', value: 16 },
+  { label: 'CWTS', title: 'Civic Welfare Training Service', copy: 'Community development, health, environment, disaster readiness, and service-learning projects.', icon: Users, accent: '#1856c8', fill: '#002147', value: 34 },
+  { label: 'LTS', title: 'Literacy Training Service', copy: 'Literacy, numeracy, tutoring, and learning support for partner schools and communities.', icon: BookOpen, accent: '#1856c8', fill: '#0b4ea2', value: 28 },
+  { label: 'MTS Army', title: 'Military Training Service - Army', copy: 'Discipline, leadership, physical readiness, and national defense preparation.', icon: ShieldCheck, accent: '#d4a719', fill: '#e5b73b', value: 22 },
+  { label: 'MTS Navy', title: 'Military Training Service - Navy', copy: 'Maritime awareness, coastal service, naval discipline, and emergency coordination.', icon: Award, accent: '#426db4', fill: '#7092c8', value: 16 },
 ];
 
-const landingComponents = [
+const landingComponents: Array<{ key: ComponentKey; title: string; copy: string; focus: string[]; icon: any; gold?: boolean }> = [
   {
     key: 'CWTS',
     title: 'Civic Welfare Training Service',
     copy: 'Prepares students for organized community service through health, environment, disaster readiness, safety, livelihood, and local development initiatives.',
     focus: ['Community immersion', 'Disaster preparedness', 'Health and environment projects'],
+    icon: Users,
   },
   {
     key: 'LTS',
     title: 'Literacy Training Service',
     copy: 'Trains students to support literacy and numeracy programs for learners, out-of-school youth, and community partners who need learning assistance.',
     focus: ['Reading support', 'Numeracy sessions', 'Learning materials and tutoring'],
+    icon: BookOpen,
+    gold: true,
   },
   {
     key: 'MTS',
     title: 'Military Training Service',
     copy: 'Develops discipline, leadership, physical readiness, and national defense awareness through Army or Navy-oriented training pathways.',
     focus: ['Leadership and discipline', 'Defense preparedness', 'Army or Navy track assignment'],
+    icon: ShieldCheck,
   },
 ];
+
+const servicePillars = [
+  { title: 'Nation-Building', copy: 'Empowering students to serve and create impact.', icon: GraduationCap },
+  { title: 'Community Focused', copy: 'Addressing real needs through meaningful service.', icon: Users },
+  { title: 'Character Development', copy: 'Building discipline, integrity, and social responsibility.', icon: ShieldCheck },
+  { title: 'Lifelong Competencies', copy: 'Equipping students with skills for personal and professional growth.', icon: BarChart3 },
+];
+
+const componentInformation = {
+  CWTS: {
+    label: 'Civic Welfare Training Service',
+    badge: 'Community service and development',
+    lead: 'Empowering students to become agents of social change through organized community projects that improve quality of life in Biliran.',
+    overview: [
+      'CWTS develops students through activities contributory to community welfare, public health, environmental stewardship, safety, education, and local development.',
+      'After meeting Common Phase requirements and receiving classification approval, students work with facilitators on component-specific sessions, attendance, outputs, and progress records.',
+    ],
+    focus: [
+      { title: 'Health and Safety', copy: 'Community wellness, preparedness, and outreach.', icon: ShieldCheck },
+      { title: 'Environment', copy: 'Stewardship projects and sustainable practices.', icon: Sparkles },
+      { title: 'Community Action', copy: 'Service planning with local partners.', icon: Users },
+      { title: 'Civic Leadership', copy: 'Responsible participation and follow-through.', icon: Award },
+    ],
+    activities: [
+      { title: 'Community Needs Assessment', copy: 'Identify priority concerns with assigned local partners.', icon: ClipboardList },
+      { title: 'Disaster Preparedness', copy: 'Translate readiness training into service-oriented action.', icon: ShieldCheck },
+      { title: 'Environmental Initiatives', copy: 'Plan and document projects supporting resilient communities.', icon: Sparkles },
+    ],
+    resources: ['CWTS orientation and syllabus', 'Community project proposal guide', 'NSTP policy and service references'],
+    coordinator: 'CWTS Component Coordination Office',
+    coordinatorCopy: 'Project assignments, faculty contact details, and approved learning links are released inside the student portal.',
+  },
+  LTS: {
+    label: 'Literacy Training Service',
+    badge: 'Education and literacy',
+    lead: 'Empowering learners through literacy and numeracy initiatives that strengthen education and community opportunity.',
+    overview: [
+      'LTS prepares BiPSU students to support literacy and numeracy development among school children, out-of-school youth, and other community members who need learning assistance.',
+      'Classified LTS students take part in guided teaching sessions, learning-output preparation, attendance tracking, and reflection-based assessment with their facilitator.',
+    ],
+    focus: [
+      { title: 'Reading Literacy', copy: 'Developmental reading and guided learning.', icon: BookOpen },
+      { title: 'Numeracy Skills', copy: 'Accessible foundations for daily learning.', icon: BarChart3 },
+      { title: 'Youth Mentorship', copy: 'Supportive instruction for learners.', icon: GraduationCap },
+      { title: 'Learning Design', copy: 'Create useful educational outputs.', icon: FileText },
+    ],
+    activities: [
+      { title: 'Literacy Drives', copy: 'Support reading initiatives in partner communities.', icon: BookOpen },
+      { title: 'Reading Remediation', copy: 'Guided tutoring for developing readers.', icon: GraduationCap },
+      { title: 'Numeracy Workshops', copy: 'Engaging practical mathematics activities.', icon: BarChart3 },
+    ],
+    resources: ['LTS session and teaching guide', 'Activity output template', 'Assessment and progress references'],
+    coordinator: 'LTS Component Coordination Office',
+    coordinatorCopy: 'Teaching schedules, assigned learners, approved materials, and facilitator notices are provided through authenticated access.',
+  },
+  MTS: {
+    label: 'Military Training Service',
+    badge: 'Discipline and preparedness',
+    lead: 'Building responsible citizens through leadership, discipline, national defense awareness, and readiness for coordinated service.',
+    overview: [
+      'MTS develops organizational discipline, leadership capability, and defense preparedness through Army or Navy-oriented training pathways under the NSTP classification process.',
+      'Once assigned, students receive component schedules, facilitator guidance, attendance records, approved training resources, and progress monitoring through the portal.',
+    ],
+    focus: [
+      { title: 'Defense Readiness', copy: 'Preparedness and responsible service.', icon: ShieldCheck },
+      { title: 'Leadership', copy: 'Decision-making and accountability.', icon: Award },
+      { title: 'Emergency Response', copy: 'Coordinated action in crises.', icon: Bell },
+      { title: 'Team Discipline', copy: 'Formation, cooperation, and duty.', icon: Users },
+    ],
+    activities: [
+      { title: 'Leadership Training', copy: 'Strengthen resilience and ethical direction.', icon: Award },
+      { title: 'Disaster Response', copy: 'Develop readiness for community emergencies.', icon: ShieldCheck },
+      { title: 'Civic Engagement', copy: 'Connect disciplined training to public service.', icon: Users },
+    ],
+    resources: ['MTS training guide', 'Preparedness and protocol reference', 'Training session schedule'],
+    coordinator: 'MTS Component Coordination Office',
+    coordinatorCopy: 'Army or Navy assignments, training schedules, and official component resources are available to classified students after login.',
+  },
+} satisfies Record<ComponentKey, {
+  label: string;
+  badge: string;
+  lead: string;
+  overview: string[];
+  focus: Array<{ title: string; copy: string; icon: any }>;
+  activities: Array<{ title: string; copy: string; icon: any }>;
+  resources: string[];
+  coordinator: string;
+  coordinatorCopy: string;
+}>;
+
+const componentFromPath = (): ComponentKey | null => {
+  if (typeof window === 'undefined') return null;
+  const match = window.location.pathname.match(/^\/components\/(cwts|lts|mts)\/?$/i);
+  return match ? (match[1].toUpperCase() as ComponentKey) : null;
+};
 
 const portalFeatures = [
   {
     icon: BookOpen,
-    label: 'Common Module',
+    label: 'Common Phase',
     value: 'Deliver standardized learning with tracked completion.',
-    color: 'from-blue-500 to-blue-700',
+    color: 'from-[#002147] to-[#0b4ea2]',
     metric: '25 hours',
     status: '8 lessons prepared',
     audience: 'Students and NSTP facilitators',
     preview: 'A sequenced learning path with lesson sections, completion buttons, learning hours, post-tests, and downloadable references.',
-    bullets: ['NSTP law, citizenship, disaster readiness, leadership, health, environment, and final reflection', 'Lesson-level completion records for every student', 'Admin view for publishing and updating module content'],
+    bullets: ['Orientation, seminars, workshops, assessments, and service preparation', 'Session-based contact-hour records for every student', 'Admin view for scheduling and updating learning content'],
     data: [
       { name: 'Lessons', score: 100 },
       { name: 'Post-tests', score: 88 },
@@ -88,7 +189,7 @@ const portalFeatures = [
     icon: Users,
     label: 'Enrollment Verification',
     value: 'Verify and manage student enrollment with accuracy.',
-    color: 'from-emerald-500 to-green-700',
+    color: 'from-[#0b4ea2] to-[#7092c8]',
     metric: 'ID-based',
     status: 'Approval queue',
     audience: 'Students, registrar staff, and NSTP admins',
@@ -104,7 +205,7 @@ const portalFeatures = [
     icon: ClipboardList,
     label: 'Assessments',
     value: 'Administer exams and measure knowledge readiness.',
-    color: 'from-violet-500 to-purple-700',
+    color: 'from-[#173b70] to-[#002147]',
     metric: '8 items',
     status: 'Post-tests and exams',
     audience: 'Students, facilitators, facilitators, and admins',
@@ -120,7 +221,7 @@ const portalFeatures = [
     icon: ShieldCheck,
     label: 'Classification',
     value: 'Classify students into CWTS, LTS, MTS Army or Navy.',
-    color: 'from-amber-400 to-orange-600',
+    color: 'from-[#735c00] to-[#e5b73b]',
     metric: '4 tracks',
     status: 'Rules-assisted',
     audience: 'NSTP coordinators and students',
@@ -137,7 +238,7 @@ const portalFeatures = [
     icon: Star,
     label: 'Grades',
     value: 'Compute and release NSTP grades securely and on time.',
-    color: 'from-cyan-400 to-sky-700',
+    color: 'from-[#0b4ea2] to-[#002147]',
     metric: 'Official',
     status: 'Release-ready',
     audience: 'Students, facilitators, and NSTP admins',
@@ -153,7 +254,7 @@ const portalFeatures = [
     icon: BarChart3,
     label: 'Reports & Analytics',
     value: 'Real-time insights for better program decisions.',
-    color: 'from-blue-500 to-indigo-700',
+    color: 'from-[#e5b73b] to-[#735c00]',
     metric: 'Live',
     status: 'Export-ready',
     audience: 'NSTP administrators and program coordinators',
@@ -182,7 +283,7 @@ const impactBars = [
 ];
 
 const workflowSteps = [
-  'Common Module Deliver',
+  'Common Phase Sessions',
   'Enrollment Verify',
   'Assessments Administer',
   'Classification Assign',
@@ -190,7 +291,7 @@ const workflowSteps = [
 ];
 
 const dashboardStats = [
-  { label: 'Common Module', value: 'In Progress', icon: BookOpen, tone: 'bg-blue-50 text-blue-700' },
+  { label: 'Common Phase', value: 'In Progress', icon: BookOpen, tone: 'bg-blue-50 text-blue-700' },
   { label: 'Assessments', value: 'Completed', icon: CheckCircle, tone: 'bg-emerald-50 text-emerald-700' },
   { label: 'Classification', value: 'MTS Army', icon: ShieldCheck, tone: 'bg-violet-50 text-violet-700' },
   { label: 'NSTP Grade', value: '1.25', icon: Star, tone: 'bg-amber-50 text-amber-700' },
@@ -276,7 +377,7 @@ const buildCurrentAddress = (houseStreetPurok: string, barangay: string, municip
 };
 
 export default function LoginPage({ onLogin }: { onLogin: (user: any) => void }) {
-  const [publicView, setPublicView] = useState<PublicView>('home');
+  const [publicView, setPublicView] = useState<PublicView>(() => componentFromPath() ? 'component' : 'home');
   const [mode, setMode] = useState<LoginMode>('login');
   const [showAuth, setShowAuth] = useState(false);
   const [surname, setSurname] = useState('');
@@ -300,20 +401,67 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
   const [confirmPassword, setConfirmPassword] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authAttemptTimestamps, setAuthAttemptTimestamps] = useState<number[]>([]);
+  const [authCooldownUntil, setAuthCooldownUntil] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedFeature, setSelectedFeature] = useState(portalFeatures[0].label);
   const [previewIndex, setPreviewIndex] = useState(0);
-  const [selectedLandingComponent, setSelectedLandingComponent] = useState('CWTS');
+  const [selectedLandingComponent, setSelectedLandingComponent] = useState<ComponentKey>(() => componentFromPath() || 'CWTS');
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     if (typeof window === 'undefined') return 'light';
     return localStorage.getItem('nstp-theme') === 'dark' ? 'dark' : 'light';
   });
   const selectedSchoolPrograms = BIPSU_PROGRAMS.find((item) => item.school === school)?.programs || [];
+  const hasAuthDraft = [
+    surname,
+    firstName,
+    middleName,
+    studentId,
+    school,
+    degreeProgram,
+    yearLevel,
+    major,
+    gender,
+    birthdate,
+    houseStreetPurok,
+    barangay,
+    municipality,
+    provincialAddress,
+    contactNumber,
+    email,
+    password,
+    confirmPassword,
+  ].some((value) => String(value || '').trim());
+  const confirmCloseAuth = () => !hasAuthDraft || window.confirm('Close the portal access form and discard the current entries?');
+  const closeAuthModal = () => setShowAuth(false);
+
+  useModalEscape({
+    open: showAuth,
+    onClose: closeAuthModal,
+    confirmClose: confirmCloseAuth,
+  });
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', themeMode === 'dark');
     localStorage.setItem('nstp-theme', themeMode);
   }, [themeMode]);
+
+  useEffect(() => {
+    const syncPublicRoute = () => {
+      const component = componentFromPath();
+      if (component) {
+        setSelectedLandingComponent(component);
+        setPublicView('component');
+      } else {
+        setPublicView('home');
+      }
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    };
+
+    window.addEventListener('popstate', syncPublicRoute);
+    return () => window.removeEventListener('popstate', syncPublicRoute);
+  }, []);
 
   useEffect(() => {
     if (publicView !== 'preview') return;
@@ -324,6 +472,9 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
   }, [publicView]);
 
   const showPublicView = (view: PublicView, featureLabel?: string, targetId = 'public-sections') => {
+    if (window.location.pathname.startsWith('/components/')) {
+      window.history.pushState({}, '', '/');
+    }
     if (featureLabel) {
       const nextIndex = portalFeatures.findIndex((feature) => feature.label === featureLabel);
       setSelectedFeature(featureLabel);
@@ -336,6 +487,14 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     });
+  };
+
+  const openComponentInformation = (component: ComponentKey) => {
+    setSelectedLandingComponent(component);
+    setPublicView('component');
+    setMobileMenuOpen(false);
+    window.history.pushState({}, '', `/components/${component.toLowerCase()}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const watchOverview = () => {
@@ -352,12 +511,21 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    window.setTimeout(() => setIsSubmitting(false), 700);
     setNotice(null);
     setError(null);
 
     ensureNstpSeedData();
     const accounts = loadAccounts();
     const pendingRegistrations = loadPendingStudentRegistrations();
+    const now = Date.now();
+
+    if (mode === 'login' && authCooldownUntil > now) {
+      setError(`Too many login attempts. Try again in ${Math.ceil((authCooldownUntil - now) / 1000)} seconds.`);
+      return;
+    }
 
     if (mode === 'register') {
       const cleanStudentId = studentId.trim();
@@ -449,6 +617,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
       };
 
       savePendingStudentRegistrations([pendingRequest, ...pendingRegistrations]);
+      addAudit({ id: pendingRequest.id, name: pendingRequest.name, role: 'student' }, 'Registration submitted', 'Account', pendingRequest.id, pendingRequest.email);
       setNotice('Registration submitted. Please wait for admin approval before signing in.');
       setSurname('');
       setFirstName('');
@@ -476,16 +645,30 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     const match = accounts.find((account) => account.email.toLowerCase() === email.toLowerCase() && account.password === password);
 
     if (match) {
+      setAuthAttemptTimestamps([]);
+      setAuthCooldownUntil(0);
+      addAudit(match, 'Login successful', 'Account', match.id, match.email);
       onLogin(match);
       return;
     }
 
     const pending = pendingRegistrations.find((registration) => registration.email.toLowerCase() === email.toLowerCase());
     if (pending) {
+      addAudit({ id: pending.id, name: pending.name, role: 'student' }, 'Login blocked pending approval', 'Account', pending.id, pending.email);
       setError('Your account is still pending admin approval.');
       return;
     }
 
+    const recentAttempts = [...authAttemptTimestamps.filter((time) => now - time < 60_000), now];
+    setAuthAttemptTimestamps(recentAttempts);
+    if (recentAttempts.length >= 5) {
+      setAuthCooldownUntil(now + 30_000);
+      addAudit({ id: 'anonymous', name: email || 'Unknown user', role: 'guest' }, 'Login rate limited', 'Account', email || 'unknown', `${recentAttempts.length} attempts in one minute`);
+      setError('Too many login attempts. Please wait 30 seconds before trying again.');
+      return;
+    }
+
+    addAudit({ id: 'anonymous', name: email || 'Unknown user', role: 'guest' }, 'Login failed', 'Account', email || 'unknown', 'Invalid credentials');
     setError('Invalid email or password.');
   };
 
@@ -511,7 +694,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     <div className="landing-page min-h-screen bg-[#edf5fb] text-[#061a42] dark:bg-[#08111f] dark:text-slate-100">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#061f4f] text-white shadow-[0_10px_30px_-20px_rgba(2,6,23,0.8)]">
         <div className="mx-auto flex max-w-[1540px] items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-5 lg:px-12">
-          <button onClick={() => showPublicView('home')} className="flex min-w-0 items-center gap-2 text-left sm:gap-4">
+          <button onClick={() => showPublicView('home', undefined, 'landing-hero')} className="flex min-w-0 items-center gap-2 text-left sm:gap-4">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1 shadow-sm sm:h-14 sm:w-14 sm:rounded-2xl sm:p-1.5">
               <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-full w-full object-contain" />
             </span>
@@ -550,7 +733,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
               {themeMode === 'dark' ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
               <span className="hidden sm:inline">{themeMode === 'dark' ? 'Light' : 'Dark'}</span>
             </button>
-            <button onClick={() => openAuth('login')} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-blue-300/70 bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-tight text-white shadow-sm hover:bg-white/12 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm">
+            <button onClick={() => openAuth('login')} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#e5b73b] px-3 py-2 text-xs font-semibold uppercase tracking-tight text-[#002147] shadow-sm hover:bg-[#ffd968] sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm">
               <LockKeyhole className="h-4 w-4" />
               <span className="hidden min-[390px]:inline">Secure </span>Login
             </button>
@@ -591,96 +774,132 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
       </header>
 
       <main className="overflow-x-hidden">
-        <section className="relative isolate min-h-[calc(100svh-5rem)] overflow-hidden bg-[#f7fbff] dark:bg-[#07111f]">
-          <div
-            className="absolute inset-0 bg-cover bg-center opacity-[0.16] saturate-[0.85] dark:opacity-[0.18] dark:saturate-[0.72]"
-            style={{ backgroundImage: `url(${splashImage})` }}
+        {publicView === 'component' ? (
+          <ComponentInformationPage
+            componentKey={selectedLandingComponent}
+            component={componentInformation[selectedLandingComponent]}
+            onBack={() => showPublicView('home', undefined, 'landing-hero')}
+            onSelect={openComponentInformation}
+            onLogin={() => openAuth('login')}
+            onCommonPhase={() => showPublicView('nstp')}
           />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.92)_34%,rgba(237,246,255,0.76)_62%,rgba(214,233,248,0.88)_100%)] dark:bg-[radial-gradient(circle_at_50%_24%,rgba(15,34,65,0.94)_0%,rgba(7,17,31,0.9)_42%,rgba(5,13,27,0.96)_100%)]" />
-          <div className="absolute left-[-7rem] top-[-7rem] h-80 w-80 rounded-full border border-blue-200/70 dark:border-blue-300/12" />
-          <div className="absolute left-[-5rem] top-[-3rem] h-72 w-72 rounded-full border border-blue-200/50 dark:border-blue-300/10" />
-          <div className="absolute right-0 top-0 h-64 w-64 bg-[radial-gradient(circle,rgba(11,78,162,0.08)_1.5px,transparent_1.5px)] [background-size:14px_14px] dark:bg-[radial-gradient(circle,rgba(147,197,253,0.13)_1.5px,transparent_1.5px)]" />
-          <div className="absolute inset-x-0 bottom-0 h-24 bg-[#06245c]" />
-          <div className="absolute bottom-0 left-0 h-24 w-[72%] rounded-tr-[100%] bg-[#06245c]" />
-          <div className="absolute bottom-0 right-0 h-24 w-[42%] rounded-tl-[100%] bg-[#f2b705]" />
-          <div className="absolute bottom-0 left-[42%] h-12 w-[38%] rounded-t-[100%] bg-[#0b4ea2]" />
-
-          <div className="relative mx-auto flex min-h-[calc(100svh-5rem)] max-w-5xl flex-col items-center justify-center px-5 pb-32 pt-10 text-center sm:px-8">
-            <img src="/bipsu-logo.png" alt="Biliran Province State University logo" className="h-24 w-24 rounded-full bg-white/90 p-2 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.55)] ring-1 ring-blue-100 dark:bg-white dark:ring-blue-300/30 sm:h-32 sm:w-32" />
-            <p className="mt-6 text-xs font-semibold uppercase tracking-[0.42em] text-[#0b4ea2] dark:text-blue-200 sm:text-sm">
-              Biliran Province State University
-            </p>
-            <span className="mt-5 h-1 w-12 rounded-full bg-[#f2b705]" />
-            <h1 className="mt-6 font-portal text-5xl font-semibold leading-none tracking-tight text-[#12366f] dark:text-white sm:text-7xl lg:text-8xl">
-              Welcome
-            </h1>
-            <p className="mt-5 max-w-2xl text-lg font-medium leading-8 text-slate-600 dark:text-slate-300 sm:text-2xl">
-              NSTP Portal for Brilliance, Innovation, Progress, Service and Unity
-            </p>
-
-            <div className="mt-8 grid w-full max-w-md grid-cols-3 gap-3 sm:mt-10 sm:max-w-xl sm:gap-5">
-              {landingComponents.map((component) => (
-                <button
-                  key={component.key}
-                  onClick={() => setSelectedLandingComponent(component.key)}
-                  className={`rounded-full border px-4 py-3 text-sm font-semibold tracking-wide shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-md dark:hover:bg-slate-900 sm:px-7 sm:py-4 sm:text-lg ${
-                    selectedLandingComponent === component.key
-                      ? component.key === 'MTS'
-                        ? 'border-[#f2b705] bg-[#f2b705]/12 text-[#b77900] dark:bg-[#f2b705]/15 dark:text-amber-100'
-                        : 'border-blue-500 bg-blue-50 text-blue-800 dark:border-blue-300/60 dark:bg-blue-500/15 dark:text-blue-100'
-                      : component.key === 'MTS'
-                      ? 'border-[#f2b705] bg-white/70 text-[#c48600] dark:bg-slate-950/55 dark:text-amber-200'
-                      : 'border-blue-300 bg-white/70 text-blue-700 dark:border-blue-400/40 dark:bg-slate-950/55 dark:text-blue-100'
-                  }`}
-                >
-                  {component.key}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-6 w-full max-w-2xl rounded-3xl border border-blue-100 bg-white/72 p-5 text-left shadow-[0_18px_48px_-36px_rgba(15,23,42,0.5)] backdrop-blur dark:border-blue-300/15 dark:bg-slate-950/62">
-              {landingComponents.filter((component) => component.key === selectedLandingComponent).map((component) => (
-                <div key={component.key}>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{component.key} component</p>
-                  <h2 className="mt-1 text-xl font-semibold text-[#12366f] dark:text-white">{component.title}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{component.copy}</p>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                    {component.focus.map((item) => (
-                      <span key={item} className="rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-center text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-5 flex w-full max-w-2xl flex-col items-center gap-3">
-              <div className="grid w-full gap-3 sm:grid-cols-2">
-                <button onClick={() => openAuth('login')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#073f9f] px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-20px_rgba(7,63,159,0.9)] transition-all hover:-translate-y-0.5 hover:bg-[#052e77]">
-                  <ShieldCheck className="h-5 w-5" />
+        ) : (
+          <>
+        <section id="landing-hero" className="relative isolate scroll-mt-24 overflow-hidden bg-[#f9f9ff] dark:bg-[#07111f]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_13%_18%,rgba(229,183,59,0.16),transparent_29%),radial-gradient(circle_at_83%_20%,rgba(0,33,71,0.12),transparent_34%)] dark:bg-[radial-gradient(circle_at_13%_18%,rgba(229,183,59,0.10),transparent_29%),radial-gradient(circle_at_83%_20%,rgba(106,156,226,0.18),transparent_34%)]" />
+          <div className="absolute inset-0 opacity-60 [background-image:radial-gradient(rgba(0,33,71,0.08)_1px,transparent_1px)] [background-size:44px_44px] dark:opacity-25" />
+          <div className="relative mx-auto grid min-h-[calc(100svh-5rem)] max-w-[1280px] items-center gap-12 px-5 py-14 sm:px-8 lg:grid-cols-[1.02fr_0.98fr] lg:gap-16 lg:px-8 lg:py-20">
+            <div className="max-w-2xl">
+              <span className="landing-label inline-flex items-center gap-2 rounded-full bg-[#002147] px-4 py-2 text-xs font-semibold uppercase tracking-[0.13em] text-[#d6e3ff] dark:bg-blue-400/12 dark:text-blue-100">
+                <Sparkles className="h-4 w-4 text-[#e5b73b]" />
+                Empowering future community leaders
+              </span>
+              <p className="landing-label mt-8 text-xs font-semibold uppercase tracking-[0.32em] text-[#735c00] dark:text-[#ffe088]">
+                Biliran Province State University
+              </p>
+              <h1 className="mt-4 text-[clamp(2.55rem,5vw,4.25rem)] font-bold leading-[1.09] tracking-[-0.045em] text-[#000a1e] dark:text-white">
+                Welcome to the BiPSU <span className="text-[#735c00] dark:text-[#ffe088]">NSTP Portal</span>
+              </h1>
+              <p className="mt-6 max-w-xl text-base leading-8 text-[#44474e] dark:text-slate-300 sm:text-lg">
+                A guided digital workspace for Brilliance, Innovation, Progress, Service and Unity, connecting student formation with meaningful service in Biliran communities.
+              </p>
+              <div className="landing-label mt-9 flex flex-col gap-3 sm:flex-row">
+                <button onClick={() => openAuth('login')} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-[#002147] px-8 py-4 text-sm font-semibold uppercase tracking-[0.06em] text-white shadow-[0_18px_38px_-20px_rgba(0,33,71,0.8)] transition hover:-translate-y-0.5 hover:bg-[#123766]">
+                  <LockKeyhole className="h-5 w-5" />
                   Secure Login
                 </button>
-                <button onClick={watchOverview} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-white/80 px-6 py-3 text-sm font-semibold text-[#0b2d75] shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:bg-white dark:border-blue-400/30 dark:bg-slate-950/70 dark:text-blue-100 dark:hover:bg-slate-900">
-                  <PlayCircle className="h-4 w-4" />
-                  Watch Overview
+                <button onClick={watchOverview} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border-2 border-[#002147] bg-white/70 px-8 py-4 text-sm font-semibold uppercase tracking-[0.06em] text-[#002147] transition hover:-translate-y-0.5 hover:bg-[#f0f3ff] dark:border-blue-200 dark:bg-transparent dark:text-blue-100 dark:hover:bg-blue-400/10">
+                  <PlayCircle className="h-5 w-5" />
+                  View Portal Overview
                 </button>
+              </div>
+              <div className="landing-label mt-12 grid gap-4 border-t border-[#c4c6cf]/70 pt-7 sm:grid-cols-3 dark:border-blue-300/15">
+                {[
+                  ['25', 'Required common phase hours'],
+                  ['3', 'NSTP component pathways'],
+                  ['Secure', 'Role-based portal access'],
+                ].map(([value, label]) => (
+                  <div key={label}>
+                    <p className="text-2xl font-bold text-[#002147] dark:text-[#ffe088]">{value}</p>
+                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.11em] text-[#5b6473] dark:text-slate-300">{label}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="mt-10 grid w-full max-w-3xl gap-4 text-sm text-[#1f3760] dark:text-slate-300 sm:grid-cols-3">
-              {[
-                [ShieldCheck, 'BiPSU blue and gold identity'],
-                [IdCard, 'Student ID verification'],
-                [GraduationCap, 'Grades and clearance portal'],
-              ].map(([Icon, label]) => {
-                const ItemIcon = Icon as typeof ShieldCheck;
+            <div className="relative lg:pl-3">
+              <div className="absolute -right-5 -top-6 h-32 w-32 rounded-3xl border border-[#e5b73b]/45 bg-[#e5b73b]/10" />
+              <div className="absolute -bottom-8 -left-6 h-48 w-48 rounded-full bg-[#002147]/10 blur-2xl dark:bg-blue-400/10" />
+              <figure className="relative overflow-hidden rounded-[2rem] border border-white bg-white p-2 shadow-[0_34px_75px_-34px_rgba(0,33,71,0.42)] dark:border-blue-300/15 dark:bg-[#101d34]">
+                <img src={splashImage} alt="BiPSU NSTP students engaged in learning, service, and preparedness activities" className="aspect-[1.46/1] w-full rounded-[1.6rem] object-cover object-center" />
+                <figcaption className="landing-label absolute inset-x-7 bottom-7 rounded-2xl border border-white/45 bg-white/92 p-4 shadow-lg backdrop-blur dark:border-blue-300/15 dark:bg-[#081426]/92">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#735c00] dark:text-[#ffe088]">Official NSTP Portal</p>
+                  <p className="mt-1 text-sm font-semibold text-[#002147] dark:text-white">Learning, attendance, assessment, and classification in one system.</p>
+                </figcaption>
+              </figure>
+              <div className="landing-label absolute -left-3 top-8 hidden rounded-2xl border border-[#e5b73b]/35 bg-white px-4 py-3 shadow-xl sm:flex sm:items-center sm:gap-3 dark:bg-[#101d34]">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-[#ffe088]/60 text-[#735c00]">
+                  <ShieldCheck className="h-5 w-5" />
+                </span>
+                <span>
+                  <span className="block text-xs font-bold text-[#002147] dark:text-white">Academic workflow</span>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-300">Secure and role-scoped</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-white px-4 py-8 dark:bg-[#08111f] sm:px-7 sm:py-10">
+          <div className="mx-auto max-w-[1540px] rounded-xl bg-[#f8fbff] px-5 py-12 shadow-[0_14px_48px_-42px_rgba(0,33,71,0.32)] dark:bg-[#0b1426] sm:px-8 sm:py-16 lg:px-14">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="landing-label text-xs font-bold uppercase tracking-[0.23em] text-[#97730a] dark:text-[#ffe088]">NSTP Program Components</p>
+              <h2 className="mt-5 text-3xl font-semibold text-[#092c66] dark:text-white sm:text-[2.7rem]">Choose a pathway of service.</h2>
+              <span className="mx-auto mt-4 block h-0.5 w-20 bg-[#d2a521]" />
+              <p className="mt-5 text-sm leading-7 text-[#434853] dark:text-slate-300 sm:text-base">Following the Common Phase and eligibility review, students continue<br className="hidden sm:block" /> through their classified component.</p>
+            </div>
+            <nav className="mt-12 grid gap-5 lg:grid-cols-3" aria-label="NSTP program components">
+              {landingComponents.map((component) => {
+                const Icon = component.icon;
                 return (
-                  <div key={label as string} className="flex flex-col items-center gap-3 border-blue-100/80 px-4 dark:border-blue-300/15 sm:border-r sm:last:border-r-0">
-                    <span className="grid h-14 w-14 place-items-center rounded-full bg-blue-50 text-blue-800 ring-1 ring-blue-100 dark:bg-blue-500/10 dark:text-blue-100 dark:ring-blue-300/20">
-                      <ItemIcon className="h-6 w-6" />
+                  <button
+                    key={component.key}
+                    type="button"
+                    onClick={() => openComponentInformation(component.key)}
+                    className={`group relative flex min-h-[19.5rem] flex-col rounded-xl border border-[#d5dfeb] bg-white px-7 pb-7 pt-8 text-left shadow-[0_8px_24px_-22px_rgba(0,33,71,0.25)] transition hover:-translate-y-1 hover:shadow-[0_24px_45px_-28px_rgba(0,33,71,0.34)] dark:border-blue-300/15 dark:bg-[#101d34] ${component.gold ? 'hover:border-[#d2a521]' : 'hover:border-[#174589]'}`}
+                  >
+                    <span className={`absolute inset-x-1 top-0 h-1.5 rounded-full ${component.gold ? 'bg-[#d3a722]' : 'bg-[#113b76]'}`} />
+                    <span className="flex items-center gap-5">
+                      <span className={`grid h-16 w-16 shrink-0 place-items-center rounded-full text-white shadow-md ${component.gold ? 'bg-gradient-to-br from-[#997000] to-[#e7ba30]' : 'bg-gradient-to-br from-[#113b76] to-[#031f50]'}`}>
+                        <Icon className="h-8 w-8" strokeWidth={1.7} />
+                      </span>
+                      <span>
+                        <span className="landing-label block text-2xl font-bold text-[#092c66] dark:text-white">{component.key}</span>
+                        <span className="landing-label mt-2 block text-xs font-bold uppercase tracking-[0.1em] text-[#907006] dark:text-[#ffe088]">{component.title}</span>
+                        <span className="mt-4 block h-0.5 w-9 bg-[#d2a521]" />
+                      </span>
                     </span>
-                    <span className="font-medium leading-5">{label as string}</span>
+                    <span className="mt-6 flex-1 text-sm leading-7 text-[#434853] dark:text-slate-300 sm:text-base">{component.copy}</span>
+                    <span className="landing-label mt-6 inline-flex items-center gap-4 text-sm font-bold uppercase text-[#092c66] dark:text-blue-100">
+                      View information
+                      <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="mt-12 grid gap-6 border-t border-transparent pt-2 sm:grid-cols-2 xl:grid-cols-4">
+              {servicePillars.map((pillar, index) => {
+                const Icon = pillar.icon;
+                return (
+                  <div key={pillar.title} className={`flex items-start gap-4 xl:px-6 ${index > 0 ? 'xl:border-l xl:border-[#d5dfeb] dark:xl:border-white/10' : ''}`}>
+                    <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[#eaf0f8] text-[#10376f] dark:bg-white/10 dark:text-blue-100">
+                      <Icon className="h-7 w-7" strokeWidth={1.8} />
+                    </span>
+                    <span>
+                      <span className="landing-label block text-xs font-bold uppercase tracking-tight text-[#092c66] dark:text-white">{pillar.title}</span>
+                      <span className="mt-2 block text-xs leading-5 text-[#434853] dark:text-slate-300">{pillar.copy}</span>
+                    </span>
                   </div>
                 );
               })}
@@ -688,7 +907,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
           </div>
         </section>
 
-        <section className="relative z-10 mx-auto mt-5 max-w-[1460px] px-4 sm:-mt-10 sm:px-5 lg:px-9">
+        <section className="relative z-10 mx-auto max-w-[1460px] px-4 py-12 sm:px-5 lg:px-9">
           <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_22px_56px_-34px_rgba(15,23,42,0.55)] sm:grid-cols-2 lg:grid-cols-6">
             {portalFeatures.map((feature) => {
               const Icon = feature.icon;
@@ -704,7 +923,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                   <span className="text-sm font-semibold leading-tight text-[#061a42] sm:text-base">{feature.label}</span>
                   <span className="mt-2 text-xs leading-5 text-[#30476d] sm:text-sm">{feature.value}</span>
                   <span className="mt-3 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 group-hover:border-blue-200 group-hover:bg-white">
-                    {feature.metric} • {feature.status}
+                    {feature.metric} - {feature.status}
                   </span>
                 </button>
               );
@@ -713,7 +932,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         </section>
 
         <section id="public-sections" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-10">
-          {publicView === 'home' && <HomeSections onStart={() => openAuth('register')} />}
+          {publicView === 'home' && <HomeSections onSelect={openComponentInformation} />}
           {publicView === 'nstp' && <NstpSections />}
           {publicView === 'school' && <SchoolSections />}
           {publicView === 'portal' && <PortalSections onLogin={() => openAuth('login')} />}
@@ -722,6 +941,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         </section>
 
         <TrustBand />
+          </>
+        )}
       </main>
 
       {showAuth && (
@@ -764,7 +985,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                         : 'Use your BiPSU student ID. Admin approval is required before login.'}
                     </p>
                   </div>
-                  <button onClick={() => setShowAuth(false)} className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                  <button onClick={() => { if (confirmCloseAuth()) closeAuthModal(); }} className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
                     Close
                   </button>
                 </div>
@@ -902,8 +1123,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                     </>
                   )}
 
-                  <button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 py-3 font-semibold text-white shadow-sm ring-1 ring-blue-800/10 hover:bg-blue-800">
-                    {mode === 'login' ? 'Continue to Dashboard' : 'Submit Registration'}
+                  <button type="submit" disabled={isSubmitting} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 py-3 font-semibold text-white shadow-sm ring-1 ring-blue-800/10 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-65">
+                    {isSubmitting ? 'Processing...' : mode === 'login' ? 'Continue to Dashboard' : 'Submit Registration'}
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </form>
@@ -925,6 +1146,150 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
   );
 }
 
+function ComponentInformationPage({
+  componentKey,
+  component,
+  onBack,
+  onSelect,
+  onLogin,
+  onCommonPhase,
+}: {
+  componentKey: ComponentKey;
+  component: typeof componentInformation[ComponentKey];
+  onBack: () => void;
+  onSelect: (component: ComponentKey) => void;
+  onLogin: () => void;
+  onCommonPhase: () => void;
+}) {
+  return (
+    <div className="bg-[#f9f9ff] dark:bg-[#07111f]">
+      <div className="mx-auto flex max-w-[1280px] items-center gap-2 px-5 py-6 text-xs font-semibold uppercase tracking-[0.14em] text-[#596477] sm:px-8">
+        <button type="button" onClick={onBack} className="landing-label hover:text-[#735c00] dark:text-slate-300 dark:hover:text-[#ffe088]">Home</button>
+        <span aria-hidden="true">/</span>
+        <span className="landing-label text-[#002147] dark:text-blue-100">{componentKey}</span>
+      </div>
+
+      <section className="relative isolate overflow-hidden bg-[#002147] text-white">
+        <img
+          src={splashImage}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover object-right opacity-35"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,#002147_0%,rgba(0,33,71,0.97)_42%,rgba(0,33,71,0.58)_100%)]" />
+        <div className="relative mx-auto grid min-h-[28rem] max-w-[1280px] items-center px-5 py-14 sm:px-8 lg:grid-cols-[0.62fr_0.38fr]">
+          <div className="max-w-3xl">
+            <p className="landing-label inline-flex rounded-full bg-[#fddd7c] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#574500]">
+              NSTP Component
+            </p>
+            <h1 className="mt-6 text-[clamp(2.25rem,5vw,3.6rem)] font-bold leading-[1.12]">{component.label} ({componentKey})</h1>
+            <p className="mt-5 max-w-2xl text-base leading-8 text-white/88 sm:text-lg">{component.lead}</p>
+            <div className="landing-label mt-9 flex flex-col gap-3 sm:flex-row">
+              <button type="button" onClick={onLogin} className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-[#fddd7c] px-7 py-3 text-sm font-semibold uppercase tracking-[0.05em] text-[#574500] shadow-lg hover:bg-[#ffe088]">
+                <LockKeyhole className="h-4 w-4" />
+                Access Portal
+              </button>
+              <button type="button" onClick={onCommonPhase} className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl border border-white/35 bg-white/8 px-7 py-3 text-sm font-semibold uppercase tracking-[0.05em] text-white hover:bg-white/15">
+                Common Phase Requirements
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-[1280px] px-5 py-14 sm:px-8 sm:py-20">
+        <div className="grid gap-12 lg:grid-cols-[1fr_0.9fr]">
+          <div>
+            <p className="landing-label text-xs font-semibold uppercase tracking-[0.18em] text-[#735c00] dark:text-[#ffe088]">{component.badge}</p>
+            <h2 className="mt-4 border-l-4 border-[#e5b73b] pl-4 text-3xl font-semibold text-[#002147] dark:text-white">What is {componentKey}?</h2>
+            <div className="mt-6 space-y-5 text-sm leading-8 text-[#44474e] dark:text-slate-300 sm:text-base">
+              {component.overview.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {component.focus.map(({ title, copy, icon: Icon }) => (
+              <article key={title} className="rounded-2xl border border-[#d8e3fa] bg-white p-5 shadow-sm dark:border-blue-300/15 dark:bg-[#101d34]">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#f0f3ff] text-[#002147] dark:bg-blue-300/10 dark:text-[#ffe088]">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <h3 className="landing-label mt-4 text-sm font-semibold text-[#002147] dark:text-white">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-[#596477] dark:text-slate-300">{copy}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[#002147] px-5 py-14 text-white sm:px-8 sm:py-20">
+        <div className="mx-auto max-w-[1280px]">
+          <div className="max-w-2xl">
+            <p className="landing-label text-xs font-semibold uppercase tracking-[0.18em] text-[#ffe088]">Impactful activities</p>
+            <h2 className="mt-3 text-3xl font-semibold">Purposeful work beyond the classroom.</h2>
+            <p className="mt-4 text-sm leading-7 text-white/75 sm:text-base">Component sessions connect learning outcomes with recorded participation, outputs, and facilitator-guided progress.</p>
+          </div>
+          <div className="mt-9 grid gap-4 md:grid-cols-3">
+            {component.activities.map(({ title, copy, icon: Icon }, index) => (
+              <article key={title} className={`rounded-2xl border p-6 ${index === 0 ? 'border-[#e5b73b]/45 bg-[#e5b73b]/12' : 'border-white/15 bg-white/6'}`}>
+                <Icon className="h-7 w-7 text-[#ffe088]" />
+                <h3 className="landing-label mt-7 text-lg font-semibold">{title}</h3>
+                <p className="mt-3 text-sm leading-7 text-white/76">{copy}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-[1280px] px-5 py-14 sm:px-8 sm:py-20">
+        <div className="grid gap-10 lg:grid-cols-[1fr_0.9fr]">
+          <div>
+            <p className="landing-label text-xs font-semibold uppercase tracking-[0.18em] text-[#735c00] dark:text-[#ffe088]">Learning resources</p>
+            <h2 className="mt-3 text-3xl font-semibold text-[#002147] dark:text-white">Approved materials inside your portal.</h2>
+            <div className="mt-7 grid gap-3">
+              {component.resources.map((resource) => (
+                <div key={resource} className="flex flex-col gap-3 rounded-xl border border-[#d8e3fa] bg-white p-4 sm:flex-row sm:items-center sm:justify-between dark:border-blue-300/15 dark:bg-[#101d34]">
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-5 w-5 shrink-0 text-[#735c00] dark:text-[#ffe088]" />
+                    <p className="landing-label text-sm font-semibold text-[#002147] dark:text-white">{resource}</p>
+                  </div>
+                  <button type="button" onClick={onLogin} className="landing-label rounded-lg bg-[#f0f3ff] px-4 py-2 text-xs font-semibold text-[#002147] hover:bg-[#dee9ff] dark:bg-blue-300/10 dark:text-blue-100">
+                    Open in portal
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <aside className="rounded-[1.5rem] bg-[#f0f3ff] p-7 dark:bg-[#101d34] sm:p-9">
+            <p className="landing-label text-xs font-semibold uppercase tracking-[0.18em] text-[#735c00] dark:text-[#ffe088]">Component support</p>
+            <h2 className="mt-4 text-2xl font-semibold text-[#002147] dark:text-white">{component.coordinator}</h2>
+            <p className="mt-4 text-sm leading-7 text-[#44474e] dark:text-slate-300">{component.coordinatorCopy}</p>
+            <button type="button" onClick={onLogin} className="landing-label mt-7 inline-flex items-center gap-2 rounded-xl bg-[#002147] px-6 py-3 text-sm font-semibold text-white hover:bg-[#123766] dark:bg-[#e5b73b] dark:text-[#002147]">
+              Sign in for official details
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </aside>
+        </div>
+      </section>
+
+      <section className="border-t border-[#d8e3fa] bg-white py-10 dark:border-blue-300/15 dark:bg-[#081426]">
+        <div className="mx-auto flex max-w-[1280px] flex-col gap-6 px-5 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="landing-label text-xs font-semibold uppercase tracking-[0.18em] text-[#735c00] dark:text-[#ffe088]">Explore another component</p>
+            <p className="mt-2 text-sm text-[#44474e] dark:text-slate-300">View public information before proceeding to verified portal access.</p>
+          </div>
+          <div className="landing-label flex flex-wrap gap-2">
+            {(Object.keys(componentInformation) as ComponentKey[]).map((key) => (
+              <button type="button" key={key} onClick={() => onSelect(key)} className={`rounded-xl px-5 py-3 text-sm font-semibold ${key === componentKey ? 'bg-[#e5b73b] text-[#002147]' : 'border border-[#d8e3fa] text-[#002147] dark:border-blue-300/20 dark:text-blue-100'}`}>
+                {key}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function DashboardPreview() {
   return (
     <div className="relative hidden lg:block">
@@ -937,7 +1302,7 @@ function DashboardPreview() {
             <nav className="mt-7 space-y-2">
               {[
                 { icon: BarChart3, label: 'Dashboard', active: true },
-                { icon: BookOpen, label: 'Common Module' },
+                { icon: BookOpen, label: 'Common Phase' },
                 { icon: ListChecks, label: 'Enrollment' },
                 { icon: ClipboardList, label: 'Assessments' },
                 { icon: Users, label: 'Classification' },
@@ -990,7 +1355,7 @@ function DashboardPreview() {
             <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="mb-4 text-sm font-semibold text-slate-900">NSTP Workflow</p>
               <div className="relative grid grid-cols-5 gap-2">
-                <div className="absolute left-[9%] right-[9%] top-5 h-1 rounded-full bg-gradient-to-r from-blue-600 via-blue-500 to-emerald-500" />
+                <div className="absolute left-[9%] right-[9%] top-5 h-1 rounded-full bg-gradient-to-r from-[#002147] via-[#0b4ea2] to-[#e5b73b]" />
                 {workflowSteps.map((step, index) => (
                   <div key={step} className="relative text-center">
                     <span className={`mx-auto grid h-10 w-10 place-items-center rounded-full border-4 border-white text-sm font-semibold text-white shadow ${index === workflowSteps.length - 1 ? 'bg-emerald-500' : 'bg-blue-600'}`}>
@@ -1029,7 +1394,7 @@ function DashboardPreview() {
                   <span className="text-xs font-semibold text-blue-700">View all</span>
                 </div>
                 {[
-                  { title: 'Common Module Schedule', date: 'May 24, 2026', Icon: CalendarDays },
+                  { title: 'Common Phase Schedule', date: 'May 24, 2026', Icon: CalendarDays },
                   { title: 'Assessment Guidelines', date: 'May 20, 2026', Icon: BookOpen },
                   { title: 'NSTP Orientation', date: 'May 15, 2026', Icon: Megaphone },
                 ].map(({ title, date, Icon }) => {
@@ -1308,92 +1673,102 @@ function OverviewPreviewCarousel({ activeIndex, onSelect, onLogin }: { activeInd
   );
 }
 
-function HomeSections({ onStart }: { onStart: () => void }) {
+function HomeSections({ onSelect }: { onSelect: (component: ComponentKey) => void }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-6">
-      <Panel className="lg:col-span-3">
-        <p className="eyebrow">What this system does</p>
-        <h2 className="section-title">NSTP delivery, assessment, enrollment, and grading in one BiPSU portal.</h2>
-        <p className="section-copy">Students follow the Common Module, complete assessments, receive component classification, and view released grades. Coordinators manage enrollment approvals, modules, exams, reports, and interventions.</p>
-      </Panel>
-      <Panel className="lg:col-span-3">
-        <p className="eyebrow">Flow</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {['Student ID approval', 'Common Module', 'Post-module tests', 'Grade release'].map((item, index) => (
-            <div key={item} className="rounded-xl border border-slate-200 bg-white/75 p-4 dark:border-slate-700 dark:bg-slate-900/70">
-              <p className="text-2xl font-semibold text-blue-700 dark:text-blue-300">0{index + 1}</p>
-              <p className="mt-1 text-sm font-bold">{item}</p>
-            </div>
-          ))}
-        </div>
-      </Panel>
-      <Panel className="lg:col-span-6">
-        <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="eyebrow">NSTP components at the university</p>
-            <h2 className="section-title">Official tracks students can enter after the Common Module.</h2>
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+        <section className="relative overflow-hidden rounded-2xl border border-[#e1e7f0] bg-white px-7 py-7 shadow-[0_12px_40px_-33px_rgba(0,33,71,0.32)] dark:border-blue-300/15 dark:bg-[#101d34] sm:px-11 sm:py-9">
+          <span className="absolute inset-y-0 left-0 w-3 bg-gradient-to-b from-[#1856c8] to-[#486fa9]" />
+          <div className="landing-label flex items-center gap-4 text-xs font-bold uppercase tracking-[0.13em] text-[#1551bd] dark:text-blue-200">
+            <span className="grid h-11 w-11 place-items-center rounded-full bg-[#dfebff] text-[#1756c6] dark:bg-white/10 dark:text-blue-100">
+              <BookOpen className="h-6 w-6" strokeWidth={1.8} />
+            </span>
+            Overview
           </div>
-          <span className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+          <h2 className="mt-3 max-w-xl text-3xl font-semibold leading-tight text-[#0a2d68] dark:text-white sm:text-[2rem]">
+            One portal for NSTP delivery, assessment, enrollment, and grading.
+          </h2>
+          <p className="mt-6 max-w-xl text-sm leading-7 text-[#3c568d] dark:text-slate-300">
+            Students complete Common Phase sessions and contact hours, meet assessment requirements, receive component classification, and view released grades.
+          </p>
+          <p className="mt-1 max-w-xl text-sm leading-7 text-[#3c568d] dark:text-slate-300">
+            Coordinators manage approvals, schedules, reports, and interventions.
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-[#e1e7f0] bg-white px-6 py-7 shadow-[0_12px_40px_-33px_rgba(0,33,71,0.32)] dark:border-blue-300/15 dark:bg-[#101d34] sm:px-8 sm:py-9">
+          <div className="landing-label flex items-center gap-7 text-xs font-bold uppercase tracking-[0.13em] text-[#1551bd] dark:text-blue-200">
+            <span>How it works</span>
+            <span className="h-px flex-1 bg-[#d8e2f0] dark:bg-white/10" />
+          </div>
+          <div className="mt-8 grid gap-5 sm:grid-cols-2">
+            {[
+              { title: 'Student ID Approval', icon: IdCard },
+              { title: 'Common Phase Sessions', icon: CalendarDays },
+              { title: 'Required Outputs', icon: FileText },
+              { title: 'Grade Release', icon: Award },
+            ].map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <div key={step.title} className="flex items-center gap-4 rounded-xl border border-[#e1e7f0] bg-white px-4 py-6 dark:border-white/10 dark:bg-[#081426]">
+                  <span className="landing-label grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#1653c5] text-sm font-bold text-white">0{index + 1}</span>
+                  <span className="h-12 w-px shrink-0 bg-[#d8e2f0] dark:bg-white/10" />
+                  <Icon className="h-7 w-7 shrink-0 text-[#194a99] dark:text-blue-100" strokeWidth={1.7} />
+                  <span className="landing-label text-sm font-bold leading-6 text-[#092c66] dark:text-white">{step.title}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-2xl border border-[#e1e7f0] bg-white px-6 py-8 shadow-[0_12px_40px_-33px_rgba(0,33,71,0.32)] dark:border-blue-300/15 dark:bg-[#101d34] sm:px-8">
+        <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="landing-label inline-flex items-center gap-4 text-xs font-bold uppercase tracking-[0.12em] text-[#1551bd] dark:text-blue-200">
+              <Landmark className="h-6 w-6" strokeWidth={1.6} />
+              NSTP Components at the University
+            </p>
+            <h2 className="mt-5 text-2xl font-semibold text-[#0a2d68] dark:text-white sm:text-[1.72rem]">Official tracks students can enter after completing the Common Phase.</h2>
+            <p className="mt-4 text-sm text-[#3c568d] dark:text-slate-300">Choose your path. Each component builds skills, discipline, and service that strengthen<br className="hidden lg:block" /> our communities and the nation.</p>
+          </div>
+          <span className="landing-label self-start rounded-full border border-[#1856c8] px-5 py-3 text-xs font-bold uppercase tracking-wide text-[#1551bd] dark:border-blue-300/40 dark:text-blue-100 lg:self-center">
             CWTS | LTS | MTS
           </span>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {componentCards.map((card) => (
-            <div key={card.label} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all hover:-translate-y-1 hover:shadow-xl dark:border-slate-700 dark:bg-slate-900">
-              <div className={`h-2 bg-gradient-to-r ${card.color}`} />
-              <div className="p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{card.label}</p>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-50 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 group-hover:bg-blue-700 group-hover:text-white dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">{card.value}%</span>
-                </div>
-                <p className="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">{card.title}</p>
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{card.copy}</p>
-              </div>
-            </div>
-          ))}
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          {componentCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <button
+                type="button"
+                key={card.label}
+                onClick={() => onSelect(card.label.startsWith('MTS') ? 'MTS' : card.label as ComponentKey)}
+                className="group flex min-h-[15.5rem] flex-col rounded-xl border border-[#dae4f1] bg-white p-6 text-left transition hover:-translate-y-1 hover:border-[#b5cae7] hover:shadow-[0_22px_42px_-32px_rgba(0,33,71,0.48)] dark:border-white/10 dark:bg-[#081426]"
+              >
+                <span className="flex items-start justify-between gap-3">
+                  <span className="grid h-14 w-14 place-items-center rounded-full border border-[#bdd2f5] text-[#194a99] dark:border-blue-300/25 dark:text-blue-100">
+                    <Icon className="h-7 w-7" strokeWidth={1.7} />
+                  </span>
+                  <span
+                    className="landing-label grid h-14 w-14 place-items-center rounded-full border-[3px] text-xs font-bold text-[#173b70] dark:text-blue-100"
+                    style={{ borderColor: `${card.accent}55`, borderRightColor: card.accent }}
+                  >
+                    {card.value}%
+                  </span>
+                </span>
+                <span className="landing-label mt-4 block text-2xl font-bold text-[#092c66] dark:text-white">{card.label}</span>
+                <span className="landing-label mt-1 block text-sm font-bold leading-5 text-[#092c66] dark:text-slate-100">{card.title}</span>
+                <span className="mt-4 flex-1 text-sm leading-6 text-[#3c568d] dark:text-slate-300">{card.copy}</span>
+                <span className="landing-label mt-5 inline-flex items-center gap-4 text-xs font-bold uppercase tracking-[0.09em]" style={{ color: card.accent }}>
+                  View component
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </span>
+              </button>
+            );
+          })}
         </div>
-      </Panel>
-      <Panel className="lg:col-span-3">
-        <p className="eyebrow">Live visualization</p>
-        <h2 className="section-title">Component distribution is easy to scan.</h2>
-        <div className="mt-5 h-72">
-          <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-            <PieChart>
-              <Pie data={componentCards} dataKey="value" nameKey="label" innerRadius={72} outerRadius={104} paddingAngle={5}>
-                {componentCards.map((entry) => (
-                  <Cell key={entry.label} fill={entry.fill} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </Panel>
-      <Panel className="lg:col-span-3">
-        <p className="eyebrow">Service outcomes</p>
-        <h2 className="section-title">A livelier program view for admins, facilitators, and students.</h2>
-        <div className="mt-5 h-72">
-          <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-            <BarChart data={impactBars}>
-              <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar dataKey="score" radius={[10, 10, 0, 0]} fill="#f2b705" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Panel>
-      <Panel className="lg:col-span-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="eyebrow">Ready to start?</p>
-            <h2 className="section-title">Request access with your BiPSU student ID.</h2>
-          </div>
-          <button onClick={onStart} className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-700 px-6 py-3 font-semibold text-white shadow-sm">
-            Begin registration
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-      </Panel>
+      </section>
     </div>
   );
 }
@@ -1409,7 +1784,7 @@ function NstpSections() {
       <Panel className="lg:col-span-2">
         <p className="eyebrow">Requirement</p>
         <p className="text-6xl font-semibold text-blue-700 dark:text-blue-300">25</p>
-        <p className="mt-2 text-sm font-bold text-slate-600 dark:text-slate-300">Common Module contact hours tracked by the system.</p>
+        <p className="mt-2 text-sm font-bold text-slate-600 dark:text-slate-300">Required Common Phase contact hours tracked by the system.</p>
       </Panel>
       <Panel className="lg:col-span-6">
         <div className="grid gap-4 md:grid-cols-4">
@@ -1435,10 +1810,10 @@ function NstpSections() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {[
-              { label: 'Verify', copy: 'Student ID and account approval', tone: 'bg-blue-700' },
-              { label: 'Learn', copy: 'Common Module and component content', tone: 'bg-emerald-600' },
-              { label: 'Assess', copy: 'Post-module quizzes and major exams', tone: 'bg-amber-500' },
-              { label: 'Release', copy: 'Grades, clearance, and reports', tone: 'bg-indigo-600' },
+              { label: 'Verify', copy: 'Student ID and account approval', tone: 'bg-[#002147]' },
+              { label: 'Learn', copy: 'Common Phase sessions and component content', tone: 'bg-[#0b4ea2]' },
+              { label: 'Assess', copy: 'Post-module quizzes and major exams', tone: 'bg-[#e5b73b]' },
+              { label: 'Release', copy: 'Grades, clearance, and reports', tone: 'bg-[#173b70]' },
             ].map((item) => (
               <div key={item.label} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                 <span className={`absolute right-4 top-4 h-3 w-3 rounded-full ${item.tone}`} />

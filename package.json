@@ -12,6 +12,7 @@
     "frontend:dev": "npm run dev --workspace frontend",
     "frontend:build": "npm run build --workspace frontend",
     "frontend:typecheck": "npm run typecheck --workspace frontend",
+    "backend:test:production-audit": "npm run test:production-audit --workspace backend",
     "prisma:migrate": "npm run prisma:migrate --workspace backend",
     "prisma:studio": "npm run prisma:studio --workspace backend"
   }

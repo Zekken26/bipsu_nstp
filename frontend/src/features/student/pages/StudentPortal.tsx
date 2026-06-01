@@ -3,10 +3,11 @@ import { Award, Bell, BookOpen, CalendarCheck, ClipboardList, GraduationCap, Lay
 import { Toaster } from 'sonner';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import AssessmentsPage from '../../../pages/AssessmentsPage';
-import { loadAssessments, loadStudents, safeJsonParse, type NstpAccount } from '../../../data/nstpData';
+import { loadAssessments, loadModules, loadStudents, safeJsonParse, type NstpAccount, type NstpAssessment, type NstpComponent, type NstpModule } from '../../../data/nstpData';
 import { commonPhaseProgress, finalGrade, loadDetailedGrades, loadSessions, studentAttendance, workflowNoticesForStudent } from '../../../data/workflowData';
-import { EmptyState, PageIntro, Panel, StatCard, StatusBadge } from '../../facilitator/components/FacilitatorUI';
+import { EmptyState, PageIntro, Pager, Panel, StatCard, StatusBadge } from '../../facilitator/components/FacilitatorUI';
 import StudentLearningMaterialsPage from './StudentLearningMaterialsPage';
+import CwtsAssessmentWorkspace from '../../cwts/components/CwtsAssessmentWorkspace';
 
 type StudentPage = 'dashboard' | 'common-phase' | 'attendance' | 'grades' | 'assessments' | 'materials' | 'announcements' | 'enrollment';
 const pages: StudentPage[] = ['dashboard', 'common-phase', 'attendance', 'grades', 'assessments', 'materials', 'announcements', 'enrollment'];
@@ -20,12 +21,32 @@ function Tile({ children }: { children: ReactNode }) {
   return <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">{children}</div>;
 }
 
+const componentFromUser = (user: NstpAccount): NstpComponent | undefined => {
+  if (user.component) return user.component;
+  if (user.demoStage === 'cwts') return 'CWTS';
+  if (user.demoStage === 'lts') return 'LTS';
+  if (user.demoStage === 'mts') return 'MTS (Army)';
+  return undefined;
+};
+
+const studentCanAccessAssessment = (assessment: NstpAssessment, modules: NstpModule[], user: NstpAccount) => {
+  const component = componentFromUser(user);
+  const classified = user.commonPhaseStatus === 'approved' || Boolean(component);
+  const audience = (assessment as any).component || (assessment as any).phase || modules.find((module) => module.id === assessment.moduleId)?.component || 'Common';
+
+  if (!classified) return audience === 'Common' || audience === 'Common Phase';
+  if (audience === 'Common' || audience === 'Common Phase') return true;
+  if (audience === 'MTS') return component?.startsWith('MTS');
+  return audience === component;
+};
+
 export default function StudentPortal({ user, onLogout }: { user: NstpAccount; onLogout: () => void }) {
   const [page, setPage] = useState<StudentPage>(pageFromPath);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
-  const [assessmentWorkspace, setAssessmentWorkspace] = useState(false);
   const [noticeFilter, setNoticeFilter] = useState<'All' | 'Common' | 'Component' | 'Urgent'>('All');
+  const [attendancePage, setAttendancePage] = useState(1);
+  const [attendancePageSize, setAttendancePageSize] = useState(10);
   useEffect(() => {
     if (!window.location.pathname.startsWith('/student/')) window.history.replaceState({}, '', pathFor('dashboard'));
     const pop = () => setPage(pageFromPath());
@@ -45,13 +66,15 @@ export default function StudentPortal({ user, onLogout }: { user: NstpAccount; o
   const student = loadStudents().find((row) => row.id === user.id || row.email.toLowerCase() === user.email.toLowerCase());
   const studentId = student?.id || user.id;
   const attendance = studentAttendance(studentId).sort((a, b) => b.sheet.date.localeCompare(a.sheet.date));
+  const displayedAttendance = attendance.slice((attendancePage - 1) * attendancePageSize, attendancePage * attendancePageSize);
   const common = commonPhaseProgress(studentId);
   const classified = user.commonPhaseStatus === 'approved' || user.demoStage !== 'common' && Boolean(user.component);
   const completedHours = classified ? 25 : common.completedHours;
   const remainingHours = Math.max(0, 25 - completedHours);
   const eligibility = classified ? 'Approved' : common.status;
   const grade = loadDetailedGrades().find((row) => row.studentId === studentId);
-  const publishedAssessments = loadAssessments().filter((item) => item.status === 'published');
+  const assessmentModules = loadModules();
+  const publishedAssessments = loadAssessments().filter((item) => item.status === 'published' && studentCanAccessAssessment(item, assessmentModules, user));
   const attempts = safeJsonParse<Record<string, { score?: number; date?: string }>>(localStorage.getItem(`assessments-${studentId}`), {});
   const notices = workflowNoticesForStudent(studentId);
   const visibleNotices = notices.filter((notice) => noticeFilter === 'All' || (noticeFilter === 'Urgent' ? notice.priority === 'Urgent' : noticeFilter === 'Common' ? notice.component === 'Common' : notice.component !== 'Common'));
@@ -59,6 +82,7 @@ export default function StudentPortal({ user, onLogout }: { user: NstpAccount; o
   const sessions = allSessions.filter((session) => session.phase === 'Common Phase' || classified && session.component === user.component);
   const attendancePercent = attendance.length ? Math.round((attendance.filter(({ entry }) => entry?.status !== 'absent').length / attendance.length) * 100) : 0;
   const completedAssessments = Object.keys(attempts).length;
+  const openAssessmentWorkspace = () => navigate('assessments');
 
   const body = useMemo(() => {
     if (page === 'dashboard') return (
@@ -77,12 +101,25 @@ export default function StudentPortal({ user, onLogout }: { user: NstpAccount; o
             <h2 className="text-lg font-bold">Quick Actions</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {[
-                ['Continue Common Phase', 'common-phase' as const, BookOpen],
-                ['Take Assessment', 'assessments' as const, ClipboardList],
-                ['View Attendance', 'attendance' as const, CalendarCheck],
-                ['View Grades', 'grades' as const, Award],
-                ['View Announcements', 'announcements' as const, Bell],
-              ].map(([label, target, Icon]) => <button key={String(target)} type="button" onClick={() => navigate(target as StudentPage)} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-left font-semibold hover:border-blue-300 hover:bg-blue-50 dark:border-slate-800 dark:hover:bg-blue-500/10"><Icon className="h-5 w-5 text-blue-700" />{label as string}</button>)}
+                ['Continue Common Phase', 'common-phase' as const, BookOpen, 'Review contact-hour progress'],
+                ['Take Assessment', 'assessments' as const, ClipboardList, `${publishedAssessments.length} available`],
+                ['View Attendance', 'attendance' as const, CalendarCheck, `${attendance.length} records`],
+                ['View Grades', 'grades' as const, Award, grade?.status || 'Not released'],
+                ['View Announcements', 'announcements' as const, Bell, `${notices.length} notices`],
+              ].map(([label, target, Icon, detail]) => (
+                <button
+                  key={String(target)}
+                  type="button"
+                  onClick={() => target === 'assessments' ? openAssessmentWorkspace() : navigate(target as StudentPage)}
+                  className={`interactive-card flex min-h-[5rem] items-center gap-3 rounded-xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600/70 dark:border-slate-800 ${target === 'assessments' ? 'border-blue-200 bg-blue-50/70 shadow-sm ring-1 ring-blue-100 hover:border-blue-500 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:ring-blue-500/20' : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50 dark:bg-slate-950 dark:hover:bg-blue-500/10'}`}
+                >
+                  <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${target === 'assessments' ? 'bg-blue-700 text-white' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200'}`}><Icon className="h-5 w-5" /></span>
+                  <span className="min-w-0">
+                    <span className="block font-bold text-slate-950 dark:text-white">{label as string}</span>
+                    <span className="mt-0.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{detail as string}</span>
+                  </span>
+                </button>
+              ))}
             </div>
           </Panel>
           <Panel>
@@ -111,7 +148,7 @@ export default function StudentPortal({ user, onLogout }: { user: NstpAccount; o
       <>
         <PageIntro eyebrow="Attendance Records" title="My Attendance" description="Date-based permanent session attendance recorded by your assigned facilitator." />
         <div className="grid gap-4 sm:grid-cols-3"><StatCard label="Attendance Rate" value={`${attendancePercent}%`} detail="Credited attendance" icon={CalendarCheck} tone="emerald" /><StatCard label="Recorded Sessions" value={attendance.length} detail="Historical sheets" icon={ClipboardList} tone="blue" /><StatCard label="Absences" value={attendance.filter(({ entry }) => entry?.status === 'absent').length} detail="For review" icon={Lock} tone="rose" /></div>
-        <Panel>{attendance.length ? <div className="overflow-x-auto"><table className="w-full min-w-[780px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date</th><th className="p-3">Session / Topic</th><th className="p-3">Status</th><th className="p-3">Remarks</th><th className="p-3">Facilitator</th></tr></thead><tbody>{attendance.map(({ sheet, entry }) => <tr key={sheet.id} className="border-b dark:border-slate-800"><td className="p-3">{new Date(`${sheet.date}T00:00:00`).toLocaleDateString()}</td><td className="p-3 font-semibold">{sheet.topic}</td><td className="p-3"><StatusBadge value={entry!.status} /></td><td className="p-3">{entry!.remarks || '--'}</td><td className="p-3">{sheet.facilitatorName}</td></tr>)}</tbody></table></div> : <EmptyState title="No attendance history" body="Recorded attendance sheets will appear here by date." />}</Panel>
+        <Panel>{attendance.length ? <><div className="overflow-x-auto"><table className="w-full min-w-[780px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date</th><th className="p-3">Session / Topic</th><th className="p-3">Status</th><th className="p-3">Remarks</th><th className="p-3">Facilitator</th></tr></thead><tbody>{displayedAttendance.map(({ sheet, entry }) => <tr key={sheet.id} className="border-b dark:border-slate-800"><td className="p-3">{new Date(`${sheet.date}T00:00:00`).toLocaleDateString()}</td><td className="p-3 font-semibold">{sheet.topic}</td><td className="p-3"><StatusBadge value={entry!.status} /></td><td className="p-3">{entry!.remarks || '--'}</td><td className="p-3">{sheet.facilitatorName}</td></tr>)}</tbody></table></div><Pager page={attendancePage} totalPages={Math.ceil(attendance.length / attendancePageSize)} onPage={setAttendancePage} total={attendance.length} pageSize={attendancePageSize} onPageSize={(size) => { setAttendancePageSize(size); setAttendancePage(1); }} pageSizeOptions={[10, 25, 50]} /></> : <EmptyState title="No attendance history" body="Recorded attendance sheets will appear here by date." />}</Panel>
       </>
     );
     if (page === 'grades') return (
@@ -120,16 +157,12 @@ export default function StudentPortal({ user, onLogout }: { user: NstpAccount; o
         {!grade || grade.status !== 'Released' ? <Panel><EmptyState title="Grades not released yet" body={`Your current gradebook status is ${grade?.status || 'Draft'}. Records will display after review and release.`} /></Panel> : <Panel><div className="grid gap-3 sm:grid-cols-3">{[['Assessments', grade.assessments], ['Attendance', grade.attendance], ['Activities', grade.activities], ['Participation', grade.participation], ['Major Exam', grade.majorExam], ['Final Grade', finalGrade(grade)]].map(([label, value]) => <Tile key={String(label)}><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-2 text-2xl font-bold">{String(value ?? '--')}</p></Tile>)}</div><p className="mt-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-500/10 dark:text-blue-100">{grade.feedback || 'No facilitator feedback recorded.'}</p></Panel>}
       </>
     );
-    if (page === 'assessments' && assessmentWorkspace) return <AssessmentsPage user={user} onBack={() => setAssessmentWorkspace(false)} />;
-    if (page === 'assessments') return (
-      <>
-        <PageIntro eyebrow="Outputs and Evaluation" title="My Assessments" description="Assessments and outputs linked to sessions, including completion and available results." actions={<button type="button" onClick={() => setAssessmentWorkspace(true)} className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white">Open assessment workspace</button>} />
-        <div className="space-y-3">{publishedAssessments.length ? publishedAssessments.map((item) => {
-          const result = attempts[item.id];
-          return <Panel key={item.id}><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><p className="text-xs font-semibold uppercase text-blue-700">{item.type}</p><h3 className="font-bold">{item.title}</h3><p className="text-sm text-slate-500">{item.timeLimit} minutes / Passing score {item.passingScore}%</p></div><div className="flex items-center gap-3"><StatusBadge value={result ? 'Completed' : 'Available'} />{result?.score !== undefined ? <strong>{result.score}%</strong> : null}</div></div></Panel>;
-        }) : <Panel><EmptyState title="No available assessments" body="Published assessments for your stage will appear here." /></Panel>}</div>
-      </>
-    );
+    if (page === 'assessments') {
+      const isCwtsStudent = componentFromUser(user) === 'CWTS' || student?.component === 'CWTS';
+      return isCwtsStudent
+        ? <CwtsAssessmentWorkspace role="student" user={user} studentId={studentId} title="My CWTS Activities" description="Complete CWTS 1 and CWTS 2 reflections, journals, reports, videos, community immersion outputs, and performance tasks." />
+        : <AssessmentsPage user={user} studentId={studentId} onBack={() => navigate('dashboard')} />;
+    }
     if (page === 'materials') return <StudentLearningMaterialsPage user={user} studentId={studentId} />;
     if (page === 'announcements') return (
       <>
@@ -143,7 +176,7 @@ export default function StudentPortal({ user, onLogout }: { user: NstpAccount; o
         <Panel><div className="grid gap-4 md:grid-cols-3"><Tile><p className="text-xs uppercase text-slate-500">Verification</p><p className="mt-2 font-bold">{classified ? 'Approved' : 'In Progress'}</p></Tile><Tile><p className="text-xs uppercase text-slate-500">Common Phase</p><p className="mt-2 font-bold">{completedHours}/25 hours</p></Tile><Tile><p className="text-xs uppercase text-slate-500">Component</p><p className="mt-2 font-bold">{classified ? user.component : 'Not yet assigned'}</p></Tile></div><p className="mt-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-500/10 dark:text-blue-100">{classified ? `You are approved and enrolled in ${user.component}. Component Proper resources are enabled.` : 'Complete the required contact hours, attendance, and assessed outputs. Classification remains disabled until approved.'}</p></Panel>
       </>
     );
-  }, [page, user, studentId, attendance, common, classified, completedHours, remainingHours, eligibility, grade, publishedAssessments, attempts, notices, visibleNotices, sessions, attendancePercent, completedAssessments, assessmentWorkspace, noticeFilter]);
+  }, [page, user, studentId, attendance, displayedAttendance, attendancePage, attendancePageSize, common, classified, completedHours, remainingHours, eligibility, grade, publishedAssessments, attempts, notices, visibleNotices, sessions, attendancePercent, completedAssessments, noticeFilter]);
 
   const nav = (label: string, icon: any, target: StudentPage) => ({ label, icon, active: target === page, onClick: () => navigate(target) });
   return (

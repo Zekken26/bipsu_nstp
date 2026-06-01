@@ -1,7 +1,8 @@
 import prisma from '../../db/prisma.js';
+import { applyFacilitatorMunicipalityScope } from '../../utils/facilitatorScope.js';
 
-export function listStudents() {
-  return prisma.studentProfile.findMany({
+export async function listStudents(req) {
+  const students = await prisma.studentProfile.findMany({
     orderBy: { createdAt: 'desc' },
     include: {
       user: {
@@ -16,4 +17,5 @@ export function listStudents() {
       section: true,
     },
   });
+  return applyFacilitatorMunicipalityScope(students, req);
 }

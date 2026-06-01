@@ -16,6 +16,7 @@ import ReportsCenter from './pages/ReportsPage';
 import GradesPage from './pages/GradesPage';
 import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
+import { useModalEscape } from './features/facilitator/components/FacilitatorUI';
 import { ensureNstpSeedData, safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents } from './data/nstpData';
 
 type ShellSection = 'overview' | 'modules' | 'assessments' | 'progress' | 'grades' | 'admin' | 'facilitator' | 'announcements' | 'reports';
@@ -163,7 +164,15 @@ export default function App() {
     const savedUser = localStorage.getItem('nstpUser');
     const parsedUser = savedUser ? safeJsonParse<any>(savedUser, null) : null;
     if (!parsedUser) return 'overview';
-    if (parsedUser.role === 'admin') return 'overview';
+    if (parsedUser.role === 'admin') {
+      const path = window.location.pathname;
+      if (path.startsWith('/admin/modules')) return 'modules';
+      if (path.startsWith('/admin/assessments')) return 'assessments';
+      if (path.startsWith('/admin/reports')) return 'reports';
+      if (path.startsWith('/admin/announcements')) return 'announcements';
+      if (path.startsWith('/admin/') && path !== '/admin/dashboard') return 'admin';
+      return 'overview';
+    }
     if (parsedUser.role === 'facilitator') return 'facilitator';
     return 'overview';
   });
@@ -174,7 +183,12 @@ export default function App() {
   const [headerSearch, setHeaderSearch] = useState('');
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [workspaceLabel, setWorkspaceLabel] = useState('nstp-system/main');
-  const [adminInitialView, setAdminInitialView] = useState<'overview' | 'enrollment' | 'students' | 'tools' | 'modules' | 'assessments' | 'facilitators' | 'assignments'>('overview');
+  const [adminInitialView, setAdminInitialView] = useState<'overview' | 'enrollment' | 'students' | 'tools' | 'modules' | 'assessments' | 'facilitators' | 'assignments'>(() => {
+    const segment = window.location.pathname.replace(/^\/admin\/?/, '').split('/')[0];
+    return ['enrollment', 'students', 'tools', 'modules', 'assessments', 'facilitators', 'assignments'].includes(segment)
+      ? segment as 'enrollment' | 'students' | 'tools' | 'modules' | 'assessments' | 'facilitators' | 'assignments'
+      : 'overview';
+  });
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [accountUtility, setAccountUtility] = useState<AccountUtility | null>(null);
   const [accountPreferences, setAccountPreferences] = useState<AccountPreferences>(DEFAULT_ACCOUNT_PREFERENCES);
@@ -444,6 +458,11 @@ export default function App() {
       completeAuthTransition();
     }, 1800);
   };
+
+  useModalEscape({
+    open: Boolean(accountUtility),
+    onClose: () => setAccountUtility(null),
+  });
 
   if (!user) {
     return (

@@ -1,8 +1,9 @@
 import express from 'express';
 import { createCorsMiddleware } from './config/cors.js';
-import { isPostgresReady } from './db/prisma.js';
+import { getPrismaPoolConfig, isPostgresReady } from './db/prisma.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
+import { requestTimeout } from './middleware/requestTimeout.js';
 import apiRouter from './routes/index.js';
 
 export function createApp() {
@@ -10,6 +11,7 @@ export function createApp() {
 
   app.use(createCorsMiddleware());
   app.use(express.json({ limit: '1mb' }));
+  app.use(requestTimeout());
 
   app.get('/health', async (req, res) => {
     res.json({
@@ -18,6 +20,7 @@ export function createApp() {
       database: {
         provider: 'postgresql',
         ready: await isPostgresReady(),
+        pool: getPrismaPoolConfig(),
       },
       timestamp: new Date().toISOString(),
     });

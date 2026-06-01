@@ -77,13 +77,16 @@ export async function listCollection(name) {
   }
 
   if (name === 'grades') {
-    return withFallback(name, async () => prisma.grade.findMany({ orderBy: { createdAt: 'desc' } }));
+    return withFallback(name, async () => prisma.grade.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { student: { include: { section: true, component: true, user: true } } },
+    }));
   }
 
   if (name === 'assessments') {
     return withFallback(name, async () => prisma.quiz.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { module: true, questions: true },
+      include: { module: { include: { component: true } }, questions: true },
     }));
   }
 

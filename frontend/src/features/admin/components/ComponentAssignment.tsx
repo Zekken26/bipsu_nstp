@@ -12,6 +12,7 @@ import {
   NstpComponent,
   QualifyingExamResult,
 } from '../../../data/nstpData';
+import { Pager } from '../../facilitator/components/FacilitatorUI';
 
 const COMPONENTS = NSTP_COMPONENTS;
 
@@ -26,6 +27,8 @@ export default function ComponentAssignment() {
   const [editingApplicantId, setEditingApplicantId] = useState<string | null>(null);
   const [manualComponent, setManualComponent] = useState('none');
   const [manualStatus, setManualStatus] = useState<'manual-approved' | 'waitlisted'>('manual-approved');
+  const [rankingPage, setRankingPage] = useState(1);
+  const [rankingPageSize, setRankingPageSize] = useState(25);
 
   useEffect(() => {
     const savedState = loadComponentApplicationState();
@@ -310,6 +313,8 @@ export default function ComponentAssignment() {
     : examResults.filter((r: any) => r.preferredComponent === selectedComponent);
 
   const sortedFiltered = [...filteredResults].sort((a: any, b: any) => b.score - a.score);
+  const displayedRankings = sortedFiltered.slice((rankingPage - 1) * rankingPageSize, rankingPage * rankingPageSize);
+  useEffect(() => setRankingPage(1), [selectedComponent, rankingPageSize]);
   const totalSlots = COMPONENTS.reduce((sum, component) => sum + (slotLimits[component as NstpComponent] || 0), 0);
   const assignedCount = Object.values(assignments).filter((assignment: any) => assignment.assignedComponent).length;
   const qualifiedCount = examResults.filter((result: any) => result.score >= qualifyingScore).length;
@@ -570,14 +575,15 @@ export default function ComponentAssignment() {
                 </tr>
               </thead>
               <tbody>
-                {sortedFiltered.map((result: any, idx: number) => {
+                {displayedRankings.map((result: any, idx: number) => {
                   const assignment = (assignments as Record<string, any>)[result.userId];
-                  const isPriority = idx < slotLimits[result.preferredComponent];
+                  const rankIndex = ((rankingPage - 1) * rankingPageSize) + idx;
+                  const isPriority = rankIndex < slotLimits[result.preferredComponent];
 
                   return (
                     <tr key={result.userId} className="border-b border-slate-100 hover:bg-blue-50/70 transition-colors dark:border-slate-800 dark:hover:bg-slate-800/40">
                       <td className="py-4 px-4">
-                        <span className="font-semibold text-slate-900 dark:text-slate-100">#{idx + 1}</span>
+                        <span className="font-semibold text-slate-900 dark:text-slate-100">#{rankIndex + 1}</span>
                       </td>
                       <td className="py-4 px-4">
                         <div>
@@ -705,6 +711,7 @@ export default function ComponentAssignment() {
             </table>
           </div>
 
+          {sortedFiltered.length > 0 && <Pager page={rankingPage} totalPages={Math.ceil(sortedFiltered.length / rankingPageSize)} onPage={setRankingPage} total={sortedFiltered.length} pageSize={rankingPageSize} onPageSize={setRankingPageSize} pageSizeOptions={[10, 25, 50, 100]} />}
           {sortedFiltered.length === 0 && (
             <div className="mt-4 text-center text-sm text-slate-500 dark:text-slate-400">
               No results match the selected component filter yet.

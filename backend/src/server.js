@@ -11,6 +11,9 @@ const server = app.listen(env.port, () => {
   logger.info(`NSTP backend listening on http://localhost:${env.port}`);
 });
 
+server.requestTimeout = env.serverlessFunctionTimeoutMs;
+server.headersTimeout = env.serverlessFunctionTimeoutMs + 5_000;
+
 async function shutdown(signal) {
   logger.info(`Received ${signal}. Shutting down backend.`);
   server.close(async () => {

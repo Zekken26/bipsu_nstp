@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Bell, CalendarCheck, Download, GraduationCap, Save, Settings, ShieldCheck, TrendingUp } from 'lucide-react';
+import { Bell, CalendarCheck, Download, Eye, GraduationCap, Save, Settings, ShieldCheck, TrendingUp, X } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { loadStudents } from '../../../data/nstpData';
 import {
   addAudit,
   allStudentProgress,
+  finalGrade,
   loadAttendanceSheets,
   loadAuditLog,
   loadDetailedGrades,
@@ -18,7 +19,7 @@ import {
   type GradingSettings,
   type WorkflowNotice,
 } from '../../../data/workflowData';
-import { EmptyState, Panel, StatCard, StatusBadge } from '../../facilitator/components/FacilitatorUI';
+import { EmptyState, Pager, Panel, StatCard, StatusBadge, useModalEscape } from '../../facilitator/components/FacilitatorUI';
 import AdminLearningMaterialsPanel from './AdminLearningMaterialsPanel';
 
 type Tab = 'overview' | 'attendance' | 'grades' | 'classification' | 'materials' | 'notices' | 'audit' | 'settings';
@@ -35,6 +36,19 @@ export default function WorkflowOversight() {
   const [noticeTitle, setNoticeTitle] = useState('');
   const [noticeMessage, setNoticeMessage] = useState('');
   const [noticeTarget, setNoticeTarget] = useState<WorkflowNotice['component']>('All');
+  const [selectedSheetId, setSelectedSheetId] = useState<string | null>(null);
+  const [overviewPage, setOverviewPage] = useState(1);
+  const [overviewPageSize, setOverviewPageSize] = useState(10);
+  const [attendancePage, setAttendancePage] = useState(1);
+  const [attendancePageSize, setAttendancePageSize] = useState(25);
+  const [gradePage, setGradePage] = useState(1);
+  const [gradePageSize, setGradePageSize] = useState(25);
+  const [classificationPage, setClassificationPage] = useState(1);
+  const [classificationPageSize, setClassificationPageSize] = useState(25);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditPageSize, setAuditPageSize] = useState(25);
+  const [sheetEntryPage, setSheetEntryPage] = useState(1);
+  const [sheetEntryPageSize, setSheetEntryPageSize] = useState(25);
   const sessions = loadSessions();
   const sheets = loadAttendanceSheets();
   const grades = loadDetailedGrades();
@@ -45,17 +59,77 @@ export default function WorkflowOversight() {
   const progress = allStudentProgress();
   const tabs: Array<[Tab, string]> = [['overview', 'Overview'], ['attendance', 'Attendance Monitoring'], ['grades', 'Grade Release'], ['classification', 'Classification'], ['materials', 'Learning Materials'], ['notices', 'Announcements'], ['audit', 'Audit Logs'], ['settings', 'Settings']];
 
-  const filteredSheets = useMemo(() => sheets.filter((sheet) => (!dateFilter || sheet.date === dateFilter) && (componentFilter === 'all' || sheet.component === componentFilter) && (sheetStatus === 'all' || sheet.status === sheetStatus) && (!attendanceSearch || `${sheet.facilitatorName} ${sheet.topic} ${sheet.group} ${sheet.municipality}`.toLowerCase().includes(attendanceSearch.toLowerCase()))), [sheets, dateFilter, componentFilter, sheetStatus, attendanceSearch, revision]);
-  const exportAttendance = () => {
-    const headers = ['Date', 'Session', 'Topic', 'Facilitator', 'Municipality', 'Component', 'Student ID', 'Status', 'Remarks'];
-    const rows = filteredSheets.flatMap((sheet) => sheet.entries.map((entry) => [sheet.date, sheet.sessionNumber, sheet.topic, sheet.facilitatorName, sheet.municipality, sheet.component, entry.studentId, entry.status, entry.remarks]));
-    const content = [headers, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const anchor = document.createElement('a');
-    anchor.href = URL.createObjectURL(new Blob([content], { type: 'text/csv' }));
-    anchor.download = `nstp-attendance-monitoring-${new Date().toISOString().slice(0, 10)}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(anchor.href);
-    toast.success('Attendance export downloaded.');
+  const filteredSheets = useMemo(() => sheets.filter((sheet) => (!dateFilter || sheet.date === dateFilter) && (componentFilter === 'all' || sheet.component === componentFilter) && (sheetStatus === 'all' || sheet.status === sheetStatus || (sheetStatus === 'Completed' && sheet.status === 'Complete')) && (!attendanceSearch || `${sheet.facilitatorName} ${sheet.topic} ${sheet.group} ${sheet.municipality}`.toLowerCase().includes(attendanceSearch.toLowerCase()))), [sheets, dateFilter, componentFilter, sheetStatus, attendanceSearch, revision]);
+  const commonSessions = sessions.filter((session) => session.phase === 'Common Phase');
+  const displayedSessions = commonSessions.slice((overviewPage - 1) * overviewPageSize, overviewPage * overviewPageSize);
+  const displayedSheets = filteredSheets.slice((attendancePage - 1) * attendancePageSize, attendancePage * attendancePageSize);
+  const displayedGrades = grades.slice((gradePage - 1) * gradePageSize, gradePage * gradePageSize);
+  const displayedProgress = progress.slice((classificationPage - 1) * classificationPageSize, classificationPage * classificationPageSize);
+  const displayedAudit = audit.slice((auditPage - 1) * auditPageSize, auditPage * auditPageSize);
+  const selectedSheet = sheets.find((sheet) => sheet.id === selectedSheetId);
+  useModalEscape({
+    open: Boolean(selectedSheet),
+    onClose: () => setSelectedSheetId(null),
+  });
+  const displayedSheetEntries = selectedSheet?.entries.slice((sheetEntryPage - 1) * sheetEntryPageSize, sheetEntryPage * sheetEntryPageSize) || [];
+  const exportAttendance = async (selection = filteredSheets) => {
+    if (!selection.length) {
+      toast.error('No saved attendance records match the export selection.');
+      return;
+    }
+    const XLSX = await import('xlsx');
+    const rows = selection.flatMap((sheet) => sheet.entries.map((entry) => {
+      const student = students.find((value) => value.id === entry.studentId);
+      return [sheet.date, sheet.sessionNumber, sheet.topic, sheet.facilitatorName, sheet.municipality, sheet.component, student?.studentId || entry.studentId, student?.name || entry.studentId, entry.status, entry.remarks || ''];
+    }));
+    const detailSheet = XLSX.utils.aoa_to_sheet([['Date', 'Session', 'Topic', 'Facilitator', 'Municipality', 'Component', 'Student ID', 'Student Name', 'Status', 'Remarks'], ...rows]);
+    detailSheet['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 34 }, { wch: 25 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 28 }, { wch: 14 }, { wch: 30 }];
+    if (detailSheet['!ref']) detailSheet['!autofilter'] = { ref: detailSheet['!ref'] };
+    const summarySheet = XLSX.utils.aoa_to_sheet([['Date', 'Session', 'Topic', 'Facilitator', 'Group', 'Present', 'Absent', 'Late', 'Excused', 'Status'], ...selection.map((sheet) => [
+      sheet.date, sheet.sessionNumber, sheet.topic, sheet.facilitatorName, sheet.group,
+      sheet.entries.filter((entry) => entry.status === 'present').length,
+      sheet.entries.filter((entry) => entry.status === 'absent').length,
+      sheet.entries.filter((entry) => entry.status === 'late').length,
+      sheet.entries.filter((entry) => entry.status === 'excused').length,
+      sheet.status,
+    ])]);
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, summarySheet, 'Sheet Summary');
+    XLSX.utils.book_append_sheet(book, detailSheet, 'Student Attendance');
+    XLSX.writeFile(book, `nstp-attendance-monitoring-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast.success('Attendance spreadsheet exported.');
+  };
+  const exportGrades = async () => {
+    if (!grades.length) {
+      toast.error('No facilitator grade records are available to export.');
+      return;
+    }
+    const XLSX = await import('xlsx');
+    const rows = grades.map((grade) => {
+      const student = students.find((value) => value.id === grade.studentId);
+      return [
+        student?.studentId || grade.studentId,
+        student?.name || grade.studentId,
+        student?.component || '',
+        grade.facilitatorId,
+        grade.attendance ?? '',
+        grade.assessments ?? '',
+        grade.activities ?? '',
+        grade.participation ?? '',
+        grade.majorExam ?? '',
+        finalGrade(grade, settings) ?? '',
+        grade.overrideFinal ?? '',
+        grade.status,
+        grade.feedback,
+      ];
+    });
+    const sheet = XLSX.utils.aoa_to_sheet([['Student ID', 'Student Name', 'Component', 'Facilitator ID', 'Attendance', 'Assessments', 'Activities', 'Participation', 'Major Exam', 'Final Grade', 'Override', 'Status', 'Feedback'], ...rows]);
+    sheet['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 13 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 34 }];
+    if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, 'Facilitator Gradebooks');
+    XLSX.writeFile(book, `nstp-grade-monitoring-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast.success('Grade monitoring spreadsheet exported.');
   };
   const setGradeStatus = (studentId: string, status: typeof grades[number]['status']) => {
     saveDetailedGrades(grades.map((grade) => grade.studentId === studentId ? { ...grade, status, updatedAt: new Date().toISOString() } : grade));
@@ -105,21 +179,29 @@ export default function WorkflowOversight() {
         </div>
         <Panel>
           <h3 className="text-lg font-bold">Common Phase Schedule and Completion</h3>
-          <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date</th><th className="p-3">Session</th><th className="p-3">Type</th><th className="p-3">Hours</th><th className="p-3">Attendance Sheet</th><th className="p-3">Status</th></tr></thead><tbody>{sessions.filter((session) => session.phase === 'Common Phase').map((session) => <tr key={session.id} className="border-b dark:border-slate-800"><td className="p-3">{session.date}</td><td className="p-3 font-semibold">{session.title}</td><td className="p-3">{session.type}</td><td className="p-3">{session.duration}</td><td className="p-3"><StatusBadge value={sheets.find((sheet) => sheet.sessionId === session.id)?.status || 'Missing attendance'} /></td><td className="p-3"><StatusBadge value={session.status} /></td></tr>)}</tbody></table></div>
+          <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date</th><th className="p-3">Session</th><th className="p-3">Type</th><th className="p-3">Hours</th><th className="p-3">Attendance Sheet</th><th className="p-3">Status</th></tr></thead><tbody>{displayedSessions.map((session) => <tr key={session.id} className="border-b dark:border-slate-800"><td className="p-3">{session.date}</td><td className="p-3 font-semibold">{session.title}</td><td className="p-3">{session.type}</td><td className="p-3">{session.duration}</td><td className="p-3"><StatusBadge value={sheets.find((sheet) => sheet.sessionId === session.id)?.status || 'Missing attendance'} /></td><td className="p-3"><StatusBadge value={session.status} /></td></tr>)}</tbody></table></div>
+          <Pager page={overviewPage} totalPages={Math.ceil(commonSessions.length / overviewPageSize)} onPage={setOverviewPage} total={commonSessions.length} pageSize={overviewPageSize} onPageSize={(size) => { setOverviewPageSize(size); setOverviewPage(1); }} pageSizeOptions={[10, 25, 50]} />
         </Panel>
       </>}
       {tab === 'attendance' && <Panel>
-        <div className="flex flex-col justify-between gap-3 md:flex-row"><div><h3 className="text-lg font-bold">Attendance Monitoring</h3><p className="text-sm text-slate-500">Read-only oversight of dated records saved by facilitators.</p></div><button type="button" onClick={exportAttendance} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"><Download className="h-4 w-4" /> Export CSV</button></div>
-        <div className="my-4 flex flex-wrap gap-3"><input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><input value={attendanceSearch} onChange={(event) => setAttendanceSearch(event.target.value)} placeholder="Facilitator, group, municipality, session" className="min-w-[260px] rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><select value={componentFilter} onChange={(event) => setComponentFilter(event.target.value)} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><option value="all">All components</option>{['Common', 'CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'].map((value) => <option key={value}>{value}</option>)}</select><select value={sheetStatus} onChange={(event) => setSheetStatus(event.target.value)} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><option value="all">Any sheet status</option><option>Draft</option><option>Complete</option><option>Needs Review</option></select></div>
-        {filteredSheets.length ? <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date</th><th className="p-3">Session / Topic</th><th className="p-3">Facilitator</th><th className="p-3">Group</th><th className="p-3">Summary</th><th className="p-3">Sheet Status</th></tr></thead><tbody>{filteredSheets.map((sheet) => <tr key={sheet.id} className="border-b dark:border-slate-800"><td className="p-3">{sheet.date}</td><td className="p-3 font-semibold">{sheet.topic}</td><td className="p-3">{sheet.facilitatorName}</td><td className="p-3">{sheet.group}</td><td className="p-3">{['present', 'absent', 'late', 'excused'].map((value) => `${value[0].toUpperCase()}: ${sheet.entries.filter((entry) => entry.status === value).length}`).join(' / ')}</td><td className="p-3"><StatusBadge value={sheet.status} /></td></tr>)}</tbody></table></div> : <EmptyState title="No attendance sheets" body="No saved attendance records match these filters." />}
+        <div className="flex flex-col justify-between gap-3 md:flex-row"><div><h3 className="text-lg font-bold">Attendance Monitoring</h3><p className="text-sm text-slate-500">Open and export dated records saved by facilitators without editing their source sheets.</p></div><button type="button" onClick={() => exportAttendance()} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"><Download className="h-4 w-4" /> Export Excel</button></div>
+        <div className="my-4 flex flex-wrap gap-3"><input type="date" value={dateFilter} onChange={(event) => { setDateFilter(event.target.value); setAttendancePage(1); }} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><input value={attendanceSearch} onChange={(event) => { setAttendanceSearch(event.target.value); setAttendancePage(1); }} placeholder="Facilitator, group, municipality, session" className="min-w-[260px] flex-1 rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><select value={componentFilter} onChange={(event) => { setComponentFilter(event.target.value); setAttendancePage(1); }} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><option value="all">All components</option>{['Common', 'CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'].map((value) => <option key={value}>{value}</option>)}</select><select value={sheetStatus} onChange={(event) => { setSheetStatus(event.target.value); setAttendancePage(1); }} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><option value="all">Any sheet status</option>{['Draft', 'Ongoing', 'Submitted', 'Completed', 'Complete', 'Needs Review'].map((value) => <option key={value}>{value}</option>)}</select></div>
+        {filteredSheets.length ? <>
+          <div className="overflow-x-auto"><table className="w-full min-w-[940px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date</th><th className="p-3">Session / Topic</th><th className="p-3">Facilitator</th><th className="p-3">Group</th><th className="p-3">Summary</th><th className="p-3">Sheet Status</th><th className="p-3">Open</th></tr></thead><tbody>{displayedSheets.map((sheet) => <tr key={sheet.id} className="border-b dark:border-slate-800"><td className="p-3">{sheet.date}</td><td className="p-3 font-semibold">{sheet.topic}</td><td className="p-3">{sheet.facilitatorName}</td><td className="p-3">{sheet.group}</td><td className="p-3">{['present', 'absent', 'late', 'excused'].map((value) => `${value[0].toUpperCase()}: ${sheet.entries.filter((entry) => entry.status === value).length}`).join(' / ')}</td><td className="p-3"><StatusBadge value={sheet.status} /></td><td className="p-3"><button type="button" onClick={() => { setSelectedSheetId(sheet.id); setSheetEntryPage(1); }} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-2.5 py-2 text-xs font-semibold text-blue-700"><Eye className="h-4 w-4" /> View</button></td></tr>)}</tbody></table></div>
+          <Pager page={attendancePage} totalPages={Math.ceil(filteredSheets.length / attendancePageSize)} onPage={setAttendancePage} total={filteredSheets.length} pageSize={attendancePageSize} onPageSize={(size) => { setAttendancePageSize(size); setAttendancePage(1); }} pageSizeOptions={[10, 25, 50, 100]} />
+        </> : <EmptyState title="No attendance sheets" body="No saved attendance records match these filters." />}
       </Panel>}
       {tab === 'grades' && <Panel>
-        <h3 className="text-lg font-bold">Grade Monitoring and Release</h3><p className="text-sm text-slate-500">Admin review controls whether facilitator-entered grades become visible in student records.</p>
-        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Student</th><th className="p-3">Current Status</th><th className="p-3">Updated</th><th className="p-3">Review Action</th></tr></thead><tbody>{grades.map((grade) => <tr key={grade.studentId} className="border-b dark:border-slate-800"><td className="p-3 font-semibold">{students.find((student) => student.id === grade.studentId)?.name || grade.studentId}</td><td className="p-3"><StatusBadge value={grade.status} /></td><td className="p-3">{new Date(grade.updatedAt).toLocaleDateString()}</td><td className="p-3"><select value={grade.status} onChange={(event) => setGradeStatus(grade.studentId, event.target.value as typeof grade.status)} className="rounded-lg border px-2 py-2 dark:border-slate-700 dark:bg-slate-900">{['Draft', 'In Progress', 'Submitted', 'Reviewed', 'Released'].map((value) => <option key={value}>{value}</option>)}</select></td></tr>)}</tbody></table></div>
+        <div className="flex flex-col justify-between gap-3 md:flex-row"><div><h3 className="text-lg font-bold">Grade Monitoring and Release</h3><p className="text-sm text-slate-500">Review facilitator-entered category scores and control student release status.</p></div><button type="button" onClick={exportGrades} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"><Download className="h-4 w-4" /> Export Excel</button></div>
+        {grades.length ? <>
+          <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[1080px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Student</th><th className="p-3">Attendance</th><th className="p-3">Assessments</th><th className="p-3">Activities</th><th className="p-3">Participation</th><th className="p-3">Major Exam</th><th className="p-3">Final</th><th className="p-3">Status</th><th className="p-3">Review Action</th></tr></thead><tbody>{displayedGrades.map((grade) => { const student = students.find((value) => value.id === grade.studentId); const computed = finalGrade(grade, settings); return <tr key={grade.studentId} className="border-b dark:border-slate-800"><td className="p-3 font-semibold">{student?.name || grade.studentId}<p className="text-xs font-normal text-slate-500">{student?.component || ''}</p></td><td className="p-3">{grade.attendance ?? '--'}</td><td className="p-3">{grade.assessments ?? '--'}</td><td className="p-3">{grade.activities ?? '--'}</td><td className="p-3">{grade.participation ?? '--'}</td><td className="p-3">{grade.majorExam ?? '--'}</td><td className="p-3 font-bold">{computed === null ? '--' : computed.toFixed(2)}</td><td className="p-3"><StatusBadge value={grade.status} /></td><td className="p-3"><select value={grade.status} onChange={(event) => setGradeStatus(grade.studentId, event.target.value as typeof grade.status)} className="rounded-lg border px-2 py-2 dark:border-slate-700 dark:bg-slate-900">{['Draft', 'In Progress', 'Submitted', 'Reviewed', 'Released'].map((value) => <option key={value}>{value}</option>)}</select></td></tr>; })}</tbody></table></div>
+          <Pager page={gradePage} totalPages={Math.ceil(grades.length / gradePageSize)} onPage={setGradePage} total={grades.length} pageSize={gradePageSize} onPageSize={(size) => { setGradePageSize(size); setGradePage(1); }} pageSizeOptions={[10, 25, 50, 100]} />
+        </> : <EmptyState title="No facilitator grades" body="Saved gradebook entries from facilitators will appear here for review and release." />}
       </Panel>}
       {tab === 'classification' && <Panel>
         <h3 className="text-lg font-bold">Component Classification Readiness</h3><p className="text-sm text-slate-500">Eligibility is based on 25 completed contact hours, attendance, assessed outputs, and final approval.</p>
-        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Student</th><th className="p-3">Current Stage</th><th className="p-3">Contact Hours</th><th className="p-3">Attendance</th><th className="p-3">Eligibility</th></tr></thead><tbody>{progress.map(({ student, progress: item }) => { const approved = student.component !== 'Common Phase'; return <tr key={student.id} className="border-b dark:border-slate-800"><td className="p-3 font-semibold">{student.name}</td><td className="p-3">{student.component}</td><td className="p-3">{approved ? '25 / 25' : `${item.completedHours} / 25`}</td><td className="p-3">{item.attendancePercentage}%</td><td className="p-3"><StatusBadge value={approved ? 'Approved' : item.status} /></td></tr>; })}</tbody></table></div>
+        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Student</th><th className="p-3">Current Stage</th><th className="p-3">Contact Hours</th><th className="p-3">Attendance</th><th className="p-3">Eligibility</th></tr></thead><tbody>{displayedProgress.map(({ student, progress: item }) => { const approved = student.component !== 'Common Phase'; return <tr key={student.id} className="border-b dark:border-slate-800"><td className="p-3 font-semibold">{student.name}</td><td className="p-3">{student.component}</td><td className="p-3">{approved ? '25 / 25' : `${item.completedHours} / 25`}</td><td className="p-3">{item.attendancePercentage}%</td><td className="p-3"><StatusBadge value={approved ? 'Approved' : item.status} /></td></tr>; })}</tbody></table></div>
+        <Pager page={classificationPage} totalPages={Math.ceil(progress.length / classificationPageSize)} onPage={setClassificationPage} total={progress.length} pageSize={classificationPageSize} onPageSize={(size) => { setClassificationPageSize(size); setClassificationPage(1); }} pageSizeOptions={[10, 25, 50, 100]} />
       </Panel>}
       {tab === 'materials' && <AdminLearningMaterialsPanel />}
       {tab === 'notices' && <Panel>
@@ -129,12 +211,26 @@ export default function WorkflowOversight() {
       </Panel>}
       {tab === 'audit' && <Panel>
         <h3 className="text-lg font-bold">Audit Logs</h3>
-        {audit.length ? <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[820px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date / Time</th><th className="p-3">Actor</th><th className="p-3">Action</th><th className="p-3">Record</th><th className="p-3">Detail</th></tr></thead><tbody>{audit.map((row) => <tr key={row.id} className="border-b dark:border-slate-800"><td className="p-3">{new Date(row.at).toLocaleString()}</td><td className="p-3">{row.actorName}</td><td className="p-3"><StatusBadge value={row.action} /></td><td className="p-3">{row.recordType}</td><td className="p-3">{row.detail}</td></tr>)}</tbody></table></div> : <EmptyState title="No logged workflow actions" body="Attendance saves, grade releases, and published notices will appear here." />}
+        {audit.length ? <><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[820px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date / Time</th><th className="p-3">Actor</th><th className="p-3">Action</th><th className="p-3">Record</th><th className="p-3">Detail</th></tr></thead><tbody>{displayedAudit.map((row) => <tr key={row.id} className="border-b dark:border-slate-800"><td className="p-3">{new Date(row.at).toLocaleString()}</td><td className="p-3">{row.actorName}</td><td className="p-3"><StatusBadge value={row.action} /></td><td className="p-3">{row.recordType}</td><td className="p-3">{row.detail}</td></tr>)}</tbody></table></div><Pager page={auditPage} totalPages={Math.ceil(audit.length / auditPageSize)} onPage={setAuditPage} total={audit.length} pageSize={auditPageSize} onPageSize={(size) => { setAuditPageSize(size); setAuditPage(1); }} pageSizeOptions={[10, 25, 50, 100]} /></> : <EmptyState title="No logged workflow actions" body="Attendance saves, grade releases, and published notices will appear here." />}
       </Panel>}
       {tab === 'settings' && <Panel>
         <h3 className="inline-flex items-center gap-2 text-lg font-bold"><Settings className="h-5 w-5 text-blue-700" /> System Settings</h3><p className="mt-1 text-sm text-slate-500">School year and flexible session scheduling remain in existing admin modules; manage the shared grading breakdown here.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">{(['attendance', 'assessments', 'activities', 'participation', 'majorExam'] as const).map((field) => <label key={field} className="text-xs font-semibold uppercase text-slate-500">{field}<input type="number" value={settings[field]} onChange={(event) => setSettings((current) => ({ ...current, [field]: Number(event.target.value) }))} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>)}<button type="button" onClick={saveRules} className="inline-flex items-center justify-center gap-2 self-end rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"><Save className="h-4 w-4" /> Save</button></div>
       </Panel>}
+      {selectedSheet && (
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <section role="dialog" aria-modal="true" className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl dark:bg-slate-950">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Read-only Attendance Sheet</p><h3 className="mt-1 text-xl font-bold">{selectedSheet.topic}</h3><p className="mt-1 text-sm text-slate-500">{selectedSheet.date} / Session {selectedSheet.sessionNumber} / {selectedSheet.facilitatorName} / {selectedSheet.group}</p></div>
+              <div className="flex gap-2"><button type="button" onClick={() => exportAttendance([selectedSheet])} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white"><Download className="h-4 w-4" /> Export Sheet</button><button type="button" onClick={() => setSelectedSheetId(null)} className="rounded-xl border border-slate-200 p-2"><X className="h-5 w-5" /></button></div>
+            </div>
+            <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+              <table className="w-full table-fixed text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="w-[38%] p-3">Student</th><th className="w-[20%] p-3">Status</th><th className="w-[42%] p-3">Remarks</th></tr></thead><tbody>{displayedSheetEntries.map((entry) => { const student = students.find((value) => value.id === entry.studentId); return <tr key={entry.studentId} className="border-t dark:border-slate-800"><td className="p-3 font-semibold">{student?.name || entry.studentId}<p className="text-xs font-normal text-slate-500">{student?.studentId || ''}</p></td><td className="p-3"><StatusBadge value={entry.status} /></td><td className="p-3">{entry.remarks || '--'}</td></tr>; })}</tbody></table>
+            </div>
+            <Pager page={sheetEntryPage} totalPages={Math.ceil(selectedSheet.entries.length / sheetEntryPageSize)} onPage={setSheetEntryPage} total={selectedSheet.entries.length} pageSize={sheetEntryPageSize} onPageSize={(size) => { setSheetEntryPageSize(size); setSheetEntryPage(1); }} pageSizeOptions={[10, 25, 50, 100]} />
+          </section>
+        </div>
+      )}
       <Toaster position="top-right" richColors />
     </section>
   );

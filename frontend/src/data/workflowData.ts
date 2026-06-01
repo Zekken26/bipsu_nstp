@@ -10,7 +10,7 @@ export type WorkflowPhase = 'Common Phase' | 'Component Proper';
 export type SessionType = 'Orientation' | 'Seminar' | 'Workshop' | 'Lecture' | 'Activity' | 'Assessment' | 'Examination';
 export type SessionStatus = 'Upcoming' | 'Ongoing' | 'Completed' | 'Cancelled';
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
-export type AttendanceRecordStatus = 'Draft' | 'Complete' | 'Needs Review';
+export type AttendanceRecordStatus = 'Draft' | 'Ongoing' | 'Submitted' | 'Completed' | 'Complete' | 'Needs Review';
 export type GradeWorkflowStatus = 'Draft' | 'In Progress' | 'Submitted' | 'Reviewed' | 'Released';
 export type EligibilityStatus = 'Not Eligible' | 'Near Completion' | 'Eligible for Component Classification' | 'Approved';
 
@@ -541,7 +541,7 @@ export function workflowSummary() {
   const attendance = loadAttendanceSheets();
   const grades = loadDetailedGrades();
   const sessions = loadSessions();
-  const completedSheets = attendance.filter((sheet) => sheet.status === 'Complete').length;
+  const completedSheets = attendance.filter((sheet) => sheet.status === 'Complete' || sheet.status === 'Completed' || sheet.status === 'Submitted').length;
   return {
     students: students.length,
     facilitators: accounts.filter((account) => account.role === 'facilitator').length,

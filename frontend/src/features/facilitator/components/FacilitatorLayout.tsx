@@ -65,7 +65,7 @@ export default function FacilitatorLayout({
   });
 
   return (
-    <div className="min-h-screen bg-[#f4f7fc] text-slate-900 dark:bg-[#080f1f] dark:text-slate-100">
+    <div className="facilitator-portal min-h-screen bg-[#f5f8fc] text-slate-900 dark:bg-[#080f1f] dark:text-slate-100">
       <CollapsibleRoleSidebar
         open={mobileOpen}
         onClose={() => setMobileOpen(false)}
@@ -83,28 +83,28 @@ export default function FacilitatorLayout({
         ]}
       />
       <div className="min-h-screen lg:pl-[76px]">
-        <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85 md:px-7">
-          <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4">
+        <header className="sticky top-0 z-30 border-b border-[#e4ebf4] bg-white/90 px-4 py-2.5 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90 md:px-6">
+          <div className="mx-auto flex max-w-[1540px] items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <button type="button" onClick={() => setMobileOpen(true)} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 lg:hidden dark:border-slate-700" aria-label="Open facilitator navigation">
                 <Menu className="h-5 w-5" />
               </button>
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Facilitator / {PAGE_INFO[page].title}</p>
-                <p className="truncate text-sm text-slate-500 dark:text-slate-400">{PAGE_INFO[page].description}</p>
+                <p className="text-[0.67rem] font-bold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Facilitator / {PAGE_INFO[page].title}</p>
+                <p className="truncate text-xs text-slate-500 dark:text-slate-400">{PAGE_INFO[page].description}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="hidden rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200 sm:block">
+              <div className="hidden rounded-full bg-blue-50 px-3 py-1.5 text-[0.68rem] font-bold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200 sm:block">
                 {(user.municipalities || []).join(', ') || 'Scope pending'}
               </div>
-              <button type="button" onClick={() => setDark((value) => !value)} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-200" aria-label="Toggle color theme">
+              <button type="button" onClick={() => setDark((value) => !value)} className="grid h-10 w-10 place-items-center rounded-xl border border-[#dfe7f1] bg-white text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" aria-label="Toggle color theme">
                 {dark ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
               </button>
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-[1500px] space-y-5 p-4 md:p-7">{children}</main>
+        <main className="mx-auto max-w-[1540px] space-y-4 p-4 md:p-5 lg:p-6">{children}</main>
       </div>
     </div>
   );

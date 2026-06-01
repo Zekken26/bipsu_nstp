@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, Eye, Save, UserRound, X } from 'lucide-react';
 import { addAudit, commonPhaseProgress, studentAttendance, type InterventionNote } from '../../../data/workflowData';
 import type { FacilitatorWorkspace } from '../hooks/useFacilitatorWorkspace';
-import { EmptyState, PageIntro, Pager, Panel, SearchField, StatusBadge } from '../components/FacilitatorUI';
-
-const PAGE_SIZE = 10;
+import { EmptyState, PageIntro, Pager, Panel, SearchField, StatusBadge, useModalEscape } from '../components/FacilitatorUI';
 
 export default function AssignedStudentsPage({ workspace, notify }: { workspace: FacilitatorWorkspace; notify: (message: string) => void }) {
   const [search, setSearch] = useState('');
@@ -12,6 +10,7 @@ export default function AssignedStudentsPage({ workspace, notify }: { workspace:
   const [status, setStatus] = useState('all');
   const [sortAscending, setSortAscending] = useState(true);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
   const [noteCategory, setNoteCategory] = useState<InterventionNote['category']>('Follow-up');
@@ -26,10 +25,15 @@ export default function AssignedStudentsPage({ workspace, notify }: { workspace:
       .sort((a, b) => sortAscending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
   }, [workspace.students, search, component, status, sortAscending]);
 
-  useEffect(() => setPage(1), [search, component, status]);
+  useEffect(() => setPage(1), [search, component, status, pageSize]);
 
-  const displayed = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const displayed = filtered.slice((page - 1) * pageSize, page * pageSize);
   const selected = workspace.students.find((student) => student.id === selectedId);
+  useModalEscape({
+    open: Boolean(selected),
+    onClose: () => setSelectedId(null),
+    confirmClose: () => !noteText.trim() || window.confirm('Discard the unsaved intervention note and close this profile?'),
+  });
   const gradeFor = (studentId: string) => workspace.detailedGrades.find((entry) => entry.studentId === studentId)?.status || 'Draft';
   const attendanceFor = (studentId: string) => latestSession?.entries.find((entry) => entry.studentId === studentId)?.status || 'Not recorded';
   const metricsFor = (studentId: string) => {
@@ -72,25 +76,26 @@ export default function AssignedStudentsPage({ workspace, notify }: { workspace:
       <Panel>
         <div className="mb-5 flex flex-col gap-3 lg:flex-row">
           <SearchField value={search} onChange={setSearch} placeholder="Search student, ID, municipality, or component" />
-          <select value={component} onChange={(event) => setComponent(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
+          <select value={component} onChange={(event) => setComponent(event.target.value)} className="rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
             <option value="all">All components</option>
             {['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'].map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
-          <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
+          <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
             <option value="all">All enrollment states</option>
             <option value="active">Active</option>
             <option value="pending">Pending</option>
             <option value="graduated">Completed</option>
           </select>
-          <button type="button" onClick={() => setSortAscending((value) => !value)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold dark:border-slate-700">
+          <button type="button" onClick={() => setSortAscending((value) => !value)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#dfe7f1] bg-white px-4 py-2.5 text-sm font-semibold transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
             <ArrowDownUp className="h-4 w-4" />
             {sortAscending ? 'A-Z' : 'Z-A'}
           </button>
         </div>
         {displayed.length ? (
-          <div className="overflow-x-auto">
+          <>
+          <div className="max-h-[650px] overflow-auto rounded-xl border border-[#edf1f6]">
             <table className="w-full min-w-[1000px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              <thead className="sticky top-0 z-10 bg-[#f7f9fc] text-xs uppercase tracking-[0.12em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                 <tr>
                   {['Student name', 'Student ID', 'Municipality', 'NSTP stage', 'Enrollment', 'Attendance', 'Grade status', 'Risk', ''].map((header) => <th key={header} className="px-4 py-3 font-semibold">{header}</th>)}
                 </tr>
@@ -98,7 +103,7 @@ export default function AssignedStudentsPage({ workspace, notify }: { workspace:
               <tbody>
                 {displayed.map((student) => {
                   const metrics = metricsFor(student.id);
-                  return <tr key={student.id} className="border-b border-slate-100 dark:border-slate-800">
+                  return <tr key={student.id} className="border-b border-slate-100 transition hover:bg-blue-50/35 dark:border-slate-800 dark:hover:bg-slate-900">
                     <td className="px-4 py-4 font-semibold text-slate-900 dark:text-white">{student.name}</td>
                     <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{student.studentId || '--'}</td>
                     <td className="px-4 py-4">{student.municipality || '--'}</td>
@@ -116,8 +121,9 @@ export default function AssignedStudentsPage({ workspace, notify }: { workspace:
                 })}
               </tbody>
             </table>
-            <Pager page={page} totalPages={Math.ceil(filtered.length / PAGE_SIZE)} onPage={setPage} total={filtered.length} />
           </div>
+          <Pager page={page} totalPages={Math.ceil(filtered.length / pageSize)} onPage={setPage} total={filtered.length} pageSize={pageSize} onPageSize={setPageSize} pageSizeOptions={[10, 25, 50, 100]} />
+          </>
         ) : <EmptyState title="No students found" body="No assigned students match the selected search and filters." />}
       </Panel>
 

@@ -147,7 +147,9 @@ export default function CollapsibleRoleSidebar({
             <button
               type="button"
               onClick={onLogout}
-              className="mt-3 flex h-10 w-full items-center gap-2 rounded-2xl text-sm font-medium text-slate-300 transition-all duration-300 ease-in-out hover:bg-white/10 hover:text-white lg:pointer-events-none lg:h-0 lg:overflow-hidden lg:px-0 lg:opacity-0 lg:group-hover/sidebar:pointer-events-auto lg:group-hover/sidebar:h-10 lg:group-hover/sidebar:px-3 lg:group-hover/sidebar:opacity-100"
+              title="Logout"
+              aria-label="Logout"
+              className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-2xl text-sm font-medium text-slate-300 transition-all duration-300 ease-in-out hover:bg-white/10 hover:text-white lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:px-3"
             >
               <LogOut className="h-5 w-5 shrink-0" />
               <span className={revealTextClass}>Logout</span>

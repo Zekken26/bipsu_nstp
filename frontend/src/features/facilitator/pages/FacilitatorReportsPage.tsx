@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { BarChart3, CalendarCheck, ClipboardCheck, GraduationCap, TrendingUp } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { calculateFinalGrade, type FacilitatorWorkspace } from '../hooks/useFacilitatorWorkspace';
-import { EmptyState, PageIntro, Panel, StatCard, StatusBadge } from '../components/FacilitatorUI';
+import { EmptyState, PageIntro, Pager, Panel, StatCard, StatusBadge } from '../components/FacilitatorUI';
 
 export default function FacilitatorReportsPage({ workspace }: { workspace: FacilitatorWorkspace }) {
+  const [gradePage, setGradePage] = useState(1);
+  const [gradePageSize, setGradePageSize] = useState(25);
   const attendanceRows = workspace.attendance.map((session) => ({
     date: session.date,
     topic: session.topic,
@@ -31,6 +34,7 @@ export default function FacilitatorReportsPage({ workspace }: { workspace: Facil
     const grade = workspace.detailedGrades.find((item) => item.studentId === student.id);
     return { student, grade, final: calculateFinalGrade(grade) };
   }).filter((row) => row.grade);
+  const displayedGrades = gradeRows.slice((gradePage - 1) * gradePageSize, gradePage * gradePageSize);
 
   return (
     <>
@@ -40,7 +44,7 @@ export default function FacilitatorReportsPage({ workspace }: { workspace: Facil
         description="Reports are generated only from your assigned student scope and facilitator-entered class records."
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Attendance Report" value={`${presentRate}%`} detail="Present across recorded sessions" icon={CalendarCheck} tone="emerald" />
+        <StatCard label="Attendance Report" value={`${presentRate}%`} detail="Present across recorded sessions" icon={CalendarCheck} tone="emerald" progress={presentRate} />
         <StatCard label="Grade Completion" value={`${completedGrades}/${workspace.students.length}`} detail="Completed or released" icon={GraduationCap} tone="blue" />
         <StatCard label="Assessment Report" value={submissionData.reduce((total, item) => total + item.submissions, 0)} detail="Recorded submissions" icon={ClipboardCheck} tone="indigo" />
         <StatCard label="Student Progress" value={`${workspace.students.length ? Math.round(workspace.students.reduce((sum, item) => sum + item.progress, 0) / workspace.students.length) : 0}%`} detail="Average learning progress" icon={TrendingUp} tone="amber" />
@@ -108,16 +112,19 @@ export default function FacilitatorReportsPage({ workspace }: { workspace: Facil
         <Panel>
           <h2 className="text-lg font-bold text-slate-950 dark:text-white">Grade Completion Report</h2>
           {gradeRows.length ? (
-            <div className="mt-4 overflow-x-auto">
+            <>
+            <div className="mt-4 overflow-auto rounded-xl border border-[#edf1f6]">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="px-3 py-3">Student</th><th className="px-3 py-3">Final</th><th className="px-3 py-3">Status</th></tr></thead>
+                <thead className="sticky top-0 z-10 bg-[#f7f9fc] text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="px-3 py-3">Student</th><th className="px-3 py-3">Final</th><th className="px-3 py-3">Status</th></tr></thead>
                 <tbody>
-                  {gradeRows.slice(0, 8).map(({ student, grade, final }) => (
+                  {displayedGrades.map(({ student, grade, final }) => (
                     <tr key={student.id} className="border-b border-slate-100 dark:border-slate-800"><td className="px-3 py-3 font-semibold">{student.name}</td><td className="px-3 py-3">{final ?? '--'}</td><td className="px-3 py-3"><StatusBadge value={grade!.status} /></td></tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            <Pager page={gradePage} totalPages={Math.ceil(gradeRows.length / gradePageSize)} onPage={setGradePage} total={gradeRows.length} pageSize={gradePageSize} onPageSize={(size) => { setGradePageSize(size); setGradePage(1); }} pageSizeOptions={[10, 25, 50, 100]} />
+            </>
           ) : <div className="mt-4"><EmptyState title="No grade completion data" body="Gradebook entries saved by the facilitator will populate this table." /></div>}
         </Panel>
       </div>

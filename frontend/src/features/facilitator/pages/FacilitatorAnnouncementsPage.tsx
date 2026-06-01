@@ -71,19 +71,19 @@ export default function FacilitatorAnnouncementsPage({ workspace, notify }: { wo
           <h2 className="text-lg font-bold text-slate-950 dark:text-white">Post to Assigned Students</h2>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Published notices appear in the student portal only for the selected assigned audience.</p>
           <div className="mt-5 space-y-3">
-            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Announcement title" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
-            <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={4} placeholder="Message for assigned students" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Announcement title" className="w-full rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900" />
+            <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={4} placeholder="Message for assigned students" className="w-full rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900" />
             <div className="grid gap-3 sm:grid-cols-2">
-              <select value={municipality} onChange={(event) => setMunicipality(event.target.value as WorkflowNotice['municipality'])} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
+              <select value={municipality} onChange={(event) => setMunicipality(event.target.value as WorkflowNotice['municipality'])} className="rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
                 <option value="All">All assigned</option>
                 {(workspace.user.municipalities || []).map((value) => <option key={value}>{value}</option>)}
               </select>
-              <select value={component} onChange={(event) => setComponent(event.target.value as WorkflowNotice['component'])} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
+              <select value={component} onChange={(event) => setComponent(event.target.value as WorkflowNotice['component'])} className="rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
                 <option value="All">All stages</option>
                 {['Common', 'CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'].map((value) => <option key={value}>{value}</option>)}
               </select>
             </div>
-            <select value={priority} onChange={(event) => setPriority(event.target.value as WorkflowNotice['priority'])} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
+            <select value={priority} onChange={(event) => setPriority(event.target.value as WorkflowNotice['priority'])} className="w-full rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
               <option value="Normal">Normal priority</option>
               <option value="Urgent">Urgent priority</option>
             </select>
@@ -95,7 +95,7 @@ export default function FacilitatorAnnouncementsPage({ workspace, notify }: { wo
             <h2 className="inline-flex items-center gap-2 text-lg font-bold text-slate-950 dark:text-white"><Bell className="h-5 w-5 text-blue-700" /> Program Notices</h2>
             <div className="mt-4 space-y-3">
               {systemNotices.length ? systemNotices.map((notice) => (
-                <article key={notice.id} className="rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <article key={notice.id} className="rounded-xl border border-[#e6ecf4] bg-[#fbfcfe] p-4 dark:border-slate-800 dark:bg-slate-900">
                   <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-900 dark:text-white">{notice.title}</h3><StatusBadge value={notice.priority} /></div>
                   <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{notice.message}</p>
                   <p className="mt-2 text-xs text-slate-400">{notice.createdBy} / {new Date(notice.createdAt).toLocaleString()}</p>
@@ -111,7 +111,7 @@ export default function FacilitatorAnnouncementsPage({ workspace, notify }: { wo
             {visiblePosts.length ? (
               <div className="space-y-3">
                 {visiblePosts.map((notice) => (
-                  <article key={notice.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                  <article key={notice.id} className="rounded-xl border border-[#e6ecf4] bg-[#fbfcfe] p-4 dark:border-slate-800 dark:bg-slate-900">
                     <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-900 dark:text-white">{notice.title}</h3><StatusBadge value={notice.priority} /></div>
                     <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{notice.message}</p>
                     <p className="mt-3 text-xs font-semibold text-blue-700 dark:text-blue-300">Audience: {notice.municipality} / {notice.component}</p>

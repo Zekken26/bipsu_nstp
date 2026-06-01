@@ -60,10 +60,10 @@ export default function DashboardOverview({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard label="Assigned Students" value={students.length} detail="Current roster" icon={Users} tone="blue" />
         <StatCard label="Pending Enrollments" value={pending.length} detail="Awaiting processing" icon={UserCheck} tone="amber" />
-        <StatCard label="Attendance Completion" value={`${attendanceRate}%`} detail={`${attendance.length} sessions recorded`} icon={CalendarCheck} tone="emerald" />
+        <StatCard label="Attendance Completion" value={`${attendanceRate}%`} detail={`${attendance.length} sessions recorded`} icon={CalendarCheck} tone="emerald" progress={attendanceRate} />
         <StatCard label="Assessments Created" value={assessments.length} detail="Owned assessments" icon={GraduationCap} tone="indigo" />
         <StatCard label="Submissions" value={submitted} detail="Recorded attempts" icon={BookOpen} tone="blue" />
-        <StatCard label="Grading Progress" value={`${gradingProgress}%`} detail={`${completeGrades} completed records`} icon={ClipboardList} tone="emerald" />
+        <StatCard label="Grading Progress" value={`${gradingProgress}%`} detail={`${completeGrades} completed records`} icon={ClipboardList} tone="emerald" progress={gradingProgress} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
@@ -72,7 +72,7 @@ export default function DashboardOverview({
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Continue routine class operations without hunting through a dashboard.</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {actions.map(({ label, detail, icon: Icon, page }) => (
-              <button key={page} type="button" onClick={() => onNavigate(page)} className="group rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10">
+              <button key={page} type="button" onClick={() => onNavigate(page)} className="group rounded-2xl border border-[#e6ecf4] bg-[#fbfcfe] p-4 text-left transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10">
                 <Icon className="h-5 w-5 text-blue-700 dark:text-blue-300" />
                 <p className="mt-3 text-sm font-semibold text-slate-900 dark:text-white">{label}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{detail}</p>
@@ -88,7 +88,7 @@ export default function DashboardOverview({
           </div>
           <div className="mt-4 space-y-3">
             {upcoming.length ? upcoming.map((session) => (
-              <div key={session.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+              <div key={session.id} className="rounded-xl border border-[#e6ecf4] bg-[#fbfcfe] p-3 transition hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex justify-between gap-3">
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">{session.title}</p>
                   <StatusBadge value={session.date === new Date().toISOString().slice(0, 10) ? 'Today' : 'Scheduled'} />
@@ -109,7 +109,7 @@ export default function DashboardOverview({
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {activity.length ? activity.slice(0, 6).map((item) => (
-            <div key={item.id} className="flex gap-3 rounded-xl border border-slate-100 p-4 dark:border-slate-800">
+            <div key={item.id} className="flex gap-3 rounded-xl border border-[#e6ecf4] bg-[#fbfcfe] p-4 dark:border-slate-800 dark:bg-slate-900">
               <div className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-blue-600" />
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">{item.title}</p>

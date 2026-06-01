@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Building2, Download, Filter, KeyRound, LockKeyhole, Mail, MoreVertical, Pencil, Plus, Save, Search, Trash2, Users, X } from 'lucide-react';
 import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, loadAccounts, loadStudents, NstpAccount, saveAccounts } from '../../../data/nstpData';
+import { Pager, useModalEscape } from '../../facilitator/components/FacilitatorUI';
 
 type Props = {
   admin: NstpAccount;
@@ -26,6 +27,19 @@ export default function FacilitatorManagement({ admin }: Props) {
   const [query, setQuery] = useState('');
   const [municipalityFilter, setMunicipalityFilter] = useState('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  const closeEditor = () => {
+    setEditingId(null);
+    setForm(null);
+  };
+
+  useModalEscape({
+    open: Boolean(editingId && form),
+    onClose: closeEditor,
+    confirmClose: () => window.confirm('Close facilitator editing and discard unsaved changes?'),
+  });
 
   useEffect(() => {
     const nextFacilitators = loadAccounts().filter((account) => account.role === 'facilitator');
@@ -48,6 +62,8 @@ export default function FacilitatorManagement({ admin }: Props) {
     const matchesMunicipality = municipalityFilter === 'all' || facilitator.municipalities?.includes(municipalityFilter as BiliranMunicipality);
     return matchesQuery && matchesMunicipality;
   });
+  useEffect(() => setPage(1), [query, municipalityFilter, pageSize]);
+  const displayedFacilitators = filteredFacilitators.slice((page - 1) * pageSize, page * pageSize);
 
   const selectedFacilitator = facilitators.find((facilitator) => facilitator.id === selectedId) || filteredFacilitators[0] || facilitators[0] || null;
   const selectedStudents = selectedFacilitator ? assignedStudentsFor(selectedFacilitator) : [];
@@ -167,7 +183,7 @@ export default function FacilitatorManagement({ admin }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {filteredFacilitators.map((facilitator, index) => {
+                {displayedFacilitators.map((facilitator, index) => {
                   const assignedStudents = assignedStudentsFor(facilitator);
                   const selected = selectedFacilitator?.id === facilitator.id;
                   return (
@@ -205,10 +221,7 @@ export default function FacilitatorManagement({ admin }: Props) {
             </table>
             {filteredFacilitators.length === 0 && <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">No facilitators match the current filters.</div>}
           </div>
-          <div className="mt-4 flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
-            <span>Showing 1 to {filteredFacilitators.length} of {facilitators.length} facilitators</span>
-            <div className="flex gap-2"><button className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-400 dark:border-slate-800">‹</button><button className="grid h-9 w-9 place-items-center rounded-xl bg-blue-700 text-white">1</button><button className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-200">2</button><button className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-400 dark:border-slate-800">›</button></div>
-          </div>
+          {filteredFacilitators.length ? <Pager page={page} totalPages={Math.ceil(filteredFacilitators.length / pageSize)} onPage={setPage} total={filteredFacilitators.length} pageSize={pageSize} onPageSize={setPageSize} pageSizeOptions={[10, 25, 50, 100]} /> : null}
         </section>
 
         <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -260,7 +273,7 @@ export default function FacilitatorManagement({ admin }: Props) {
                 <h3 className="text-2xl font-semibold text-slate-950 dark:text-white">{editingId === 'new' ? 'Create Facilitator' : 'Edit Facilitator'}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Define login credentials and municipality coverage.</p>
               </div>
-              <button onClick={() => { setEditingId(null); setForm(null); }} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
+              <button onClick={closeEditor} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Name</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></label>
@@ -288,7 +301,7 @@ export default function FacilitatorManagement({ admin }: Props) {
             </div>
             <div className="mt-6 flex flex-wrap justify-end gap-3">
               {editingId !== 'new' && <button onClick={() => form && removeFacilitator(form.id)} className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-5 py-3 font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200"><Trash2 className="h-4 w-4" /> Delete</button>}
-              <button onClick={() => { setEditingId(null); setForm(null); }} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">Cancel</button>
+              <button onClick={closeEditor} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">Cancel</button>
               <button onClick={saveFacilitator} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800"><Save className="h-4 w-4" /> Save Facilitator</button>
             </div>
           </div>

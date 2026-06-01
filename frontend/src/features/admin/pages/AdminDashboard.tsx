@@ -3,10 +3,12 @@ import { Users, BookOpen, TrendingUp, Award, Search, ClipboardList, TriangleAler
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, CartesianGrid, XAxis, YAxis, Bar, LineChart, Line, Legend } from 'recharts';
 import ComponentAssignment from '../components/ComponentAssignment';
 import AssessmentManager from '../../assessments/components/AssessmentManager';
+import CwtsAssessmentWorkspace from '../../cwts/components/CwtsAssessmentWorkspace';
 import ModulesPage from '../../../pages/ModulesPage';
 import FacilitatorManagement from '../components/FacilitatorManagement';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import WorkflowOversight from '../components/WorkflowOversight';
+import { Pager, useModalEscape } from '../../facilitator/components/FacilitatorUI';
 import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups } from '../../../data/nstpData';
 
 type AdminAuditEntry = {
@@ -151,13 +153,15 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const [presetName, setPresetName] = useState('');
   const csvInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingStudentRegistration[]>([]);
+  const [enrollmentPage, setEnrollmentPage] = useState(1);
+  const [enrollmentPageSize, setEnrollmentPageSize] = useState(25);
   const [trainingGroups, setTrainingGroups] = useState(loadTrainingGroups());
   const [gradeRecords, setGradeRecords] = useState<NstpGradeRecord[]>([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('risk');
   const [studentPage, setStudentPage] = useState(1);
-  const [studentsPerPage, setStudentsPerPage] = useState(10);
+  const [studentsPerPage, setStudentsPerPage] = useState(25);
   const [accountVersion, setAccountVersion] = useState(0);
   const [adminSearch, setAdminSearch] = useState('');
   const [schoolYear, setSchoolYear] = useState('SY 2024-2025');
@@ -528,6 +532,12 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const cancelStudentEdit = () => {
     setEditingStudentId(null);
     setStudentForm(null);
+  };
+
+  const requestCancelStudentEdit = () => {
+    if (!studentForm || window.confirm('Discard unsaved student record changes?')) {
+      cancelStudentEdit();
+    }
   };
 
   const saveStudent = () => {
@@ -968,10 +978,14 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const paginatedStudents = filteredStudents.slice((visibleStudentPage - 1) * studentsPerPage, visibleStudentPage * studentsPerPage);
   const studentPageStart = filteredStudents.length === 0 ? 0 : (visibleStudentPage - 1) * studentsPerPage + 1;
   const studentPageEnd = Math.min(filteredStudents.length, visibleStudentPage * studentsPerPage);
+  const paginatedPendingRegistrations = pendingRegistrations.slice((enrollmentPage - 1) * enrollmentPageSize, enrollmentPage * enrollmentPageSize);
 
   useEffect(() => {
     setStudentPage(1);
   }, [search, filter, sortBy, schoolYear, studentsPerPage]);
+  useEffect(() => {
+    setEnrollmentPage(1);
+  }, [pendingRegistrations.length, enrollmentPageSize]);
 
   const studentsNeedingSupport = schoolYearStudents.filter((s) => s.progress < 70).length;
   const selectedStudents = students.filter((student) => selectedStudentIds.includes(student.id));
@@ -1327,6 +1341,16 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     if (!studentForm) return;
     setStudentForm({ ...studentForm, [field]: value });
   };
+
+  useModalEscape({ open: exportSettingsOpen, onClose: () => setExportSettingsOpen(false) });
+  useModalEscape({ open: pdfPreviewOpen, onClose: () => setPdfPreviewOpen(false) });
+  useModalEscape({ open: Boolean(pendingHeaderCrop), onClose: () => setPendingHeaderCrop(null) });
+  useModalEscape({ open: Boolean(studentDetail), onClose: () => setStudentDetailId(null) });
+  useModalEscape({
+    open: Boolean(studentForm),
+    onClose: cancelStudentEdit,
+    confirmClose: () => !studentForm || window.confirm('Discard unsaved student record changes?'),
+  });
 
   if (false && view === 'assessments') {
     return <AssessmentManager user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" />;
@@ -2006,7 +2030,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                           </tr>
                         </thead>
                         <tbody>
-                          {pendingRegistrations.map((registration) => {
+                          {paginatedPendingRegistrations.map((registration) => {
                             const assignedFacilitator = facilitatorAccounts.find((account) => account.municipalities?.includes((registration.municipality || 'Naval') as BiliranMunicipality));
                             return (
                               <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
@@ -2043,6 +2067,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                         <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">No pending enrollment requests right now.</div>
                       )}
                     </div>
+                    {pendingRegistrations.length ? <Pager page={enrollmentPage} totalPages={Math.ceil(pendingRegistrations.length / enrollmentPageSize)} onPage={setEnrollmentPage} total={pendingRegistrations.length} pageSize={enrollmentPageSize} onPageSize={setEnrollmentPageSize} pageSizeOptions={[10, 25, 50, 100]} /> : null}
                   </section>
                 ) : view === 'students' ? (
                   <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -2232,7 +2257,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     )}
 
                     {studentForm && (
-                      <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={cancelStudentEdit}>
+                      <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={requestCancelStudentEdit}>
                         <section onMouseDown={(event) => event.stopPropagation()} className="max-h-[92dvh] w-full max-w-5xl overflow-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
                           <div className="mb-5 flex items-start justify-between gap-3">
                             <div>
@@ -2240,7 +2265,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                               <h3 className="text-2xl font-semibold text-slate-950 dark:text-white">{studentForm.name || 'Student Record'}</h3>
                               <p className="text-sm text-slate-500 dark:text-slate-400">Update identity, municipality, component placement, status, and progress.</p>
                             </div>
-                            <button type="button" onClick={cancelStudentEdit} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
+                            <button type="button" onClick={requestCancelStudentEdit} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
                           </div>
                           <div className="grid gap-4 md:grid-cols-2">
                             <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Name</span><input value={studentForm.name} onChange={(e) => updateForm('name', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
@@ -2255,7 +2280,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                           </div>
                           <div className="mt-5 flex flex-wrap justify-end gap-3">
                             {editingStudentId !== 'new' && <button type="button" onClick={() => requestDeleteStudent(studentForm)} className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-5 py-3 font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200"><Trash2 className="h-4 w-4" />Delete</button>}
-                            <button type="button" onClick={cancelStudentEdit} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">Cancel</button>
+                            <button type="button" onClick={requestCancelStudentEdit} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">Cancel</button>
                             <button type="button" onClick={saveStudent} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800"><Save className="h-4 w-4" />Save Student</button>
                           </div>
                         </section>
@@ -2521,11 +2546,20 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     </div>
                   </section>
                 ) : view === 'assessments' ? (
-                  <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Assessment Module</p>
-                    <h2 className="mb-4 text-2xl font-semibold text-slate-950 dark:text-white">Assessment Bank</h2>
-                    <AssessmentManager user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" />
-                  </section>
+                  <div className="space-y-5">
+                    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Assessment Module</p>
+                      <h2 className="mb-4 text-2xl font-semibold text-slate-950 dark:text-white">Assessment Bank</h2>
+                      <AssessmentManager user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" />
+                    </section>
+                    <CwtsAssessmentWorkspace
+                      role="admin"
+                      user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }}
+                      students={students}
+                      title="Admin CWTS Assessment Oversight"
+                      description="Monitor CWTS 1 and CWTS 2 performance tasks, submissions, completion analytics, grades, feedback, and export-ready records across all municipalities."
+                    />
+                  </div>
                 ) : view === 'assignments' ? (
                   <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                     <div className="border-b border-slate-200 p-5 dark:border-slate-800">
@@ -3292,7 +3326,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   </tr>
                 </thead>
                 <tbody>
-                  {pendingRegistrations.map((registration) => (
+                  {paginatedPendingRegistrations.map((registration) => (
                     <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
                       <td className="py-4 px-4 font-medium text-slate-900 dark:text-slate-100">{registration.name}</td>
                       <td className="py-4 px-4 text-slate-700 dark:text-slate-200">
@@ -3604,7 +3638,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100">{editingStudentId === 'new' ? 'Create Student' : 'Edit Student'}</h4>
                     <p className="text-sm text-slate-600 dark:text-slate-300">Admin can adjust identity, component, progress, and status directly.</p>
                   </div>
-                  <button onClick={cancelStudentEdit} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+                  <button onClick={requestCancelStudentEdit} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
                     <X className="w-4 h-4" />
                     Close
                   </button>
@@ -3678,7 +3712,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 </div>
 
                 <div className="flex flex-wrap justify-end gap-3 mt-5">
-                  <button onClick={cancelStudentEdit} className="rounded-xl border border-slate-300 px-5 py-3 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+                  <button onClick={requestCancelStudentEdit} className="rounded-xl border border-slate-300 px-5 py-3 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
                     Cancel
                   </button>
                   <button onClick={saveStudent} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-700 to-yellow-500 px-5 py-3 text-white font-medium hover:opacity-95 transition-opacity cursor-pointer">

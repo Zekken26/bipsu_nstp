@@ -5,6 +5,7 @@ import {
   loadModules,
   loadPendingStudentRegistrations,
   loadStudents,
+  type BiliranMunicipality,
   type NstpAccount,
   type NstpAssessment,
   type NstpGradeRecord,
@@ -47,6 +48,9 @@ import type {
 
 export type FacilitatorWorkspace = {
   user: NstpAccount;
+  assignedMunicipalities: BiliranMunicipality[];
+  activeMunicipality: BiliranMunicipality | 'All Assigned';
+  setActiveMunicipality: (value: BiliranMunicipality | 'All Assigned') => void;
   students: NstpStudent[];
   pending: PendingStudentRegistration[];
   assessments: NstpAssessment[];
@@ -82,6 +86,15 @@ export function calculateFinalGrade(entry?: FacilitatorGradeEntry) {
 }
 
 export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorWorkspace {
+  const assignedMunicipalities = useMemo(() => user.municipalities || [], [user.municipalities]);
+  const [activeMunicipality, setActiveMunicipalityState] = useState<BiliranMunicipality | 'All Assigned'>(
+    () => {
+      const saved = localStorage.getItem(`nstp-facilitator-municipality-scope-${user.id}`) as BiliranMunicipality | 'All Assigned' | null;
+      if (saved === 'All Assigned') return saved;
+      if (saved && assignedMunicipalities.includes(saved)) return saved;
+      return assignedMunicipalities.length > 1 ? 'All Assigned' : assignedMunicipalities[0] || 'All Assigned';
+    },
+  );
   const [allStudents, setAllStudents] = useState<NstpStudent[]>([]);
   const [allPending, setAllPending] = useState<PendingStudentRegistration[]>([]);
   const [assessments, setAssessments] = useState<NstpAssessment[]>([]);
@@ -95,6 +108,19 @@ export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorW
   const [sessions, setSessionsState] = useState<NstpSession[]>([]);
   const [notes, setNotesState] = useState<InterventionNote[]>([]);
   const [gradingSettings, setGradingSettingsState] = useState<GradingSettings>(loadGradingSettings());
+
+  const municipalityAllowed = useCallback((municipality?: BiliranMunicipality | 'All' | 'All Assigned') => {
+    if (!assignedMunicipalities.length) return true;
+    if (!municipality || municipality === 'All Assigned') return false;
+    if (municipality === 'All') return true;
+    return assignedMunicipalities.includes(municipality);
+  }, [assignedMunicipalities]);
+
+  const municipalityVisible = useCallback((municipality?: BiliranMunicipality | 'All' | 'All Assigned') => {
+    if (!municipalityAllowed(municipality)) return false;
+    if (activeMunicipality === 'All Assigned') return true;
+    return municipality === activeMunicipality || municipality === 'All';
+  }, [activeMunicipality, municipalityAllowed]);
 
   const refresh = useCallback(() => {
     setAllStudents(loadStudents());
@@ -111,6 +137,16 @@ export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorW
     setNotesState(loadInterventionNotes().filter((note) => note.facilitatorId === user.id));
     setGradingSettingsState(loadGradingSettings());
   }, [user.id]);
+
+  useEffect(() => {
+    if (!assignedMunicipalities.length) {
+      if (activeMunicipality !== 'All Assigned') setActiveMunicipalityState('All Assigned');
+      return;
+    }
+    if (activeMunicipality !== 'All Assigned' && !assignedMunicipalities.includes(activeMunicipality)) {
+      setActiveMunicipalityState(assignedMunicipalities.length > 1 ? 'All Assigned' : assignedMunicipalities[0]);
+    }
+  }, [activeMunicipality, assignedMunicipalities]);
 
   useEffect(() => {
     refresh();
@@ -130,10 +166,36 @@ export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorW
     return () => events.forEach((event) => window.removeEventListener(event, refresh));
   }, [refresh]);
 
-  const students = useMemo(() => allStudents.filter((student) => isAssignedStudent(user, student)), [allStudents, user]);
+  const assignedStudents = useMemo(() => allStudents.filter((student) => isAssignedStudent(user, student)), [allStudents, user]);
+  const students = useMemo(
+    () => assignedStudents.filter((student) => activeMunicipality === 'All Assigned' || student.municipality === activeMunicipality),
+    [activeMunicipality, assignedStudents],
+  );
+  const assignedStudentIds = useMemo(() => new Set(assignedStudents.map((student) => student.id)), [assignedStudents]);
+  const visibleStudentIds = useMemo(() => new Set(students.map((student) => student.id)), [students]);
   const pending = useMemo(
-    () => allPending.filter((student) => Boolean(student.municipality && user.municipalities?.includes(student.municipality))),
-    [allPending, user.municipalities],
+    () => allPending
+      .filter((student) => Boolean(student.municipality && assignedMunicipalities.includes(student.municipality)))
+      .filter((student) => activeMunicipality === 'All Assigned' || student.municipality === activeMunicipality),
+    [activeMunicipality, allPending, assignedMunicipalities],
+  );
+  const scopedAttendance = useMemo(
+    () => attendance
+      .filter((sheet) => sheet.facilitatorId === user.id && municipalityVisible(sheet.municipality))
+      .map((sheet) => ({ ...sheet, entries: sheet.entries.filter((entry) => visibleStudentIds.has(entry.studentId)) })),
+    [attendance, municipalityVisible, user.id, visibleStudentIds],
+  );
+  const scopedSessions = useMemo(
+    () => sessions.filter((session) => session.facilitatorId === user.id && municipalityVisible(session.municipality)),
+    [municipalityVisible, sessions, user.id],
+  );
+  const scopedDetailedGrades = useMemo(
+    () => detailedGrades.filter((grade) => grade.facilitatorId === user.id && visibleStudentIds.has(grade.studentId)),
+    [detailedGrades, user.id, visibleStudentIds],
+  );
+  const scopedNotes = useMemo(
+    () => notes.filter((note) => note.facilitatorId === user.id && visibleStudentIds.has(note.studentId)),
+    [notes, user.id, visibleStudentIds],
   );
 
   const recordActivity = (title: string, detail: string) => {
@@ -143,14 +205,22 @@ export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorW
   };
 
   const setAttendance = (value: AttendanceSession[]) => {
-    const others = loadAttendanceSheets().filter((sheet) => sheet.facilitatorId !== user.id);
-    saveAttendanceSheets([...value, ...others]);
-    setAttendanceState(value);
+    const incoming = value
+      .filter((sheet) => sheet.facilitatorId === user.id && municipalityAllowed(sheet.municipality))
+      .map((sheet) => ({ ...sheet, entries: sheet.entries.filter((entry) => assignedStudentIds.has(entry.studentId)) }));
+    const incomingIds = new Set(incoming.map((sheet) => sheet.id));
+    const current = loadAttendanceSheets();
+    const others = current.filter((sheet) => sheet.facilitatorId !== user.id || !incomingIds.has(sheet.id));
+    saveAttendanceSheets([...incoming, ...others]);
+    setAttendanceState([...incoming, ...current.filter((sheet) => sheet.facilitatorId === user.id && !incomingIds.has(sheet.id))]);
   };
   const setDetailedGrades = (value: FacilitatorGradeEntry[]) => {
-    const others = loadDetailedGrades().filter((grade) => grade.facilitatorId !== user.id);
-    saveDetailedGrades([...value, ...others]);
-    setDetailedGradesState(value);
+    const incoming = value.filter((grade) => grade.facilitatorId === user.id && assignedStudentIds.has(grade.studentId));
+    const incomingStudentIds = new Set(incoming.map((grade) => grade.studentId));
+    const current = loadDetailedGrades();
+    const others = current.filter((grade) => grade.facilitatorId !== user.id || !incomingStudentIds.has(grade.studentId));
+    saveDetailedGrades([...incoming, ...others]);
+    setDetailedGradesState([...incoming, ...current.filter((grade) => grade.facilitatorId === user.id && !incomingStudentIds.has(grade.studentId))]);
   };
   const setMaterials = (value: LearningMaterial[]) => {
     saveLearningMaterials(user.id, value);
@@ -161,14 +231,20 @@ export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorW
     setNoticesState(value);
   };
   const setSessions = (value: NstpSession[]) => {
-    const others = loadSessions().filter((session) => session.facilitatorId !== user.id);
-    saveSessions([...value, ...others]);
-    setSessionsState(value);
+    const incoming = value.filter((session) => session.facilitatorId === user.id && municipalityAllowed(session.municipality));
+    const incomingIds = new Set(incoming.map((session) => session.id));
+    const current = loadSessions();
+    const others = current.filter((session) => session.facilitatorId !== user.id || !incomingIds.has(session.id));
+    saveSessions([...incoming, ...others]);
+    setSessionsState([...incoming, ...current.filter((session) => session.facilitatorId === user.id && !incomingIds.has(session.id))]);
   };
   const setNotes = (value: InterventionNote[]) => {
-    const others = loadInterventionNotes().filter((note) => note.facilitatorId !== user.id);
-    saveInterventionNotes([...value, ...others]);
-    setNotesState(value);
+    const incoming = value.filter((note) => note.facilitatorId === user.id && assignedStudentIds.has(note.studentId));
+    const incomingIds = new Set(incoming.map((note) => note.id));
+    const current = loadInterventionNotes();
+    const others = current.filter((note) => note.facilitatorId !== user.id || !incomingIds.has(note.id));
+    saveInterventionNotes([...incoming, ...others]);
+    setNotesState([...incoming, ...current.filter((note) => note.facilitatorId === user.id && !incomingIds.has(note.id))]);
   };
   const setGradingSettings = (value: GradingSettings) => {
     saveGradingSettings(value);
@@ -176,20 +252,35 @@ export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorW
     addAudit(user, 'Updated grading settings', 'Settings', 'grading-breakdown', 'Adjusted official grade computation breakdown.');
   };
 
+  const setActiveMunicipality = (value: BiliranMunicipality | 'All Assigned') => {
+    const next = value === 'All Assigned' || assignedMunicipalities.includes(value)
+      ? value
+      : assignedMunicipalities.length > 1 ? 'All Assigned' : assignedMunicipalities[0] || 'All Assigned';
+    setActiveMunicipalityState(next);
+    localStorage.setItem(`nstp-facilitator-municipality-scope-${user.id}`, next);
+    const currentUser = JSON.parse(localStorage.getItem('nstpUser') || 'null');
+    if (currentUser?.id === user.id) {
+      localStorage.setItem('nstpUser', JSON.stringify({ ...currentUser, activeMunicipality: next }));
+    }
+  };
+
   return {
     user,
+    assignedMunicipalities,
+    activeMunicipality,
+    setActiveMunicipality,
     students,
     pending,
     assessments,
     gradeRecords,
     modules,
-    attendance,
-    detailedGrades,
+    attendance: scopedAttendance,
+    detailedGrades: scopedDetailedGrades,
     materials,
     notices,
     activity,
-    sessions,
-    notes,
+    sessions: scopedSessions,
+    notes: scopedNotes,
     gradingSettings,
     refresh,
     recordActivity,
