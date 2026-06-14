@@ -15,7 +15,8 @@ import {
   Line,
   Legend,
 } from 'recharts';
-import { loadAccounts, loadAssessments, loadGradeRecords, loadModules, loadStudents, loadTrainingGroups, NstpStudent } from '../data/nstpData';
+import { NSTP_COMPONENTS, loadAccounts, loadAssessments, loadGradeRecords, loadModules, loadStudents, loadTrainingGroups, NstpStudent } from '../data/nstpData';
+import { exportSpreadsheetWorkbook } from '../utils/spreadsheetExport';
 
 const PALETTE = ['#2563eb', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4'];
 
@@ -181,68 +182,72 @@ export default function ReportsCenter({ user }: { user: any }) {
     setExportState('working');
 
     try {
-      const XLSX = await import('xlsx');
-      const wb = XLSX.utils.book_new();
-
-    const summaryAoA = [
-      ['NSTP Report Summary'],
-      ['Role', user.role],
-      ['Profile', profile],
-      ['Generated At', new Date().toLocaleString()],
-      ['Total Students', String(totalStudents)],
-      ['Average Progress', `${avgProgress}%`],
-      ['Completion Rate', `${completionRate}%`],
-      ['Published Assessments', String(publishedAssessments)],
-      ['Total Modules', String(modules.length)],
-      ['Total Module Hours', String(totalModuleHours)],
-    ];
-
-    const studentSheet = XLSX.utils.aoa_to_sheet([
-      ['Student ID', 'Name', 'Email', 'Program', 'Municipality', 'Facilitator', 'Component', 'Progress', 'Assessments', 'Status'],
-      ...reportRows,
-    ]);
-
-    const gradeSheet = XLSX.utils.aoa_to_sheet([
-      ['Student ID', 'Prelim', 'Midterm', 'Final', 'Remarks', 'Release Status', 'Updated At'],
-      ...gradeRows,
-    ]);
-
-    const moduleSheet = XLSX.utils.aoa_to_sheet([
-      ['Module', 'Difficulty', 'Hours', 'Sections', 'Updated At'],
-      ...modules.map((module) => [module.title, module.difficulty, module.hours, module.sections.length, module.updatedAt]),
-    ]);
-
-    const assessmentSheet = XLSX.utils.aoa_to_sheet([
-      ['Assessment', 'Type', 'Status', 'Owner', 'Passing Score', 'Questions'],
-      ...roleScopedAssessments.map((assessment) => [
-        assessment.title,
-        assessment.type,
-        assessment.status,
-        assessment.ownerName,
-        assessment.passingScore,
-        assessment.questions.length,
-      ]),
-    ]);
-
-    const facilitatorSheet = XLSX.utils.aoa_to_sheet([
-      ['Facilitator', 'Email', 'Municipalities', 'Students'],
-      ...facilitatorRows,
-    ]);
-
-    const trainingGroupSheet = XLSX.utils.aoa_to_sheet([
-      ['School Year', 'Semester', 'Component', 'Facilitator', 'Municipality', 'Program Handles', 'Students', 'Load Status'],
-      ...trainingGroupRows,
-    ]);
-
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryAoA), 'Summary');
-      XLSX.utils.book_append_sheet(wb, studentSheet, 'Students');
-      XLSX.utils.book_append_sheet(wb, gradeSheet, 'Grades');
-      XLSX.utils.book_append_sheet(wb, moduleSheet, 'Modules');
-      XLSX.utils.book_append_sheet(wb, assessmentSheet, 'Assessments');
-      XLSX.utils.book_append_sheet(wb, facilitatorSheet, 'Facilitators');
-      XLSX.utils.book_append_sheet(wb, trainingGroupSheet, 'Training Groups');
-
-      XLSX.writeFile(wb, `nstp-reports-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      exportSpreadsheetWorkbook(`nstp-reports-${new Date().toISOString().slice(0, 10)}.xls`, [
+        {
+          name: 'Summary',
+          rows: [
+            ['NSTP Report Summary'],
+            ['Role', user.role],
+            ['Profile', profile],
+            ['Generated At', new Date().toLocaleString()],
+            ['Total Students', totalStudents],
+            ['Average Progress', `${avgProgress}%`],
+            ['Completion Rate', `${completionRate}%`],
+            ['Published Assessments', publishedAssessments],
+            ['Total Modules', modules.length],
+            ['Total Module Hours', totalModuleHours],
+          ],
+        },
+        {
+          name: 'Students',
+          rows: [
+            ['Student ID', 'Name', 'Email', 'Program', 'Municipality', 'Facilitator', 'Component', 'Progress', 'Assessments', 'Status'],
+            ...reportRows,
+          ],
+        },
+        {
+          name: 'Grades',
+          rows: [
+            ['Student ID', 'Prelim', 'Midterm', 'Final', 'Remarks', 'Release Status', 'Updated At'],
+            ...gradeRows,
+          ],
+        },
+        {
+          name: 'Modules',
+          rows: [
+            ['Module', 'Difficulty', 'Hours', 'Sections', 'Updated At'],
+            ...modules.map((module) => [module.title, module.difficulty, module.hours, module.sections.length, module.updatedAt]),
+          ],
+        },
+        {
+          name: 'Assessments',
+          rows: [
+            ['Assessment', 'Type', 'Status', 'Owner', 'Passing Score', 'Questions'],
+            ...roleScopedAssessments.map((assessment) => [
+              assessment.title,
+              assessment.type,
+              assessment.status,
+              assessment.ownerName,
+              assessment.passingScore,
+              assessment.questions.length,
+            ]),
+          ],
+        },
+        {
+          name: 'Facilitators',
+          rows: [
+            ['Facilitator', 'Email', 'Municipalities', 'Students'],
+            ...facilitatorRows,
+          ],
+        },
+        {
+          name: 'Training Groups',
+          rows: [
+            ['School Year', 'Semester', 'Component', 'Facilitator', 'Municipality', 'Program Handles', 'Students', 'Load Status'],
+            ...trainingGroupRows,
+          ],
+        },
+      ]);
       setExportState('idle');
     } catch {
       setExportState('error');
@@ -360,12 +365,13 @@ export default function ReportsCenter({ user }: { user: any }) {
       const value = Math.min(overallAverage, Math.round(start + ((overallAverage - start) / Math.max(1, rows.length - 1)) * index + (index % 2 === 0 ? 0 : 2)));
       return { month, score: value };
     });
-    const componentBreakdown = [
-      { name: 'CWTS', value: student.component === 'CWTS' ? 56 : 18, avg: student.component === 'CWTS' ? overallAverage : 91, color: '#10b981' },
-      { name: 'LTS', value: student.component === 'LTS' ? 56 : 22, avg: student.component === 'LTS' ? overallAverage : 91, color: '#2563eb' },
-      { name: 'MTS (Army)', value: student.component === 'MTS (Army)' ? 56 : 11, avg: student.component === 'MTS (Army)' ? overallAverage : 90, color: '#f97316' },
-      { name: 'MTS (Navy)', value: student.component === 'MTS (Navy)' ? 56 : 11, avg: student.component === 'MTS (Navy)' ? overallAverage : 93, color: '#7c3aed' },
-    ];
+    const colors = ['#10b981', '#0891b2', '#0ea5e9', '#2563eb', '#f97316'];
+    const componentBreakdown = NSTP_COMPONENTS.map((component, index) => ({
+      name: component,
+      value: student.component === component ? 56 : 12 + (index * 3),
+      avg: student.component === component ? overallAverage : 88 + (index % 4),
+      color: colors[index % colors.length],
+    }));
     const recentAssessments = roleScopedAssessments.filter((assessment) => assessment.status === 'published').slice(0, 5).map((assessment, index) => ({
       title: assessment.title,
       module: modules.find((module) => module.id === assessment.moduleId)?.title || `Module ${Math.max(1, index + 3)}`,

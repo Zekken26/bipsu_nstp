@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, Eye, Save, UserRound, X } from 'lucide-react';
 import { addAudit, commonPhaseProgress, studentAttendance, type InterventionNote } from '../../../data/workflowData';
+import { NSTP_COMPONENTS } from '../../../data/nstpData';
 import type { FacilitatorWorkspace } from '../hooks/useFacilitatorWorkspace';
 import { EmptyState, PageIntro, Pager, Panel, SearchField, StatusBadge, useModalEscape } from '../components/FacilitatorUI';
+import ExportButtonGroup from '../../../components/common/ExportButtonGroup';
+import { exportRows, type ExportColumn, type ExportFormat } from '../../../utils/exportRecords';
 
 export default function AssignedStudentsPage({ workspace, notify }: { workspace: FacilitatorWorkspace; notify: (message: string) => void }) {
   const [search, setSearch] = useState('');
@@ -66,6 +69,38 @@ export default function AssignedStudentsPage({ workspace, notify }: { workspace:
     notify('Private facilitator note saved.');
   };
 
+  const exportStudents = async (format: ExportFormat, rows = filtered, scope = 'Filtered') => {
+    if (!rows.length) {
+      notify('No assigned students match the current export filters.');
+      return;
+    }
+    const columns: ExportColumn<typeof rows[number]>[] = [
+      { header: 'Student Name', value: 'name', width: 28 },
+      { header: 'Student ID', value: (student) => student.studentId || student.id, width: 18 },
+      { header: 'Email', value: 'email', width: 30 },
+      { header: 'Municipality', value: (student) => student.municipality || '', width: 18 },
+      { header: 'Component', value: 'component', width: 18 },
+      { header: 'Program / Section', value: (student) => student.programSection || student.degreeProgram || '', width: 24 },
+      { header: 'Enrollment Status', value: 'status', width: 16 },
+      { header: 'Latest Attendance', value: (student) => attendanceFor(student.id), width: 18 },
+      { header: 'Attendance Rate', value: (student) => `${metricsFor(student.id).percentage}%`, width: 16 },
+      { header: 'Missed Sessions', value: (student) => metricsFor(student.id).missed, width: 16 },
+      { header: 'Grade Status', value: (student) => gradeFor(student.id), width: 16 },
+      { header: 'Eligibility', value: (student) => metricsFor(student.id).progress.status, width: 28 },
+      { header: 'Risk', value: (student) => metricsFor(student.id).risk, width: 14 },
+    ];
+    await exportRows(format, rows, columns, {
+      title: 'Assigned Student Records',
+      dataType: 'StudentRecords',
+      scope,
+      generatedBy: workspace.user.name,
+      filters: { Municipality: workspace.activeMunicipality, Component: component, Status: status, Search: search || 'All' },
+      signatureLines: ['Prepared by', 'Reviewed by'],
+    });
+    addAudit(workspace.user, 'Assigned students exported', 'Student Export', scope, `${rows.length} rows exported as ${format.toUpperCase()}.`);
+    notify(`Assigned student ${format.toUpperCase()} export generated.`);
+  };
+
   return (
     <>
       <PageIntro
@@ -78,7 +113,7 @@ export default function AssignedStudentsPage({ workspace, notify }: { workspace:
           <SearchField value={search} onChange={setSearch} placeholder="Search student, ID, municipality, or component" />
           <select value={component} onChange={(event) => setComponent(event.target.value)} className="rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
             <option value="all">All components</option>
-            {['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'].map((value) => <option key={value} value={value}>{value}</option>)}
+            {NSTP_COMPONENTS.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
           <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
             <option value="all">All enrollment states</option>
@@ -90,6 +125,7 @@ export default function AssignedStudentsPage({ workspace, notify }: { workspace:
             <ArrowDownUp className="h-4 w-4" />
             {sortAscending ? 'A-Z' : 'Z-A'}
           </button>
+          <ExportButtonGroup compact label="Export assigned students" onExport={(format) => exportStudents(format, filtered, 'Filtered')} disabled={!filtered.length} />
         </div>
         {displayed.length ? (
           <>
@@ -138,7 +174,10 @@ export default function AssignedStudentsPage({ workspace, notify }: { workspace:
                   <p className="text-sm text-slate-500">{selected.studentId || selected.email}</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setSelectedId(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="h-5 w-5" /></button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <ExportButtonGroup compact label="Export student detail" onExport={(format) => exportStudents(format, [selected], selected.studentId || selected.id)} />
+                <button type="button" onClick={() => setSelectedId(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="h-5 w-5" /></button>
+              </div>
             </div>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               {[

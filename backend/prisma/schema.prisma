@@ -15,7 +15,10 @@ enum UserRole {
 
 enum NSTPComponentType {
   CWTS
+  CWTS_COASTGUARD
+  CWTS_SUNDAY
   LTS
+  MTS
   MTS_ARMY
   MTS_NAVY
 }

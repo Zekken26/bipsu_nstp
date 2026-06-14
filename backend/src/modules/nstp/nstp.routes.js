@@ -4,7 +4,7 @@ import { preventDuplicateSubmissions } from '../../middleware/idempotency.js';
 import { assessmentSubmissionLimiter, exportLimiter, registrationLimiter, strictWriteLimiter } from '../../middleware/rateLimit.js';
 import { queueRequest } from '../../queue/requestQueue.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { createNstpExportJob, getAdminSummaryController, listNstpCollection, upsertNstpCollectionRecord } from './nstp.controller.js';
+import { createNstpExportJob, downloadNstpExport, getAdminSummaryController, listNstpCollection, upsertNstpCollectionRecord } from './nstp.controller.js';
 
 const router = Router();
 
@@ -61,6 +61,7 @@ function requireCollectionWrite(req, res, next) {
 }
 
 router.get('/summary/admin', authenticateRequest(), requireRole('admin'), asyncHandler(getAdminSummaryController));
+router.get('/exports/:collection', authenticateRequest(), enforceActiveMunicipalityScope, requireCollectionRead, exportLimiter, asyncHandler(downloadNstpExport));
 router.post('/exports/:collection', authenticateRequest(), enforceActiveMunicipalityScope, requireRole('admin', 'facilitator'), requireCollectionRead, exportLimiter, queueRequest('reportExports'), preventDuplicateSubmissions({ keyPrefix: 'exports', windowMs: 60_000 }), asyncHandler(createNstpExportJob));
 router.get('/:collection', authenticateRequest(), enforceActiveMunicipalityScope, requireCollectionRead, asyncHandler(listNstpCollection));
 router.post(

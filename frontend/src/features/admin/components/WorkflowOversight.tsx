@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Bell, CalendarCheck, Download, Eye, GraduationCap, Save, Settings, ShieldCheck, TrendingUp, X } from 'lucide-react';
+import { Bell, CalendarCheck, Eye, GraduationCap, Save, Settings, ShieldCheck, TrendingUp, X } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
-import { loadStudents } from '../../../data/nstpData';
+import { NSTP_COMPONENTS, loadStudents } from '../../../data/nstpData';
 import {
   addAudit,
   allStudentProgress,
@@ -21,6 +21,8 @@ import {
 } from '../../../data/workflowData';
 import { EmptyState, Pager, Panel, StatCard, StatusBadge, useModalEscape } from '../../facilitator/components/FacilitatorUI';
 import AdminLearningMaterialsPanel from './AdminLearningMaterialsPanel';
+import ExportButtonGroup from '../../../components/common/ExportButtonGroup';
+import { exportRows, type ExportColumn, type ExportFormat } from '../../../utils/exportRecords';
 
 type Tab = 'overview' | 'attendance' | 'grades' | 'classification' | 'materials' | 'notices' | 'audit' | 'settings';
 const actor = { id: 'admin-1', name: 'Administrator', role: 'admin' };
@@ -72,64 +74,151 @@ export default function WorkflowOversight() {
     onClose: () => setSelectedSheetId(null),
   });
   const displayedSheetEntries = selectedSheet?.entries.slice((sheetEntryPage - 1) * sheetEntryPageSize, sheetEntryPage * sheetEntryPageSize) || [];
-  const exportAttendance = async (selection = filteredSheets) => {
+  const exportAttendance = async (format: ExportFormat, selection = filteredSheets, scope = 'Filtered') => {
     if (!selection.length) {
       toast.error('No saved attendance records match the export selection.');
       return;
     }
-    const XLSX = await import('xlsx');
     const rows = selection.flatMap((sheet) => sheet.entries.map((entry) => {
       const student = students.find((value) => value.id === entry.studentId);
-      return [sheet.date, sheet.sessionNumber, sheet.topic, sheet.facilitatorName, sheet.municipality, sheet.component, student?.studentId || entry.studentId, student?.name || entry.studentId, entry.status, entry.remarks || ''];
+      return {
+        date: sheet.date,
+        session: sheet.sessionNumber,
+        eventTitle: sheet.topic,
+        component: sheet.component,
+        municipality: sheet.municipality,
+        facilitator: sheet.facilitatorName,
+        studentId: student?.studentId || entry.studentId,
+        studentName: student?.name || entry.studentId,
+        section: student?.programSection || student?.degreeProgram || '',
+        status: entry.status,
+        remarks: entry.remarks || '',
+        createdAt: sheet.createdAt,
+        updatedAt: sheet.updatedAt,
+      };
     }));
-    const detailSheet = XLSX.utils.aoa_to_sheet([['Date', 'Session', 'Topic', 'Facilitator', 'Municipality', 'Component', 'Student ID', 'Student Name', 'Status', 'Remarks'], ...rows]);
-    detailSheet['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 34 }, { wch: 25 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 28 }, { wch: 14 }, { wch: 30 }];
-    if (detailSheet['!ref']) detailSheet['!autofilter'] = { ref: detailSheet['!ref'] };
-    const summarySheet = XLSX.utils.aoa_to_sheet([['Date', 'Session', 'Topic', 'Facilitator', 'Group', 'Present', 'Absent', 'Late', 'Excused', 'Status'], ...selection.map((sheet) => [
-      sheet.date, sheet.sessionNumber, sheet.topic, sheet.facilitatorName, sheet.group,
-      sheet.entries.filter((entry) => entry.status === 'present').length,
-      sheet.entries.filter((entry) => entry.status === 'absent').length,
-      sheet.entries.filter((entry) => entry.status === 'late').length,
-      sheet.entries.filter((entry) => entry.status === 'excused').length,
-      sheet.status,
-    ])]);
-    const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, summarySheet, 'Sheet Summary');
-    XLSX.utils.book_append_sheet(book, detailSheet, 'Student Attendance');
-    XLSX.writeFile(book, `nstp-attendance-monitoring-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast.success('Attendance spreadsheet exported.');
+    const columns: ExportColumn<typeof rows[number]>[] = [
+      { header: 'Event Title', value: 'eventTitle', width: 34 },
+      { header: 'Attendance Date', value: 'date', width: 16 },
+      { header: 'Session', value: 'session', width: 10 },
+      { header: 'Component', value: 'component', width: 18 },
+      { header: 'Municipality', value: 'municipality', width: 18 },
+      { header: 'Facilitator', value: 'facilitator', width: 28 },
+      { header: 'Student Name', value: 'studentName', width: 28 },
+      { header: 'Student ID', value: 'studentId', width: 18 },
+      { header: 'Section', value: 'section', width: 22 },
+      { header: 'Status', value: 'status', width: 14 },
+      { header: 'Remarks', value: 'remarks', width: 32 },
+      { header: 'Created At', value: (row) => row.createdAt ? new Date(row.createdAt).toLocaleString() : '', width: 22 },
+      { header: 'Updated At', value: (row) => row.updatedAt ? new Date(row.updatedAt).toLocaleString() : '', width: 22 },
+    ];
+    await exportRows(format, rows, columns, {
+      title: 'Attendance Monitoring Records',
+      dataType: 'Attendance',
+      scope,
+      generatedBy: actor.name,
+      filters: { Date: dateFilter || 'All', Component: componentFilter, Status: sheetStatus, Search: attendanceSearch || 'All' },
+      signatureLines: ['Prepared by', 'Checked by', 'NSTP Director'],
+    }, [
+      {
+        name: 'Sheet Summary',
+        rows: [['Date', 'Session', 'Topic', 'Facilitator', 'Group', 'Present', 'Absent', 'Late', 'Excused', 'Status'], ...selection.map((sheet) => [
+          sheet.date, sheet.sessionNumber, sheet.topic, sheet.facilitatorName, sheet.group,
+          sheet.entries.filter((entry) => entry.status === 'present').length,
+          sheet.entries.filter((entry) => entry.status === 'absent').length,
+          sheet.entries.filter((entry) => entry.status === 'late').length,
+          sheet.entries.filter((entry) => entry.status === 'excused').length,
+          sheet.status,
+        ])],
+      },
+    ]);
+    addAudit(actor, 'Attendance exported', 'Attendance Export', scope, `${rows.length} rows exported as ${format.toUpperCase()}.`);
+    toast.success(`Attendance ${format.toUpperCase()} export generated.`);
   };
-  const exportGrades = async () => {
+  const exportGrades = async (format: ExportFormat) => {
     if (!grades.length) {
       toast.error('No facilitator grade records are available to export.');
       return;
     }
-    const XLSX = await import('xlsx');
     const rows = grades.map((grade) => {
       const student = students.find((value) => value.id === grade.studentId);
-      return [
-        student?.studentId || grade.studentId,
-        student?.name || grade.studentId,
-        student?.component || '',
-        grade.facilitatorId,
-        grade.attendance ?? '',
-        grade.assessments ?? '',
-        grade.activities ?? '',
-        grade.participation ?? '',
-        grade.majorExam ?? '',
-        finalGrade(grade, settings) ?? '',
-        grade.overrideFinal ?? '',
-        grade.status,
-        grade.feedback,
-      ];
+      return {
+        studentId: student?.studentId || grade.studentId,
+        studentName: student?.name || grade.studentId,
+        component: student?.component || '',
+        municipality: student?.municipality || '',
+        facilitator: grade.facilitatorId,
+        assessmentTitle: 'Facilitator Gradebook',
+        score: finalGrade(grade, settings) ?? '',
+        totalPoints: 100,
+        percentage: finalGrade(grade, settings) ?? '',
+        remarks: grade.feedback,
+        submittedAt: grade.updatedAt,
+        gradedAt: grade.updatedAt,
+        status: grade.status,
+        attendance: grade.attendance ?? '',
+        assessments: grade.assessments ?? '',
+        activities: grade.activities ?? '',
+        participation: grade.participation ?? '',
+        majorExam: grade.majorExam ?? '',
+      };
     });
-    const sheet = XLSX.utils.aoa_to_sheet([['Student ID', 'Student Name', 'Component', 'Facilitator ID', 'Attendance', 'Assessments', 'Activities', 'Participation', 'Major Exam', 'Final Grade', 'Override', 'Status', 'Feedback'], ...rows]);
-    sheet['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 13 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 34 }];
-    if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };
-    const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, sheet, 'Facilitator Gradebooks');
-    XLSX.writeFile(book, `nstp-grade-monitoring-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast.success('Grade monitoring spreadsheet exported.');
+    await exportRows(format, rows, [
+      { header: 'Student Name', value: 'studentName', width: 28 },
+      { header: 'Student ID', value: 'studentId', width: 18 },
+      { header: 'Component', value: 'component', width: 18 },
+      { header: 'Municipality', value: 'municipality', width: 18 },
+      { header: 'Facilitator', value: 'facilitator', width: 18 },
+      { header: 'Assessment Title', value: 'assessmentTitle', width: 26 },
+      { header: 'Score', value: 'score', width: 12 },
+      { header: 'Total Points', value: 'totalPoints', width: 14 },
+      { header: 'Percentage', value: 'percentage', width: 14 },
+      { header: 'Remarks', value: 'remarks', width: 34 },
+      { header: 'Submission Date', value: (row) => row.submittedAt ? new Date(row.submittedAt).toLocaleString() : '', width: 22 },
+      { header: 'Grading Date', value: (row) => row.gradedAt ? new Date(row.gradedAt).toLocaleString() : '', width: 22 },
+      { header: 'Status', value: 'status', width: 16 },
+    ], {
+      title: 'Grade Monitoring Records',
+      dataType: 'Gradesheet',
+      scope: 'AllComponents',
+      generatedBy: actor.name,
+      filters: { Records: grades.length },
+      signatureLines: ['Prepared by', 'Reviewed by', 'NSTP Director'],
+    });
+    addAudit(actor, 'Grades exported', 'Gradebook Export', 'AllComponents', `${rows.length} rows exported as ${format.toUpperCase()}.`);
+    toast.success(`Grade monitoring ${format.toUpperCase()} export generated.`);
+  };
+  const exportSchedule = async (format: ExportFormat) => {
+    await exportRows(format, commonSessions, [
+      { header: 'Date', value: 'date', width: 16 },
+      { header: 'Session', value: 'title', width: 34 },
+      { header: 'Type', value: 'type', width: 16 },
+      { header: 'Contact Hours', value: 'duration', width: 14 },
+      { header: 'Facilitator', value: 'facilitatorName', width: 26 },
+      { header: 'Venue', value: 'venue', width: 24 },
+      { header: 'Status', value: 'status', width: 16 },
+    ], { title: 'Common Phase Schedule and Completion', dataType: 'Schedule', scope: 'CommonPhase', generatedBy: actor.name });
+  };
+  const exportClassification = async (format: ExportFormat) => {
+    await exportRows(format, progress, [
+      { header: 'Student Name', value: ({ student }) => student.name, width: 28 },
+      { header: 'Student ID', value: ({ student }) => student.studentId || student.id, width: 18 },
+      { header: 'Current Stage', value: ({ student }) => student.component, width: 20 },
+      { header: 'Contact Hours', value: ({ progress: item }) => item.completedHours, width: 14 },
+      { header: 'Attendance Percentage', value: ({ progress: item }) => `${item.attendancePercentage}%`, width: 18 },
+      { header: 'Eligibility', value: ({ progress: item, student }) => student.component !== 'Common Phase' ? 'Approved' : item.status, width: 28 },
+    ], { title: 'Component Classification Readiness', dataType: 'Classification', scope: 'AllStudents', generatedBy: actor.name });
+  };
+  const exportAudit = async (format: ExportFormat) => {
+    await exportRows(format, audit, [
+      { header: 'Date / Time', value: (row) => new Date(row.at).toLocaleString(), width: 22 },
+      { header: 'Actor', value: 'actorName', width: 24 },
+      { header: 'Role', value: 'actorRole', width: 14 },
+      { header: 'Action', value: 'action', width: 24 },
+      { header: 'Record Type', value: 'recordType', width: 18 },
+      { header: 'Record ID', value: 'recordId', width: 24 },
+      { header: 'Detail', value: 'detail', width: 42 },
+    ], { title: 'Workflow Audit Logs', dataType: 'AuditLogs', scope: 'Workflow', generatedBy: actor.name });
   };
   const setGradeStatus = (studentId: string, status: typeof grades[number]['status']) => {
     saveDetailedGrades(grades.map((grade) => grade.studentId === studentId ? { ...grade, status, updatedAt: new Date().toISOString() } : grade));
@@ -178,39 +267,42 @@ export default function WorkflowOversight() {
           <StatCard label="Grade Release" value={`${summary.gradeRelease}%`} detail="Visible to students" icon={ShieldCheck} tone="amber" />
         </div>
         <Panel>
-          <h3 className="text-lg font-bold">Common Phase Schedule and Completion</h3>
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <h3 className="text-lg font-bold">Common Phase Schedule and Completion</h3>
+            <ExportButtonGroup compact label="Export schedule" onExport={exportSchedule} disabled={!commonSessions.length} />
+          </div>
           <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date</th><th className="p-3">Session</th><th className="p-3">Type</th><th className="p-3">Hours</th><th className="p-3">Attendance Sheet</th><th className="p-3">Status</th></tr></thead><tbody>{displayedSessions.map((session) => <tr key={session.id} className="border-b dark:border-slate-800"><td className="p-3">{session.date}</td><td className="p-3 font-semibold">{session.title}</td><td className="p-3">{session.type}</td><td className="p-3">{session.duration}</td><td className="p-3"><StatusBadge value={sheets.find((sheet) => sheet.sessionId === session.id)?.status || 'Missing attendance'} /></td><td className="p-3"><StatusBadge value={session.status} /></td></tr>)}</tbody></table></div>
           <Pager page={overviewPage} totalPages={Math.ceil(commonSessions.length / overviewPageSize)} onPage={setOverviewPage} total={commonSessions.length} pageSize={overviewPageSize} onPageSize={(size) => { setOverviewPageSize(size); setOverviewPage(1); }} pageSizeOptions={[10, 25, 50]} />
         </Panel>
       </>}
       {tab === 'attendance' && <Panel>
-        <div className="flex flex-col justify-between gap-3 md:flex-row"><div><h3 className="text-lg font-bold">Attendance Monitoring</h3><p className="text-sm text-slate-500">Open and export dated records saved by facilitators without editing their source sheets.</p></div><button type="button" onClick={() => exportAttendance()} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"><Download className="h-4 w-4" /> Export Excel</button></div>
-        <div className="my-4 flex flex-wrap gap-3"><input type="date" value={dateFilter} onChange={(event) => { setDateFilter(event.target.value); setAttendancePage(1); }} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><input value={attendanceSearch} onChange={(event) => { setAttendanceSearch(event.target.value); setAttendancePage(1); }} placeholder="Facilitator, group, municipality, session" className="min-w-[260px] flex-1 rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><select value={componentFilter} onChange={(event) => { setComponentFilter(event.target.value); setAttendancePage(1); }} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><option value="all">All components</option>{['Common', 'CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'].map((value) => <option key={value}>{value}</option>)}</select><select value={sheetStatus} onChange={(event) => { setSheetStatus(event.target.value); setAttendancePage(1); }} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><option value="all">Any sheet status</option>{['Draft', 'Ongoing', 'Submitted', 'Completed', 'Complete', 'Needs Review'].map((value) => <option key={value}>{value}</option>)}</select></div>
+        <div className="flex flex-col justify-between gap-3 md:flex-row"><div><h3 className="text-lg font-bold">Attendance Monitoring</h3><p className="text-sm text-slate-500">Open and export dated records saved by facilitators without editing their source sheets.</p></div><ExportButtonGroup compact label="Export attendance" onExport={(format) => exportAttendance(format, filteredSheets, 'Filtered')} disabled={!filteredSheets.length} /></div>
+        <div className="my-4 flex flex-wrap gap-3"><input type="date" value={dateFilter} onChange={(event) => { setDateFilter(event.target.value); setAttendancePage(1); }} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><input value={attendanceSearch} onChange={(event) => { setAttendanceSearch(event.target.value); setAttendancePage(1); }} placeholder="Facilitator, group, municipality, session" className="min-w-[260px] flex-1 rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><select value={componentFilter} onChange={(event) => { setComponentFilter(event.target.value); setAttendancePage(1); }} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><option value="all">All components</option>{['Common', ...NSTP_COMPONENTS].map((value) => <option key={value}>{value}</option>)}</select><select value={sheetStatus} onChange={(event) => { setSheetStatus(event.target.value); setAttendancePage(1); }} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><option value="all">Any sheet status</option>{['Draft', 'Ongoing', 'Submitted', 'Completed', 'Complete', 'Needs Review'].map((value) => <option key={value}>{value}</option>)}</select></div>
         {filteredSheets.length ? <>
           <div className="overflow-x-auto"><table className="w-full min-w-[940px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date</th><th className="p-3">Session / Topic</th><th className="p-3">Facilitator</th><th className="p-3">Group</th><th className="p-3">Summary</th><th className="p-3">Sheet Status</th><th className="p-3">Open</th></tr></thead><tbody>{displayedSheets.map((sheet) => <tr key={sheet.id} className="border-b dark:border-slate-800"><td className="p-3">{sheet.date}</td><td className="p-3 font-semibold">{sheet.topic}</td><td className="p-3">{sheet.facilitatorName}</td><td className="p-3">{sheet.group}</td><td className="p-3">{['present', 'absent', 'late', 'excused'].map((value) => `${value[0].toUpperCase()}: ${sheet.entries.filter((entry) => entry.status === value).length}`).join(' / ')}</td><td className="p-3"><StatusBadge value={sheet.status} /></td><td className="p-3"><button type="button" onClick={() => { setSelectedSheetId(sheet.id); setSheetEntryPage(1); }} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-2.5 py-2 text-xs font-semibold text-blue-700"><Eye className="h-4 w-4" /> View</button></td></tr>)}</tbody></table></div>
           <Pager page={attendancePage} totalPages={Math.ceil(filteredSheets.length / attendancePageSize)} onPage={setAttendancePage} total={filteredSheets.length} pageSize={attendancePageSize} onPageSize={(size) => { setAttendancePageSize(size); setAttendancePage(1); }} pageSizeOptions={[10, 25, 50, 100]} />
         </> : <EmptyState title="No attendance sheets" body="No saved attendance records match these filters." />}
       </Panel>}
       {tab === 'grades' && <Panel>
-        <div className="flex flex-col justify-between gap-3 md:flex-row"><div><h3 className="text-lg font-bold">Grade Monitoring and Release</h3><p className="text-sm text-slate-500">Review facilitator-entered category scores and control student release status.</p></div><button type="button" onClick={exportGrades} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"><Download className="h-4 w-4" /> Export Excel</button></div>
+        <div className="flex flex-col justify-between gap-3 md:flex-row"><div><h3 className="text-lg font-bold">Grade Monitoring and Release</h3><p className="text-sm text-slate-500">Review facilitator-entered category scores and control student release status.</p></div><ExportButtonGroup compact label="Export grades" onExport={exportGrades} disabled={!grades.length} /></div>
         {grades.length ? <>
           <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[1080px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Student</th><th className="p-3">Attendance</th><th className="p-3">Assessments</th><th className="p-3">Activities</th><th className="p-3">Participation</th><th className="p-3">Major Exam</th><th className="p-3">Final</th><th className="p-3">Status</th><th className="p-3">Review Action</th></tr></thead><tbody>{displayedGrades.map((grade) => { const student = students.find((value) => value.id === grade.studentId); const computed = finalGrade(grade, settings); return <tr key={grade.studentId} className="border-b dark:border-slate-800"><td className="p-3 font-semibold">{student?.name || grade.studentId}<p className="text-xs font-normal text-slate-500">{student?.component || ''}</p></td><td className="p-3">{grade.attendance ?? '--'}</td><td className="p-3">{grade.assessments ?? '--'}</td><td className="p-3">{grade.activities ?? '--'}</td><td className="p-3">{grade.participation ?? '--'}</td><td className="p-3">{grade.majorExam ?? '--'}</td><td className="p-3 font-bold">{computed === null ? '--' : computed.toFixed(2)}</td><td className="p-3"><StatusBadge value={grade.status} /></td><td className="p-3"><select value={grade.status} onChange={(event) => setGradeStatus(grade.studentId, event.target.value as typeof grade.status)} className="rounded-lg border px-2 py-2 dark:border-slate-700 dark:bg-slate-900">{['Draft', 'In Progress', 'Submitted', 'Reviewed', 'Released'].map((value) => <option key={value}>{value}</option>)}</select></td></tr>; })}</tbody></table></div>
           <Pager page={gradePage} totalPages={Math.ceil(grades.length / gradePageSize)} onPage={setGradePage} total={grades.length} pageSize={gradePageSize} onPageSize={(size) => { setGradePageSize(size); setGradePage(1); }} pageSizeOptions={[10, 25, 50, 100]} />
         </> : <EmptyState title="No facilitator grades" body="Saved gradebook entries from facilitators will appear here for review and release." />}
       </Panel>}
       {tab === 'classification' && <Panel>
-        <h3 className="text-lg font-bold">Component Classification Readiness</h3><p className="text-sm text-slate-500">Eligibility is based on 25 completed contact hours, attendance, assessed outputs, and final approval.</p>
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start"><div><h3 className="text-lg font-bold">Component Classification Readiness</h3><p className="text-sm text-slate-500">Eligibility is based on 25 completed contact hours, attendance, assessed outputs, and final approval.</p></div><ExportButtonGroup compact label="Export classification" onExport={exportClassification} disabled={!progress.length} /></div>
         <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Student</th><th className="p-3">Current Stage</th><th className="p-3">Contact Hours</th><th className="p-3">Attendance</th><th className="p-3">Eligibility</th></tr></thead><tbody>{displayedProgress.map(({ student, progress: item }) => { const approved = student.component !== 'Common Phase'; return <tr key={student.id} className="border-b dark:border-slate-800"><td className="p-3 font-semibold">{student.name}</td><td className="p-3">{student.component}</td><td className="p-3">{approved ? '25 / 25' : `${item.completedHours} / 25`}</td><td className="p-3">{item.attendancePercentage}%</td><td className="p-3"><StatusBadge value={approved ? 'Approved' : item.status} /></td></tr>; })}</tbody></table></div>
         <Pager page={classificationPage} totalPages={Math.ceil(progress.length / classificationPageSize)} onPage={setClassificationPage} total={progress.length} pageSize={classificationPageSize} onPageSize={(size) => { setClassificationPageSize(size); setClassificationPage(1); }} pageSizeOptions={[10, 25, 50, 100]} />
       </Panel>}
       {tab === 'materials' && <AdminLearningMaterialsPanel />}
       {tab === 'notices' && <Panel>
         <h3 className="inline-flex items-center gap-2 text-lg font-bold"><Bell className="h-5 w-5 text-blue-700" /> Announcements Management</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_180px_auto]"><input value={noticeTitle} onChange={(event) => setNoticeTitle(event.target.value)} placeholder="Notice title" className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><input value={noticeMessage} onChange={(event) => setNoticeMessage(event.target.value)} placeholder="Message" className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><select value={noticeTarget} onChange={(event) => setNoticeTarget(event.target.value as WorkflowNotice['component'])} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><option value="All">All students</option><option value="Common">Common Phase</option><option value="CWTS">CWTS</option><option value="LTS">LTS</option><option value="MTS (Army)">MTS Army</option></select><button type="button" onClick={publishNotice} className="rounded-xl bg-blue-700 px-4 py-2 font-semibold text-white">Publish</button></div>
+        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_180px_auto]"><input value={noticeTitle} onChange={(event) => setNoticeTitle(event.target.value)} placeholder="Notice title" className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><input value={noticeMessage} onChange={(event) => setNoticeMessage(event.target.value)} placeholder="Message" className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900" /><select value={noticeTarget} onChange={(event) => setNoticeTarget(event.target.value as WorkflowNotice['component'])} className="rounded-xl border px-3 py-2 dark:border-slate-700 dark:bg-slate-900"><option value="All">All students</option><option value="Common">Common Phase</option>{NSTP_COMPONENTS.map((component) => <option key={component} value={component}>{component}</option>)}</select><button type="button" onClick={publishNotice} className="rounded-xl bg-blue-700 px-4 py-2 font-semibold text-white">Publish</button></div>
         <div className="mt-5 space-y-2">{notices.map((notice) => <div key={notice.id} className="rounded-xl border p-3 dark:border-slate-800"><div className="flex items-center gap-2"><strong>{notice.title}</strong><StatusBadge value={notice.status} /><StatusBadge value={notice.component} /></div><p className="mt-2 text-sm">{notice.message}</p></div>)}</div>
       </Panel>}
       {tab === 'audit' && <Panel>
-        <h3 className="text-lg font-bold">Audit Logs</h3>
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center"><h3 className="text-lg font-bold">Audit Logs</h3><ExportButtonGroup compact label="Export audit" onExport={exportAudit} disabled={!audit.length} /></div>
         {audit.length ? <><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[820px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date / Time</th><th className="p-3">Actor</th><th className="p-3">Action</th><th className="p-3">Record</th><th className="p-3">Detail</th></tr></thead><tbody>{displayedAudit.map((row) => <tr key={row.id} className="border-b dark:border-slate-800"><td className="p-3">{new Date(row.at).toLocaleString()}</td><td className="p-3">{row.actorName}</td><td className="p-3"><StatusBadge value={row.action} /></td><td className="p-3">{row.recordType}</td><td className="p-3">{row.detail}</td></tr>)}</tbody></table></div><Pager page={auditPage} totalPages={Math.ceil(audit.length / auditPageSize)} onPage={setAuditPage} total={audit.length} pageSize={auditPageSize} onPageSize={(size) => { setAuditPageSize(size); setAuditPage(1); }} pageSizeOptions={[10, 25, 50, 100]} /></> : <EmptyState title="No logged workflow actions" body="Attendance saves, grade releases, and published notices will appear here." />}
       </Panel>}
       {tab === 'settings' && <Panel>
@@ -222,7 +314,7 @@ export default function WorkflowOversight() {
           <section role="dialog" aria-modal="true" className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl dark:bg-slate-950">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Read-only Attendance Sheet</p><h3 className="mt-1 text-xl font-bold">{selectedSheet.topic}</h3><p className="mt-1 text-sm text-slate-500">{selectedSheet.date} / Session {selectedSheet.sessionNumber} / {selectedSheet.facilitatorName} / {selectedSheet.group}</p></div>
-              <div className="flex gap-2"><button type="button" onClick={() => exportAttendance([selectedSheet])} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white"><Download className="h-4 w-4" /> Export Sheet</button><button type="button" onClick={() => setSelectedSheetId(null)} className="rounded-xl border border-slate-200 p-2"><X className="h-5 w-5" /></button></div>
+              <div className="flex flex-wrap gap-2"><ExportButtonGroup compact label="Export sheet" onExport={(format) => exportAttendance(format, [selectedSheet], `${selectedSheet.date}-Session-${selectedSheet.sessionNumber}`)} /><button type="button" onClick={() => setSelectedSheetId(null)} className="rounded-xl border border-slate-200 p-2"><X className="h-5 w-5" /></button></div>
             </div>
             <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
               <table className="w-full table-fixed text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="w-[38%] p-3">Student</th><th className="w-[20%] p-3">Status</th><th className="w-[42%] p-3">Remarks</th></tr></thead><tbody>{displayedSheetEntries.map((entry) => { const student = students.find((value) => value.id === entry.studentId); return <tr key={entry.studentId} className="border-t dark:border-slate-800"><td className="p-3 font-semibold">{student?.name || entry.studentId}<p className="text-xs font-normal text-slate-500">{student?.studentId || ''}</p></td><td className="p-3"><StatusBadge value={entry.status} /></td><td className="p-3">{entry.remarks || '--'}</td></tr>; })}</tbody></table>

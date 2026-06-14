@@ -8,7 +8,7 @@ import type { FacilitatorWorkspace } from '../hooks/useFacilitatorWorkspace';
 import { ConfirmDialog, EmptyState, PageIntro, Panel, SearchField, StatusBadge } from '../components/FacilitatorUI';
 
 const CATEGORIES: MaterialCategory[] = ['YouTube Video', 'Google Drive Video', 'Google Drive Document', 'PDF / Document', 'Web Resource'];
-const AUDIENCES: MaterialAudience[] = ['Common Phase', 'CWTS', 'LTS', 'MTS'];
+const AUDIENCES: MaterialAudience[] = ['Common Phase', 'CWTS', 'CWTS-Coastguard', 'LTS', 'MTS'];
 const VISIBILITY: MaterialVisibility[] = ['Draft', 'Published'];
 
 const blank = (workspace: FacilitatorWorkspace): LearningMaterial => ({

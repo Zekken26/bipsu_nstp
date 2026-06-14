@@ -385,7 +385,7 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
               </span>
               <h1 className="mt-4 max-w-2xl text-3xl font-semibold leading-tight md:text-4xl">General Education for NSTP readiness</h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-50 md:text-base">
-                Finish the 25-hour seminar track, pass each short assessment, then unlock component selection for CWTS, LTS, MTS Army, or MTS Navy.
+                Finish the 25-hour seminar track, pass each short assessment, then unlock component selection for CWTS, CWTS-Coastguard, CWTS-Sunday, LTS, or MTS.
               </p>
               <div className="mt-5 flex flex-wrap gap-2 text-xs font-medium text-blue-50">
                 <span className="rounded-full bg-white/14 px-3 py-1">25 contact hours</span>

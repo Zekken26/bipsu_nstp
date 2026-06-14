@@ -9,7 +9,7 @@ import { ConfirmDialog, EmptyState, Panel, SearchField, StatusBadge } from '../.
 
 const admin = { id: 'admin-1', name: 'Administrator', role: 'admin' };
 const CATEGORIES: MaterialCategory[] = ['YouTube Video', 'Google Drive Video', 'Google Drive Document', 'PDF / Document', 'Web Resource'];
-const AUDIENCES: MaterialAudience[] = ['Common Phase', 'CWTS', 'LTS', 'MTS'];
+const AUDIENCES: MaterialAudience[] = ['Common Phase', 'CWTS', 'CWTS-Coastguard', 'LTS', 'MTS'];
 
 const blank = (): LearningMaterial => ({
   id: '',

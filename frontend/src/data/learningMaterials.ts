@@ -1,6 +1,6 @@
-import { safeJsonParse, type NstpAccount } from './nstpData';
+import { contentComponentFor, safeJsonParse, type NstpAccount, type NstpComponentContent } from './nstpData';
 
-export type MaterialAudience = 'Common Phase' | 'CWTS' | 'LTS' | 'MTS';
+export type MaterialAudience = 'Common Phase' | NstpComponentContent;
 export type MaterialCategory = 'YouTube Video' | 'Google Drive Video' | 'Google Drive Document' | 'PDF / Document' | 'Web Resource';
 export type MaterialVisibility = 'Draft' | 'Published' | 'Archived';
 
@@ -98,6 +98,24 @@ const DEMO_MATERIALS: LearningMaterial[] = [
     createdAt: new Date('2026-05-18T08:00:00').toISOString(),
     updatedAt: new Date('2026-05-18T08:00:00').toISOString(),
   },
+  {
+    id: 'material-coastguard-water-safety',
+    facilitatorId: 'facilitator-demo-coastguard',
+    facilitatorName: 'Lt. Adrian Mercado',
+    title: 'Coastal Safety and Rescue Readiness Primer',
+    description: 'Component-specific reference for CWTS-Coastguard learners on water safety, coastal coordination, and emergency response.',
+    url: 'https://www.bipsu.edu.ph/',
+    category: 'Web Resource',
+    audience: 'CWTS-Coastguard',
+    visibility: 'Published',
+    sessionDate: '2026-05-22',
+    speaker: 'Lt. Adrian Mercado',
+    relatedActivity: 'Water safety orientation',
+    tags: ['CWTS-Coastguard', 'water safety', 'rescue'],
+    moduleId: 'm3',
+    createdAt: new Date('2026-05-19T08:00:00').toISOString(),
+    updatedAt: new Date('2026-05-19T08:00:00').toISOString(),
+  },
 ];
 
 function normalizeLegacy(row: LegacyMaterial, url: string, suffix = ''): LearningMaterial {
@@ -161,9 +179,7 @@ export function saveFacilitatorOwnedMaterials(facilitatorId: string, materials: 
 
 export function studentMaterialAudience(user: NstpAccount): MaterialAudience[] {
   if (user.demoStage === 'common' || !user.component) return ['Common Phase'];
-  if (user.component === 'CWTS') return ['Common Phase', 'CWTS'];
-  if (user.component === 'LTS') return ['Common Phase', 'LTS'];
-  return ['Common Phase', 'MTS'];
+  return ['Common Phase', contentComponentFor(user.component)];
 }
 
 export function publishedMaterialsForStudent(user: NstpAccount) {

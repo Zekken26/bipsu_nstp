@@ -14,8 +14,12 @@ export async function getDatabaseStatus() {
 const fallback = {
   accounts: [
     { id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' },
-    { id: 'speaker-1', name: 'Dr. Maria Elena Santos', email: 'speaker@nstp.edu', password: 'speaker', role: 'speaker', title: 'NSTP Program Director' },
-    { id: 'student-demo-1', studentId: '2024-0001', name: 'Juan Dela Cruz', email: 'juan.dela-cruz@student.edu', password: 'student', role: 'student', component: 'MTS (Army)', generalEducationComplete: true, preferredComponent: 'MTS (Army)', examTaken: true, examScore: 92 },
+    { id: 'facilitator-1', name: 'Dr. Maria Elena Santos', email: 'facilitator@nstp.edu', password: 'facilitator', role: 'facilitator', title: 'NSTP Program Director', component: 'CWTS', municipalities: ['Naval'] },
+    { id: 'facilitator-demo-coastguard', name: 'Lt. Adrian Mercado', email: 'coastguard.facilitator@nstp.edu', password: 'facilitator', role: 'facilitator', component: 'CWTS-Coastguard', municipalities: ['Naval'] },
+    { id: 'facilitator-demo-sunday', name: 'Prof. Elisa Cabal', email: 'sunday.facilitator@nstp.edu', password: 'facilitator', role: 'facilitator', component: 'CWTS-Sunday', municipalities: ['Naval'] },
+    { id: 'facilitator-demo-lts', name: 'Prof. Daniel Flores', email: 'lts.facilitator@nstp.edu', password: 'facilitator', role: 'facilitator', component: 'LTS', municipalities: ['Naval'] },
+    { id: 'facilitator-demo-mts', name: 'Capt. Ramon Villanueva', email: 'mts.facilitator@nstp.edu', password: 'facilitator', role: 'facilitator', component: 'MTS', municipalities: ['Naval'] },
+    { id: 'student-demo-1', studentId: '2024-0001', name: 'Juan Dela Cruz', email: 'juan.dela-cruz@student.edu', password: 'student', role: 'student', component: 'MTS', generalEducationComplete: true, preferredComponent: 'MTS', examTaken: true, examScore: 92 },
   ],
   modules: [
     { id: 'm1', title: 'Module 1: Introduction to NSTP', description: 'Understanding NSTP, legal basis, and civic purpose.', hours: 3, difficulty: 'Beginner', sections: [], updatedAt: now() },
@@ -26,8 +30,10 @@ const fallback = {
     { id: 'asmt-nstp-intro', title: 'Module 1 Quiz', type: 'quiz', description: 'NSTP fundamentals.', moduleId: 'm1', timeLimit: 15, passingScore: 70, ownerId: 'admin-1', ownerName: 'Administrator', ownerRole: 'admin', status: 'published', questions: [], updatedAt: now() },
   ],
   students: [
-    { id: 'student-1', studentId: '2024-1001', name: 'Maria Santos', email: 'maria.santos@university.edu', component: 'CWTS', progress: 85, assessments: 7, status: 'active', notes: 'Consistent participation.', updatedAt: now() },
-    { id: 'student-2', studentId: '2024-1002', name: 'Juan Dela Cruz', email: 'juan.delacruz@university.edu', component: 'LTS', progress: 92, assessments: 8, status: 'active', notes: 'Ready for peer mentoring.', updatedAt: now() },
+    { id: 'student-1', studentId: '2024-1001', name: 'Maria Santos', email: 'maria.santos@university.edu', component: 'CWTS', municipality: 'Naval', progress: 85, assessments: 7, status: 'active', notes: 'Consistent participation.', updatedAt: now() },
+    { id: 'student-demo-coastguard', studentId: '2026-CG01', name: 'Marco Rivera', email: 'coastguard.student@student.edu', component: 'CWTS-Coastguard', municipality: 'Naval', progress: 84, assessments: 7, status: 'active', notes: 'Maritime component learner.', updatedAt: now() },
+    { id: 'student-demo-sunday', studentId: '2026-SU01', name: 'Bea Castillo', email: 'sunday.student@student.edu', component: 'CWTS-Sunday', municipality: 'Naval', progress: 82, assessments: 7, status: 'active', notes: 'Sunday CWTS learner.', updatedAt: now() },
+    { id: 'student-2', studentId: '2024-1002', name: 'Juan Dela Cruz', email: 'juan.delacruz@university.edu', component: 'LTS', municipality: 'Naval', progress: 92, assessments: 8, status: 'active', notes: 'Ready for peer mentoring.', updatedAt: now() },
   ],
   grades: [
     { studentId: '2024-0001', prelim: 88, midterm: 90, final: 0, remarks: 'In Progress', released: true, updatedAt: now() },
@@ -45,8 +51,9 @@ const toUserRole = (role) => {
 
 const toComponentType = (component) => {
   const normalized = String(component || '').toUpperCase().replace(/\s+/g, '_').replace(/[()]/g, '');
-  if (normalized.includes('ARMY')) return 'MTS_ARMY';
-  if (normalized.includes('NAVY')) return 'MTS_NAVY';
+  if (normalized === 'CWTS_COASTGUARD') return 'CWTS_COASTGUARD';
+  if (normalized === 'CWTS_SUNDAY') return 'CWTS_SUNDAY';
+  if (normalized === 'MTS' || normalized.includes('ARMY') || normalized.includes('NAVY')) return 'MTS';
   if (normalized === 'LTS') return 'LTS';
   return 'CWTS';
 };

@@ -1,6 +1,7 @@
 import {
   loadAccounts,
   loadStudents,
+  normalizeComponent,
   safeJsonParse,
   type BiliranMunicipality,
   type NstpComponent,
@@ -258,8 +259,8 @@ const DEMO_SESSIONS: NstpSession[] = [
     endTime: '17:00',
     duration: 4,
     venue: 'Naval Central School',
-    facilitatorId: 'facilitator-1',
-    facilitatorName: 'Dr. Maria Elena Santos',
+    facilitatorId: 'facilitator-demo-lts',
+    facilitatorName: 'Prof. Daniel Flores',
     municipality: 'Naval',
     component: 'LTS',
     group: 'LTS - Naval Group 1',
@@ -277,21 +278,61 @@ const DEMO_SESSIONS: NstpSession[] = [
     endTime: '10:00',
     duration: 4,
     venue: 'University Field',
-    facilitatorId: 'facilitator-1',
-    facilitatorName: 'Dr. Maria Elena Santos',
+    facilitatorId: 'facilitator-demo-mts',
+    facilitatorName: 'Capt. Ramon Villanueva',
     municipality: 'Naval',
-    component: 'MTS (Army)',
-    group: 'MTS Army - Naval Group 1',
+    component: 'MTS',
+    group: 'MTS - Naval Group 1',
     description: 'Leadership, formation, and safety preparedness exercise.',
+    status: 'Completed',
+  },
+  {
+    id: 'coastguard-water-safety',
+    phase: 'Component Proper',
+    sessionNumber: 1,
+    title: 'CWTS-Coastguard Water Safety and Rescue Readiness',
+    type: 'Workshop',
+    date: '2026-05-25',
+    startTime: '08:00',
+    endTime: '12:00',
+    duration: 4,
+    venue: 'Naval Coastal Training Area',
+    facilitatorId: 'facilitator-demo-coastguard',
+    facilitatorName: 'Lt. Adrian Mercado',
+    municipality: 'Naval',
+    component: 'CWTS-Coastguard',
+    group: 'CWTS-Coastguard - Naval Group 1',
+    description: 'Water safety, coastal coordination, and rescue-readiness simulation.',
+    status: 'Completed',
+  },
+  {
+    id: 'cwts-sunday-community-profile',
+    phase: 'Component Proper',
+    sessionNumber: 1,
+    title: 'CWTS-Sunday Community Profiling and Consultation',
+    type: 'Activity',
+    date: '2026-05-26',
+    startTime: '08:00',
+    endTime: '12:00',
+    duration: 4,
+    venue: 'Naval Barangay Hall',
+    facilitatorId: 'facilitator-demo-sunday',
+    facilitatorName: 'Prof. Elisa Cabal',
+    municipality: 'Naval',
+    component: 'CWTS-Sunday',
+    group: 'CWTS-Sunday - Naval Group 1',
+    description: 'Sunday CWTS activity using the shared CWTS community profiling structure.',
     status: 'Completed',
   },
 ];
 
 const entry = (studentId: string, status: AttendanceStatus, remarks = '', excuseAttachmentName?: string): AttendanceEntry => ({ studentId, status, remarks, excuseAttachmentName });
-const commonLearners = ['student-demo-common', 'student-demo-cwts', 'student-demo-lts', 'student-demo-mts'];
+const commonLearners = ['student-demo-common', 'student-demo-cwts', 'student-demo-coastguard', 'student-demo-sunday', 'student-demo-lts', 'student-demo-mts'];
 const commonEntries = (commonStatus: AttendanceStatus = 'present') => [
   entry('student-demo-common', commonStatus, commonStatus === 'late' ? 'Arrived 20 minutes late; counseled.' : ''),
   entry('student-demo-cwts', 'present'),
+  entry('student-demo-coastguard', 'present'),
+  entry('student-demo-sunday', 'present'),
   entry('student-demo-lts', 'present'),
   entry('student-demo-mts', 'present'),
 ];
@@ -333,8 +374,8 @@ const DEMO_ATTENDANCE: AttendanceSheet[] = [
   {
     id: 'sheet-lts',
     sessionId: 'lts-reading-clinic',
-    facilitatorId: 'facilitator-1',
-    facilitatorName: 'Dr. Maria Elena Santos',
+    facilitatorId: 'facilitator-demo-lts',
+    facilitatorName: 'Prof. Daniel Flores',
     date: '2026-05-22',
     sessionNumber: 1,
     topic: 'LTS Reading Clinic Facilitation',
@@ -350,26 +391,62 @@ const DEMO_ATTENDANCE: AttendanceSheet[] = [
   {
     id: 'sheet-mts',
     sessionId: 'mts-readiness-drill',
-    facilitatorId: 'facilitator-1',
-    facilitatorName: 'Dr. Maria Elena Santos',
     date: '2026-05-24',
     sessionNumber: 1,
     topic: 'MTS Leadership and Readiness Drill',
     phase: 'Component Proper',
     municipality: 'Naval',
-    component: 'MTS (Army)',
-    group: 'MTS Army - Naval Group 1',
+    facilitatorId: 'facilitator-demo-mts',
+    facilitatorName: 'Capt. Ramon Villanueva',
+    component: 'MTS',
+    group: 'MTS - Naval Group 1',
     status: 'Complete',
     entries: [entry('student-demo-mts', 'excused', 'Medical excuse filed.', 'medical-certificate.pdf')],
     createdAt: iso('2026-05-24'),
     updatedAt: iso('2026-05-24'),
   },
+  {
+    id: 'sheet-coastguard',
+    sessionId: 'coastguard-water-safety',
+    facilitatorId: 'facilitator-demo-coastguard',
+    facilitatorName: 'Lt. Adrian Mercado',
+    date: '2026-05-25',
+    sessionNumber: 1,
+    topic: 'CWTS-Coastguard Water Safety and Rescue Readiness',
+    phase: 'Component Proper',
+    municipality: 'Naval',
+    component: 'CWTS-Coastguard',
+    group: 'CWTS-Coastguard - Naval Group 1',
+    status: 'Complete',
+    entries: [entry('student-demo-coastguard', 'present', 'Completed water safety simulation.')],
+    createdAt: iso('2026-05-25'),
+    updatedAt: iso('2026-05-25'),
+  },
+  {
+    id: 'sheet-cwts-sunday',
+    sessionId: 'cwts-sunday-community-profile',
+    facilitatorId: 'facilitator-demo-sunday',
+    facilitatorName: 'Prof. Elisa Cabal',
+    date: '2026-05-26',
+    sessionNumber: 1,
+    topic: 'CWTS-Sunday Community Profiling and Consultation',
+    phase: 'Component Proper',
+    municipality: 'Naval',
+    component: 'CWTS-Sunday',
+    group: 'CWTS-Sunday - Naval Group 1',
+    status: 'Complete',
+    entries: [entry('student-demo-sunday', 'present', 'Completed Sunday profiling worksheet.')],
+    createdAt: iso('2026-05-26'),
+    updatedAt: iso('2026-05-26'),
+  },
 ];
 
 const DEMO_GRADES: DetailedGrade[] = [
   { studentId: 'student-demo-cwts', facilitatorId: 'facilitator-1', assessments: 91, quizzes: 88, attendance: 96, activities: 94, participation: 93, majorExam: 90, overrideFinal: null, status: 'Released', feedback: 'Strong community profiling output.', updatedAt: iso('2026-05-24') },
-  { studentId: 'student-demo-lts', facilitatorId: 'facilitator-1', assessments: 92, quizzes: 94, attendance: 100, activities: 95, participation: 94, majorExam: 91, overrideFinal: null, status: 'Released', feedback: 'Excellent learner facilitation.', updatedAt: iso('2026-05-24') },
-  { studentId: 'student-demo-mts', facilitatorId: 'facilitator-1', assessments: 88, quizzes: 90, attendance: 92, activities: 87, participation: 91, majorExam: 89, overrideFinal: null, status: 'Reviewed', feedback: 'Medical excuse accepted; release pending.', updatedAt: iso('2026-05-24') },
+  { studentId: 'student-demo-coastguard', facilitatorId: 'facilitator-demo-coastguard', assessments: 89, quizzes: 87, attendance: 98, activities: 92, participation: 91, majorExam: 90, overrideFinal: null, status: 'Released', feedback: 'Strong water safety readiness output.', updatedAt: iso('2026-05-25') },
+  { studentId: 'student-demo-sunday', facilitatorId: 'facilitator-demo-sunday', assessments: 90, quizzes: 88, attendance: 96, activities: 93, participation: 92, majorExam: 91, overrideFinal: null, status: 'Released', feedback: 'Consistent Sunday CWTS performance.', updatedAt: iso('2026-05-26') },
+  { studentId: 'student-demo-lts', facilitatorId: 'facilitator-demo-lts', assessments: 92, quizzes: 94, attendance: 100, activities: 95, participation: 94, majorExam: 91, overrideFinal: null, status: 'Released', feedback: 'Excellent learner facilitation.', updatedAt: iso('2026-05-24') },
+  { studentId: 'student-demo-mts', facilitatorId: 'facilitator-demo-mts', assessments: 88, quizzes: 90, attendance: 92, activities: 87, participation: 91, majorExam: 89, overrideFinal: null, status: 'Reviewed', feedback: 'Medical excuse accepted; release pending.', updatedAt: iso('2026-05-24') },
   { studentId: 'student-demo-common', facilitatorId: 'facilitator-1', assessments: 87, quizzes: 84, attendance: 94, activities: 88, participation: 90, majorExam: null, overrideFinal: null, status: 'In Progress', feedback: 'Complete synthesis examination to reach eligibility.', updatedAt: iso('2026-05-24') },
 ];
 
@@ -405,7 +482,7 @@ const DEMO_NOTICES: WorkflowNotice[] = [
     municipality: 'All',
     component: 'All',
     title: 'Component Proper Requirements',
-    message: 'CWTS, LTS, and MTS learners should confirm activity schedules and required outputs with assigned facilitators.',
+    message: 'CWTS, CWTS-Coastguard, CWTS-Sunday, LTS, and MTS learners should confirm activity schedules and required outputs with assigned facilitators.',
     priority: 'Normal',
     status: 'Published',
     createdAt: iso('2026-05-20'),
@@ -444,15 +521,24 @@ function save<T>(key: string, rows: T[], eventName: string) {
   window.dispatchEvent(new CustomEvent(eventName));
 }
 
-export const loadSessions = () => load(SESSION_KEY, DEMO_SESSIONS);
+export const loadSessions = () => load<NstpSession>(SESSION_KEY, DEMO_SESSIONS).map((session: any) => ({
+  ...session,
+  component: session.component === 'Common' ? 'Common' : normalizeComponent(session.component),
+}));
 export const saveSessions = (sessions: NstpSession[]) => save(SESSION_KEY, sessions, 'nstp-workflow-sessions-updated');
-export const loadAttendanceSheets = () => load(ATTENDANCE_KEY, DEMO_ATTENDANCE);
+export const loadAttendanceSheets = () => load<AttendanceSheet>(ATTENDANCE_KEY, DEMO_ATTENDANCE).map((sheet: any) => ({
+  ...sheet,
+  component: sheet.component === 'Common' || sheet.component === 'All Components' ? sheet.component : normalizeComponent(sheet.component),
+}));
 export const saveAttendanceSheets = (sheets: AttendanceSheet[]) => save(ATTENDANCE_KEY, sheets, 'nstp-workflow-attendance-updated');
 export const loadDetailedGrades = () => load(GRADE_KEY, DEMO_GRADES);
 export const saveDetailedGrades = (grades: DetailedGrade[]) => save(GRADE_KEY, grades, 'nstp-workflow-grades-updated');
 export const loadInterventionNotes = () => load(NOTE_KEY, [] as InterventionNote[]);
 export const saveInterventionNotes = (notes: InterventionNote[]) => save(NOTE_KEY, notes, 'nstp-workflow-notes-updated');
-export const loadWorkflowNotices = () => load(NOTICE_KEY, DEMO_NOTICES);
+export const loadWorkflowNotices = () => load<WorkflowNotice>(NOTICE_KEY, DEMO_NOTICES).map((notice: any) => ({
+  ...notice,
+  component: notice.component === 'Common' || notice.component === 'All' ? notice.component : normalizeComponent(notice.component),
+}));
 export const saveWorkflowNotices = (notices: WorkflowNotice[]) => save(NOTICE_KEY, notices, 'nstp-workflow-notices-updated');
 export const loadAuditLog = () => load(AUDIT_KEY, [] as AuditEntry[]);
 export const saveAuditLog = (logs: AuditEntry[]) => save(AUDIT_KEY, logs.slice(0, 250), 'nstp-workflow-audit-updated');

@@ -52,6 +52,27 @@ test('protected API routes reject missing and wrong roles', async () => {
   });
 });
 
+test('local login issues a bearer token and /me returns the session', async () => {
+  await withServer(async (base) => {
+    const login = await fetch(`${base}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'admin@nstp.edu', password: 'admin' }),
+    });
+    assert.equal(login.status, 200);
+    const body = await login.json();
+    assert.ok(body.data.token);
+    assert.equal(body.data.user.role, 'admin');
+
+    const me = await fetch(`${base}/api/auth/me`, {
+      headers: { authorization: `Bearer ${body.data.token}` },
+    });
+    assert.equal(me.status, 200);
+    const session = await me.json();
+    assert.equal(session.data.user.role, 'admin');
+  });
+});
+
 test('municipality scope rejects direct access outside facilitator assignment', async () => {
   await withServer(async (base) => {
     const response = await fetch(`${base}/api/nstp/grades`, {
@@ -142,5 +163,30 @@ test('admin export queue and audit log are protected and usable', async () => {
     assert.equal(auditResponse.status, 200);
     const body = await auditResponse.json();
     assert.ok(Array.isArray(body.data));
+  });
+});
+
+test('direct backend exports enforce admin super access and scoped roles', async () => {
+  await withServer(async (base) => {
+    const adminAll = await fetch(`${base}/api/nstp/exports/all?format=json`, { headers: headers.admin });
+    assert.equal(adminAll.status, 200);
+    assert.match(adminAll.headers.get('content-disposition'), /NSTP_all_AdminSuperAccess_/);
+    const adminBody = await adminAll.json();
+    assert.ok(adminBody.data.accounts);
+    assert.ok(adminBody.data.students);
+    assert.ok(adminBody.data.auditLogs);
+
+    const facilitatorStudents = await fetch(`${base}/api/nstp/exports/students?format=csv&municipality=Naval`, { headers: headers.facilitator });
+    assert.equal(facilitatorStudents.status, 200);
+    assert.equal(facilitatorStudents.headers.get('x-nstp-export-scope'), 'Naval');
+    assert.match(await facilitatorStudents.text(), /student/i);
+
+    const studentRoster = await fetch(`${base}/api/nstp/exports/students?format=json`, { headers: headers.student });
+    assert.equal(studentRoster.status, 403);
+
+    const studentGrades = await fetch(`${base}/api/nstp/exports/grades?format=json`, { headers: headers.student });
+    assert.equal(studentGrades.status, 200);
+    const gradeBody = await studentGrades.json();
+    assert.ok(Array.isArray(gradeBody.data));
   });
 });

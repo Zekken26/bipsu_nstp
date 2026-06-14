@@ -10,6 +10,9 @@ import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSi
 import WorkflowOversight from '../components/WorkflowOversight';
 import { Pager, useModalEscape } from '../../facilitator/components/FacilitatorUI';
 import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups } from '../../../data/nstpData';
+import ExportButtonGroup from '../../../components/common/ExportButtonGroup';
+import { exportRows, type ExportColumn, type ExportFormat } from '../../../utils/exportRecords';
+import { apiDownload, apiErrorMessage } from '../../../services/apiClient';
 
 type AdminAuditEntry = {
   id: string;
@@ -176,6 +179,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const [municipalitySort, setMunicipalitySort] = useState('name');
   const [openMunicipalityManage, setOpenMunicipalityManage] = useState<string | null>(null);
   const [exportSettingsOpen, setExportSettingsOpen] = useState(false);
+  const [serverExportState, setServerExportState] = useState<'idle' | 'working' | 'error'>('idle');
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [pendingHeaderCrop, setPendingHeaderCrop] = useState<{ dataUrl: string; name: string } | null>(null);
   const [headerCrop, setHeaderCrop] = useState({ x: 0, y: 0, width: 100, height: 38 });
@@ -312,18 +316,28 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     URL.revokeObjectURL(url);
   };
 
+  const exportAdminAudit = async (format: ExportFormat, rows?: AdminAuditEntry[], scope = auditSearch ? 'Filtered' : 'All') => {
+    const selection = rows || filteredAuditLog;
+    if (selection.length === 0) return;
+    const columns: ExportColumn<AdminAuditEntry>[] = [
+      { header: 'Date / Time', value: (entry) => new Date(entry.at).toLocaleString(), width: 24 },
+      { header: 'Actor', value: 'actor', width: 20 },
+      { header: 'Action', value: 'action', width: 26 },
+      { header: 'Detail', value: 'detail', width: 46 },
+    ];
+    await exportRows(format, selection, columns, {
+      title: 'Admin Audit Log',
+      dataType: 'AuditLogs',
+      scope,
+      generatedBy: 'Administrator',
+      filters: { Search: auditSearch || 'All' },
+      signatureLines: ['Prepared by', 'Reviewed by'],
+    });
+    logAudit('Exported audit log', `${selection.length} entries exported as ${format.toUpperCase()}`);
+  };
+
   const exportAuditLogCsv = () => {
-    if (auditLog.length === 0) return;
-    const header = ['timestamp', 'actor', 'action', 'detail'];
-    const rows = auditLog.map((entry) => [
-      entry.at,
-      entry.actor,
-      entry.action,
-      entry.detail.replace(/\n/g, ' '),
-    ].map((field) => `"${field.replace(/"/g, '""')}"`).join(','));
-    const csv = [header.join(','), ...rows].join('\n');
-    downloadTextFile(`nstp-admin-audit-${new Date().toISOString().slice(0, 10)}.csv`, csv, 'text/csv;charset=utf-8;');
-    logAudit('Exported audit log', `${auditLog.length} entries exported`);
+    void exportAdminAudit('csv', auditLog, 'All');
   };
 
   const clearAuditLog = () => {
@@ -362,7 +376,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     const statusIdx = indexOf('status');
     const notesIdx = indexOf('notes');
 
-    const componentValues: NstpStudent['component'][] = ['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'];
+    const componentValues: NstpStudent['component'][] = [...NSTP_COMPONENTS];
     const statusValues: NstpStudent['status'][] = ['active', 'pending', 'graduated'];
 
     const importedRows = lines.slice(1).map((line) => parseCsvLine(line));
@@ -948,12 +962,12 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const avgProgress = totalStudents === 0 ? 0 : Math.round(schoolYearStudents.reduce((acc, s) => acc + s.progress, 0) / totalStudents);
   const completionRate = totalStudents === 0 ? 0 : Math.round((schoolYearStudents.filter(s => s.progress === 100).length / totalStudents) * 100);
 
-  const componentCounts = useMemo(() => ({
-    'CWTS': schoolYearStudents.filter((s) => s.component === 'CWTS').length,
-    'LTS': schoolYearStudents.filter((s) => s.component === 'LTS').length,
-    'MTS (Army)': schoolYearStudents.filter((s) => s.component === 'MTS (Army)').length,
-    'MTS (Navy)': schoolYearStudents.filter((s) => s.component === 'MTS (Navy)').length,
-  }), [schoolYearStudents]);
+  const componentCounts = useMemo(() => (
+    NSTP_COMPONENTS.reduce<Record<NstpStudent['component'], number>>((acc, component) => {
+      acc[component] = schoolYearStudents.filter((student) => student.component === component).length;
+      return acc;
+    }, {} as Record<NstpStudent['component'], number>)
+  ), [schoolYearStudents]);
 
   const filteredStudents = schoolYearStudents.filter((student) => {
     const matchesFilter = filter === 'all' || student.component === filter;
@@ -1251,39 +1265,132 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     logAudit('Bulk progress adjustment', `${selectedStudentIds.length} records changed by ${delta}`);
   };
 
-  const exportStudentsCsv = (rows: NstpStudent[]) => {
-    const header = ['id', 'studentId', 'surname', 'firstName', 'middleName', 'name', 'email', 'school', 'degreeProgram', 'municipality', 'contactNumber', 'component', 'progress', 'assessments', 'status', 'notes', 'updatedAt'];
-    const csvRows = rows.map((row) => [
-      row.id,
-      row.studentId || '',
-      row.surname || '',
-      row.firstName || '',
-      row.middleName || '',
-      row.name,
-      row.email,
-      row.school || '',
-      row.degreeProgram || '',
-      row.municipality || '',
-      row.contactNumber || '',
-      row.component,
-      String(row.progress),
-      String(row.assessments),
-      row.status,
-      row.notes.replace(/\n/g, ' '),
-      row.updatedAt,
-    ].map((field) => `"${field.replace(/"/g, '""')}"`).join(','));
+  const studentExportColumns: ExportColumn<NstpStudent>[] = [
+    { header: 'Student ID', value: (row) => row.studentId || row.id, width: 18 },
+    { header: 'Student Name', value: 'name', width: 28 },
+    { header: 'Email', value: 'email', width: 30 },
+    { header: 'School', value: (row) => row.school || row.department || '', width: 24 },
+    { header: 'Course', value: (row) => row.degreeProgram || '', width: 26 },
+    { header: 'Year Level', value: (row) => row.yearLevel || '', width: 14 },
+    { header: 'Section', value: (row) => row.programSection || '', width: 18 },
+    { header: 'Municipality', value: (row) => row.municipality || '', width: 18 },
+    { header: 'NSTP Component', value: 'component', width: 20 },
+    { header: 'Assigned Facilitator', value: (row) => row.facilitatorName || '', width: 28 },
+    { header: 'Status', value: 'status', width: 14 },
+    { header: 'Progress', value: 'progress', width: 12 },
+    { header: 'Assessments', value: 'assessments', width: 14 },
+    { header: 'Contact Number', value: (row) => row.contactNumber || '', width: 18 },
+    { header: 'Remarks', value: (row) => row.notes || '', width: 36 },
+    { header: 'Updated At', value: (row) => row.updatedAt ? new Date(row.updatedAt).toLocaleString() : '', width: 22 },
+  ];
 
-    const csv = [header.join(','), ...csvRows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `nstp-students-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    logAudit('Exported student CSV', `${rows.length} rows exported`);
+  const exportStudents = async (format: ExportFormat, rows: NstpStudent[], scope = 'Filtered') => {
+    if (rows.length === 0) return;
+    await exportRows(format, rows, studentExportColumns, {
+      title: 'Student Roster and Performance Records',
+      dataType: 'StudentRecords',
+      scope,
+      generatedBy: 'Administrator',
+      filters: { SchoolYear: schoolYear, Component: filter === 'all' ? 'All' : filter, Search: search || 'All', Sort: sortBy },
+      signatureLines: ['Prepared by', 'Validated by', 'NSTP Director'],
+    });
+    logAudit('Exported student records', `${rows.length} rows exported as ${format.toUpperCase()} (${scope})`);
+  };
+
+  const exportStudentsCsv = (rows: NstpStudent[]) => {
+    void exportStudents('csv', rows, 'All');
+  };
+
+  const exportEnrollments = async (format: ExportFormat, rows = pendingRegistrations, scope = 'Pending') => {
+    if (rows.length === 0) return;
+    const columns: ExportColumn<PendingStudentRegistration>[] = [
+      { header: 'Student Name', value: 'name', width: 28 },
+      { header: 'Student ID', value: (row) => row.studentId || '', width: 18 },
+      { header: 'Email', value: 'email', width: 30 },
+      { header: 'Course', value: (row) => row.degreeProgram || '', width: 26 },
+      { header: 'Year Level', value: (row) => row.yearLevel || '', width: 14 },
+      { header: 'Major', value: (row) => row.major || '', width: 18 },
+      { header: 'Municipality', value: (row) => row.municipality || 'Naval', width: 18 },
+      { header: 'Selected Component', value: () => 'Pending classification', width: 22 },
+      { header: 'Enrollment Status', value: () => 'Pending', width: 16 },
+      { header: 'Date Submitted', value: (row) => row.createdAt ? new Date(row.createdAt).toLocaleString() : '', width: 22 },
+      { header: 'Assigned Facilitator', value: (row) => facilitatorAccounts.find((account) => account.municipalities?.includes((row.municipality || 'Naval') as BiliranMunicipality))?.name || 'Unassigned', width: 28 },
+      { header: 'Contact Details', value: (row) => row.contactNumber || row.email, width: 28 },
+      { header: 'Remarks', value: () => 'Awaiting admin action', width: 26 },
+    ];
+    await exportRows(format, rows, columns, {
+      title: 'Enrollment Approval Records',
+      dataType: 'Enrollment',
+      scope,
+      generatedBy: 'Administrator',
+      filters: { Status: 'Pending', Page: `${enrollmentPage}`, PageSize: enrollmentPageSize },
+      signatureLines: ['Prepared by', 'Approved by', 'NSTP Director'],
+    });
+    logAudit('Exported enrollment records', `${rows.length} pending records exported as ${format.toUpperCase()}`);
+  };
+
+  const exportMunicipalities = async (format: ExportFormat, rows = municipalityAssignmentRows, scope = 'Filtered') => {
+    if (rows.length === 0) return;
+    const columns: ExportColumn<(typeof municipalityAssignmentRows)[number]>[] = [
+      { header: 'Municipality', value: 'municipality', width: 18 },
+      { header: 'Students', value: 'studentCount', width: 12 },
+      { header: 'Facilitators', value: (row) => row.assigned.map((facilitator) => facilitator.name).join('; ') || 'Unassigned', width: 42 },
+      { header: 'Facilitator Emails', value: (row) => row.assigned.map((facilitator) => facilitator.email).join('; '), width: 44 },
+      { header: 'Status', value: 'status', width: 14 },
+    ];
+    await exportRows(format, rows, columns, {
+      title: 'Municipality Assignment Records',
+      dataType: 'MunicipalityRecords',
+      scope,
+      generatedBy: 'Administrator',
+      filters: { Search: municipalitySearch || 'All', Status: municipalityStatusFilter, Sort: municipalitySort },
+      signatureLines: ['Prepared by', 'Reviewed by'],
+    });
+    logAudit('Exported municipality assignments', `${rows.length} rows exported as ${format.toUpperCase()}`);
+  };
+
+  const exportDashboardAnalytics = async (format: ExportFormat) => {
+    const rows = [
+      { metric: 'Total Students', value: totalStudents, detail: schoolYear },
+      { metric: 'Average Progress', value: `${avgProgress}%`, detail: 'Across active roster' },
+      { metric: 'Completion Rate', value: `${completionRate}%`, detail: 'Students at 100%' },
+      { metric: 'Module Completion Average', value: `${moduleCompletionAvg}%`, detail: 'Average lesson progress' },
+      { metric: 'At-risk Students', value: studentsNeedingSupport, detail: 'Below 70% progress' },
+      { metric: 'Pending Enrollments', value: pendingRegistrations.length, detail: 'Awaiting admin approval' },
+      { metric: 'Facilitators', value: facilitatorAccounts.length, detail: 'Active facilitator accounts' },
+      { metric: 'Audit Entries', value: auditLog.length, detail: 'Admin audit trail' },
+    ];
+    await exportRows(format, rows, [
+      { header: 'Metric', value: 'metric', width: 30 },
+      { header: 'Value', value: 'value', width: 16 },
+      { header: 'Detail', value: 'detail', width: 42 },
+    ], {
+      title: 'Dashboard Analytics Summary',
+      dataType: 'DashboardAnalytics',
+      scope: schoolYear,
+      generatedBy: 'Administrator',
+      filters: { SchoolYear: schoolYear },
+      signatureLines: ['Prepared by', 'Reviewed by', 'NSTP Director'],
+    }, [
+      { name: 'Component Distribution', rows: [['Component', 'Students'], ...componentChartData.map((row) => [row.name, row.value])], columnWidths: [24, 14] },
+      { name: 'Municipality Coverage', rows: [['Municipality', 'Students', 'Facilitators'], ...municipalityStats.map((row) => [row.municipality, row.students, row.facilitators])], columnWidths: [20, 14, 14] },
+      { name: 'Progress Bands', rows: [['Band', 'Students'], ...progressBandData.map((row) => [row.band, row.students])], columnWidths: [16, 14] },
+      { name: 'Facilitator Load', rows: [['Facilitator', 'Students', 'Municipalities'], ...facilitatorLoadData.map((row) => [row.name, row.students, row.municipalities])], columnWidths: [22, 14, 16] },
+    ]);
+    logAudit('Exported dashboard analytics', `Dashboard exported as ${format.toUpperCase()}`);
+  };
+
+  const exportServerAllRecords = async (format: 'xlsx' | 'csv' | 'json' | 'print') => {
+    setServerExportState('working');
+    try {
+      const apiFormat = format === 'xlsx' ? 'xlsx' : format;
+      const result = await apiDownload(`/nstp/exports/all?format=${apiFormat}&scope=AdminSuperAccess`, `NSTP_AllRecords_AdminSuperAccess_${new Date().toISOString().slice(0, 10)}.${format === 'print' ? 'html' : format}`);
+      setServerExportState('idle');
+      logAudit('Downloaded server export', `${result.filename} (${result.rows} rows, ${result.scope || 'AdminSuperAccess'})`);
+    } catch (error) {
+      setServerExportState('error');
+      window.alert(apiErrorMessage(error));
+    }
   };
 
   const exportComplianceSnapshot = () => {
@@ -1497,32 +1604,25 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">Export Reports</h3>
-              <div className="grid sm:grid-cols-2 gap-2">
-                <button
-                  onClick={() => exportStudentsCsv(students)}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Export full roster CSV
-                </button>
-                <button
-                  onClick={() => exportStudentsCsv(filteredStudents)}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Export filtered CSV
-                </button>
-                <button
-                  onClick={exportComplianceSnapshot}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Export compliance JSON
-                </button>
-                <button
-                  onClick={exportAuditLogCsv}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                  disabled={auditLog.length === 0}
-                >
-                  Export audit log CSV
-                </button>
+                      <div className="space-y-3">
+                <ExportButtonGroup onExport={(format) => exportStudents(format, filteredStudents, 'Filtered')} disabled={filteredStudents.length === 0} label="Filtered Roster" />
+                <ExportButtonGroup onExport={(format) => exportDashboardAnalytics(format)} disabled={schoolYearStudents.length === 0} label="Dashboard" />
+                <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-500/20 dark:bg-blue-500/10">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-blue-700 dark:text-blue-200">Backend Super Export</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(['xlsx', 'csv', 'json', 'print'] as const).map((format) => (
+                      <button key={format} onClick={() => exportServerAllRecords(format)} disabled={serverExportState === 'working'} className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50 dark:bg-slate-900 dark:text-blue-200">
+                        {format === 'xlsx' ? 'Excel' : format.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                  {serverExportState === 'working' && <p className="mt-2 text-xs text-blue-700 dark:text-blue-200">Preparing backend export...</p>}
+                  {serverExportState === 'error' && <p className="mt-2 text-xs text-rose-600 dark:text-rose-300">Backend export failed. Check API auth or server status.</p>}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => exportStudents('xlsx', students, 'AllComponents')} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Export all students</button>
+                  <button onClick={exportComplianceSnapshot} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Compliance JSON</button>
+                </div>
               </div>
             </div>
           </div>
@@ -2012,7 +2112,10 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                         <h2 className="text-2xl font-semibold text-slate-950 dark:text-white">Student Approvals</h2>
                         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Approve, reject, and monitor student enrollment from the main admin body.</p>
                       </div>
-                      <div className="rounded-2xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{pendingRegistrations.length} pending request{pendingRegistrations.length === 1 ? '' : 's'}</div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="rounded-2xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{pendingRegistrations.length} pending request{pendingRegistrations.length === 1 ? '' : 's'}</div>
+                        <ExportButtonGroup compact label="Export pending enrollment" onExport={(format) => exportEnrollments(format, pendingRegistrations, 'Pending')} disabled={pendingRegistrations.length === 0} />
+                      </div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[1120px] text-sm">
@@ -2082,9 +2185,10 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                           <Plus className="h-4 w-4" />
                           Add Student
                         </button>
-                        <button onClick={() => exportStudentsCsv(filteredStudents)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+                        <ExportButtonGroup compact label="Export filtered students" onExport={(format) => exportStudents(format, filteredStudents, 'Filtered')} disabled={filteredStudents.length === 0} />
+                        <button onClick={() => exportStudents('xlsx', students, 'AllComponents')} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
                           <FileDown className="h-4 w-4" />
-                          Export Visible
+                          Export All
                         </button>
                       </div>
                     </div>
@@ -2119,10 +2223,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                       </label>
                       <select value={filter} onChange={(event) => setFilter(event.target.value)} className="min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                         <option value="all">All Components</option>
-                        <option value="CWTS">CWTS</option>
-                        <option value="LTS">LTS</option>
-                        <option value="MTS (Army)">MTS Army</option>
-                        <option value="MTS (Navy)">MTS Navy</option>
+                        {NSTP_COMPONENTS.map((component) => <option key={component} value={component}>{component}</option>)}
                       </select>
                       <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                         <option value="risk">Risk First</option>
@@ -2342,10 +2443,9 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                             <option value="students">Students</option>
                             <option value="facilitators">Facilitators</option>
                           </select>
-                          <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-blue-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
-                            <FileDown className="h-4 w-4" />
-                            Export
-                          </button>
+                          <div className="xl:col-span-4">
+                            <ExportButtonGroup compact label="Export municipality assignments" onExport={(format) => exportMunicipalities(format, municipalityAssignmentRows, 'Filtered')} disabled={municipalityAssignmentRows.length === 0} />
+                          </div>
                         </div>
 
                         <div className="overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800">
@@ -2578,10 +2678,9 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                         <h2 className="text-2xl font-semibold text-slate-950 dark:text-white">Program Analytics</h2>
                         <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">Monitor enrollment movement, municipality coverage, component distribution, and learning completion from one decision-ready view.</p>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 rounded-2xl border border-blue-100 bg-blue-50/70 p-2 dark:border-blue-500/20 dark:bg-blue-500/10">
-                        <button onClick={() => exportStudentsCsv(students)} className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-800">Roster</button>
-                        <button onClick={exportComplianceSnapshot} className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:bg-slate-900 dark:text-blue-200">Snapshot</button>
-                        <button onClick={exportAuditLogCsv} className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50 dark:bg-slate-900 dark:text-blue-200" disabled={auditLog.length === 0}>Audit</button>
+                      <div className="flex flex-wrap gap-2">
+                        <ExportButtonGroup compact label="Export dashboard analytics" onExport={(format) => exportDashboardAnalytics(format)} disabled={schoolYearStudents.length === 0} />
+                        <button onClick={() => exportServerAllRecords('xlsx')} disabled={serverExportState === 'working'} className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-800 disabled:opacity-50">Server All</button>
                       </div>
                     </div>
 
@@ -2818,11 +2917,11 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                           <Users className="h-6 w-6" />
                           <span><span className="block font-semibold">Load 1,200 Demo Students</span><span className="text-xs text-blue-100">Stress-test filters and charts</span></span>
                         </button>
-                        <button onClick={() => exportStudentsCsv(schoolYearStudents)} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left text-slate-800 hover:border-blue-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                        <button onClick={() => exportStudents('xlsx', schoolYearStudents, schoolYear)} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left text-slate-800 hover:border-blue-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                           <FileDown className="h-5 w-5 text-blue-700 dark:text-blue-200" />
                           <span><span className="block font-semibold">Export Current Year</span><span className="text-xs text-slate-500 dark:text-slate-400">{schoolYearStudents.length} visible records</span></span>
                         </button>
-                        <button onClick={exportAuditLogCsv} disabled={auditLog.length === 0} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left text-slate-800 hover:border-blue-300 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                        <button onClick={() => exportAdminAudit('xlsx', auditLog, 'All')} disabled={auditLog.length === 0} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left text-slate-800 hover:border-blue-300 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                           <History className="h-5 w-5 text-blue-700 dark:text-blue-200" />
                           <span><span className="block font-semibold">Export Audit Log</span><span className="text-xs text-slate-500 dark:text-slate-400">{auditLog.length} audit entries</span></span>
                         </button>
@@ -3270,10 +3369,9 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     <button onClick={() => updateStudent(spotlightStudent.id, { status: 'graduated', progress: 100 })} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Graduate</button>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button onClick={() => assignSpotlightComponent('CWTS')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">CWTS</button>
-                    <button onClick={() => assignSpotlightComponent('LTS')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">LTS</button>
-                    <button onClick={() => assignSpotlightComponent('MTS (Army)')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">MTS Army</button>
-                    <button onClick={() => assignSpotlightComponent('MTS (Navy)')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">MTS Navy</button>
+                    {NSTP_COMPONENTS.map((component) => (
+                      <button key={component} onClick={() => assignSpotlightComponent(component)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">{component}</button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -3600,13 +3698,10 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 <button onClick={() => applyBulkPatch({ status: 'pending' })} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 dark:hover:bg-amber-500/20">Set pending</button>
                 <button onClick={() => applyBulkPatch({ status: 'graduated', progress: 100 })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Set graduated</button>
                 <select value={bulkComponent} onChange={(e) => setBulkComponent(e.target.value as NstpStudent['component'])} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                  <option value="CWTS">CWTS</option>
-                  <option value="LTS">LTS</option>
-                  <option value="MTS (Army)">MTS (Army)</option>
-                  <option value="MTS (Navy)">MTS (Navy)</option>
+                  {NSTP_COMPONENTS.map((component) => <option key={component} value={component}>{component}</option>)}
                 </select>
                 <button onClick={() => applyBulkPatch({ component: bulkComponent })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Apply component</button>
-                <button onClick={() => exportStudentsCsv(filteredStudents)} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"><FileDown className="w-4 h-4" />Export CSV</button>
+                <ExportButtonGroup compact label="Export filtered students" onExport={(format) => exportStudents(format, filteredStudents, 'Filtered')} disabled={filteredStudents.length === 0} />
                 <button onClick={() => csvInputRef.current?.click()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"><FileUp className="w-4 h-4" />Import CSV</button>
                 <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCsv} />
                 <select onChange={(e) => applyFilterPreset(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" defaultValue="">
@@ -3683,10 +3778,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>Component</span>
                     <select value={studentForm.component} onChange={(e) => updateForm('component', e.target.value as NstpStudent['component'])} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                      <option value="CWTS">CWTS</option>
-                      <option value="LTS">LTS</option>
-                      <option value="MTS (Army)">MTS (Army)</option>
-                      <option value="MTS (Navy)">MTS (Navy)</option>
+                      {NSTP_COMPONENTS.map((component) => <option key={component} value={component}>{component}</option>)}
                     </select>
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -3873,10 +3965,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               >
                 <option value="all">All Components</option>
-                <option value="CWTS">CWTS</option>
-                <option value="LTS">LTS</option>
-                <option value="MTS (Army)">MTS (Army)</option>
-                <option value="MTS (Navy)">MTS (Navy)</option>
+                {NSTP_COMPONENTS.map((component) => <option key={component} value={component}>{component}</option>)}
               </select>
               <select
                 value={sortBy}
@@ -4003,10 +4092,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 placeholder="Search action or detail"
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
-              <button onClick={exportAuditLogCsv} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
-                <FileDown className="w-4 h-4" />
-                Export audit
-              </button>
+              <ExportButtonGroup compact label="Export audit log" onExport={(format) => exportAdminAudit(format, filteredAuditLog, auditSearch ? 'Filtered' : 'All')} disabled={filteredAuditLog.length === 0} />
               <button onClick={clearAuditLog} className="inline-flex items-center gap-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200 dark:hover:bg-rose-500/20">
                 <Trash2 className="w-4 h-4" />
                 Clear audit

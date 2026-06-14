@@ -1,5 +1,6 @@
 export type NstpRole = 'admin' | 'student' | 'facilitator';
-export type NstpComponent = 'CWTS' | 'LTS' | 'MTS (Army)' | 'MTS (Navy)';
+export type NstpComponent = 'CWTS' | 'CWTS-Coastguard' | 'CWTS-Sunday' | 'LTS' | 'MTS';
+export type NstpComponentContent = 'CWTS' | 'CWTS-Coastguard' | 'LTS' | 'MTS';
 export type BiliranMunicipality = 'Almeria' | 'Biliran' | 'Cabucgayan' | 'Caibiran' | 'Culaba' | 'Kawayan' | 'Maripipi' | 'Naval';
 
 export type NstpAccount = {
@@ -36,7 +37,7 @@ export type NstpAccount = {
   examScore?: number;
   component?: NstpComponent;
   componentAccessStatus?: string;
-  demoStage?: 'common' | 'cwts' | 'lts' | 'mts';
+  demoStage?: 'common' | 'cwts' | 'cwts-coastguard' | 'cwts-sunday' | 'lts' | 'mts';
   commonPhaseStatus?: 'in-progress' | 'eligible' | 'approved';
 };
 
@@ -181,8 +182,29 @@ const GRADES_KEY = 'nstp-grade-records';
 const TRAINING_GROUPS_KEY = 'nstp-training-groups';
 export const QUALIFYING_RESULTS_KEY = 'qualifyingExamResults';
 export const COMPONENT_APPLICATION_STATE_KEY = 'nstp-component-application-state';
-export const NSTP_COMPONENTS: NstpComponent[] = ['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'];
+export const NSTP_COMPONENTS: NstpComponent[] = ['CWTS', 'CWTS-Coastguard', 'CWTS-Sunday', 'LTS', 'MTS'];
 export const BILIRAN_MUNICIPALITIES: BiliranMunicipality[] = ['Almeria', 'Biliran', 'Cabucgayan', 'Caibiran', 'Culaba', 'Kawayan', 'Maripipi', 'Naval'];
+
+export function normalizeComponent(value: unknown, fallback: NstpComponent = 'CWTS'): NstpComponent {
+  const raw = String(value || '').trim();
+  if ((NSTP_COMPONENTS as string[]).includes(raw)) return raw as NstpComponent;
+  if (raw === 'MTS (Army)' || raw === 'MTS (Navy)' || raw.toUpperCase() === 'MTS_ARMY' || raw.toUpperCase() === 'MTS_NAVY') return 'MTS';
+  if (raw.toUpperCase() === 'CWTS_COASTGUARD') return 'CWTS-Coastguard';
+  if (raw.toUpperCase() === 'CWTS_SUNDAY') return 'CWTS-Sunday';
+  if (raw.toUpperCase() === 'LTS') return 'LTS';
+  if (raw.toUpperCase() === 'MTS') return 'MTS';
+  if (raw.toUpperCase() === 'CWTS') return 'CWTS';
+  return fallback;
+}
+
+export function contentComponentFor(component: unknown): NstpComponentContent {
+  const normalized = normalizeComponent(component);
+  return normalized === 'CWTS-Sunday' ? 'CWTS' : normalized;
+}
+
+export function usesCwtsContent(component: unknown) {
+  return contentComponentFor(component) === 'CWTS';
+}
 
 export type QualifyingExamResult = {
   userId: string;
@@ -207,9 +229,10 @@ export type ComponentApplicationState = {
 export const DEFAULT_COMPONENT_APPLICATION_STATE: ComponentApplicationState = {
   slotLimits: {
     CWTS: 600,
+    'CWTS-Coastguard': 150,
+    'CWTS-Sunday': 150,
     LTS: 400,
-    'MTS (Army)': 300,
-    'MTS (Navy)': 200,
+    MTS: 500,
   },
   qualifyingScore: 70,
   applicationClosed: false,
@@ -373,6 +396,51 @@ const DEFAULT_ACCOUNTS: NstpAccount[] = [
     title: 'Municipal NSTP Facilitator',
     bio: 'Facilitates NSTP students assigned to Naval and coordinates enrollment, progress, and grade inputs.',
     municipalities: ['Naval'],
+    component: 'CWTS',
+  },
+  {
+    id: 'facilitator-demo-coastguard',
+    name: 'Lt. Adrian Mercado',
+    email: 'coastguard.facilitator@nstp.edu',
+    password: 'facilitator',
+    role: 'facilitator',
+    title: 'CWTS-Coastguard Facilitator',
+    bio: 'Facilitates maritime safety, coastal service, and rescue-readiness NSTP learners.',
+    municipalities: ['Naval'],
+    component: 'CWTS-Coastguard',
+  },
+  {
+    id: 'facilitator-demo-sunday',
+    name: 'Prof. Elisa Cabal',
+    email: 'sunday.facilitator@nstp.edu',
+    password: 'facilitator',
+    role: 'facilitator',
+    title: 'CWTS-Sunday Facilitator',
+    bio: 'Facilitates Sunday CWTS learners using the shared CWTS learning and assessment structure.',
+    municipalities: ['Naval'],
+    component: 'CWTS-Sunday',
+  },
+  {
+    id: 'facilitator-demo-lts',
+    name: 'Prof. Daniel Flores',
+    email: 'lts.facilitator@nstp.edu',
+    password: 'facilitator',
+    role: 'facilitator',
+    title: 'LTS Facilitator',
+    bio: 'Facilitates literacy service learners, reading clinics, and teaching-output validation.',
+    municipalities: ['Naval'],
+    component: 'LTS',
+  },
+  {
+    id: 'facilitator-demo-mts',
+    name: 'Capt. Ramon Villanueva',
+    email: 'mts.facilitator@nstp.edu',
+    password: 'facilitator',
+    role: 'facilitator',
+    title: 'MTS Facilitator',
+    bio: 'Facilitates military preparedness learners through leadership, discipline, and readiness activities.',
+    municipalities: ['Naval'],
+    component: 'MTS',
   },
   {
     id: 'student-demo-1',
@@ -382,10 +450,10 @@ const DEFAULT_ACCOUNTS: NstpAccount[] = [
     password: 'student',
     role: 'student',
     generalEducationComplete: true,
-    preferredComponent: 'MTS (Army)',
+    preferredComponent: 'MTS',
     examTaken: true,
     examScore: 92,
-    component: 'MTS (Army)',
+    component: 'MTS',
     demoStage: 'mts',
     commonPhaseStatus: 'approved',
   },
@@ -414,6 +482,34 @@ const DEFAULT_ACCOUNTS: NstpAccount[] = [
     commonPhaseStatus: 'approved',
   },
   {
+    id: 'student-demo-coastguard',
+    studentId: '2026-CG01',
+    name: 'Marco Rivera',
+    email: 'coastguard.student@student.edu',
+    password: 'student',
+    role: 'student',
+    generalEducationComplete: true,
+    preferredComponent: 'CWTS-Coastguard',
+    examTaken: true,
+    component: 'CWTS-Coastguard',
+    demoStage: 'cwts-coastguard',
+    commonPhaseStatus: 'approved',
+  },
+  {
+    id: 'student-demo-sunday',
+    studentId: '2026-SU01',
+    name: 'Bea Castillo',
+    email: 'sunday.student@student.edu',
+    password: 'student',
+    role: 'student',
+    generalEducationComplete: true,
+    preferredComponent: 'CWTS-Sunday',
+    examTaken: true,
+    component: 'CWTS-Sunday',
+    demoStage: 'cwts-sunday',
+    commonPhaseStatus: 'approved',
+  },
+  {
     id: 'student-demo-lts',
     studentId: '2026-LT01',
     name: 'Daniel Flores',
@@ -435,9 +531,9 @@ const DEFAULT_ACCOUNTS: NstpAccount[] = [
     password: 'student',
     role: 'student',
     generalEducationComplete: true,
-    preferredComponent: 'MTS (Army)',
+    preferredComponent: 'MTS',
     examTaken: true,
-    component: 'MTS (Army)',
+    component: 'MTS',
     demoStage: 'mts',
     commonPhaseStatus: 'approved',
   },
@@ -611,7 +707,7 @@ const DEFAULT_ASSESSMENTS: NstpAssessment[] = [
     updatedAt: now(),
     questions: [
       createQuestion('The Common Module requirement in this system is monitored as:', ['25 contact hours', '10 minutes', 'One activity only', 'No required time'], 0),
-      createQuestion('NSTP classification in this system includes:', ['CWTS, LTS, MTS (Army), and MTS (Navy)', 'Only CWTS', 'Only LTS', 'Only MTS Army'], 0),
+      createQuestion('NSTP classification in this system includes:', ['CWTS, CWTS-Coastguard, CWTS-Sunday, LTS, and MTS', 'Only CWTS', 'Only LTS', 'Only MTS'], 0),
       createQuestion('Assessments after modules are used to:', ['Check learning and compliance before progression', 'Remove feedback', 'Avoid instructional delivery', 'Replace enrollment'], 0),
       createQuestion('Instructional delivery in the platform may include:', ['Modules, materials, videos, lessons, quizzes, assignments, and exams', 'Only announcements', 'Only reports', 'Only login forms'], 0),
       createQuestion('Student progress should be reviewed to:', ['Identify completion, risk, and intervention needs', 'Hide learning status', 'Prevent advising', 'Avoid reports'], 0),
@@ -821,14 +917,44 @@ const DEFAULT_STUDENTS: NstpStudent[] = [
     updatedAt: now(),
   },
   {
+    id: 'student-demo-coastguard',
+    studentId: '2026-CG01',
+    name: 'Marco Rivera',
+    email: 'coastguard.student@student.edu',
+    component: 'CWTS-Coastguard',
+    municipality: 'Naval',
+    facilitatorId: 'facilitator-demo-coastguard',
+    facilitatorName: 'Lt. Adrian Mercado',
+    progress: 84,
+    assessments: 7,
+    status: 'active',
+    notes: 'Coastal safety and rescue-readiness activities in progress.',
+    updatedAt: now(),
+  },
+  {
+    id: 'student-demo-sunday',
+    studentId: '2026-SU01',
+    name: 'Bea Castillo',
+    email: 'sunday.student@student.edu',
+    component: 'CWTS-Sunday',
+    municipality: 'Naval',
+    facilitatorId: 'facilitator-demo-sunday',
+    facilitatorName: 'Prof. Elisa Cabal',
+    progress: 82,
+    assessments: 7,
+    status: 'active',
+    notes: 'Sunday CWTS learner using the shared CWTS activity sequence.',
+    updatedAt: now(),
+  },
+  {
     id: 'student-demo-lts',
     studentId: '2026-LT01',
     name: 'Daniel Flores',
     email: 'lts.student@student.edu',
     component: 'LTS',
     municipality: 'Naval',
-    facilitatorId: 'facilitator-1',
-    facilitatorName: 'Dr. Maria Elena Santos',
+    facilitatorId: 'facilitator-demo-lts',
+    facilitatorName: 'Prof. Daniel Flores',
     progress: 91,
     assessments: 8,
     status: 'active',
@@ -840,10 +966,10 @@ const DEFAULT_STUDENTS: NstpStudent[] = [
     studentId: '2026-MT01',
     name: 'Joshua Villanueva',
     email: 'mts.student@student.edu',
-    component: 'MTS (Army)',
+    component: 'MTS',
     municipality: 'Naval',
-    facilitatorId: 'facilitator-1',
-    facilitatorName: 'Dr. Maria Elena Santos',
+    facilitatorId: 'facilitator-demo-mts',
+    facilitatorName: 'Capt. Ramon Villanueva',
     progress: 86,
     assessments: 7,
     status: 'active',
@@ -872,8 +998,8 @@ const DEFAULT_STUDENTS: NstpStudent[] = [
     email: 'juan.delacruz@university.edu',
     component: 'LTS',
     municipality: 'Naval',
-    facilitatorId: 'facilitator-1',
-    facilitatorName: 'Dr. Maria Elena Santos',
+    facilitatorId: 'facilitator-demo-lts',
+    facilitatorName: 'Prof. Daniel Flores',
     progress: 92,
     assessments: 8,
     status: 'active',
@@ -885,10 +1011,10 @@ const DEFAULT_STUDENTS: NstpStudent[] = [
     studentId: '2024-1003',
     name: 'Anna Reyes',
     email: 'anna.reyes@university.edu',
-    component: 'MTS (Army)',
+    component: 'MTS',
     municipality: 'Naval',
-    facilitatorId: 'facilitator-1',
-    facilitatorName: 'Dr. Maria Elena Santos',
+    facilitatorId: 'facilitator-demo-mts',
+    facilitatorName: 'Capt. Ramon Villanueva',
     progress: 68,
     assessments: 5,
     status: 'pending',
@@ -900,14 +1026,14 @@ const DEFAULT_STUDENTS: NstpStudent[] = [
     studentId: '2024-1004',
     name: 'Carlos Garcia',
     email: 'carlos.garcia@university.edu',
-    component: 'MTS (Navy)',
+    component: 'CWTS-Coastguard',
     municipality: 'Naval',
-    facilitatorId: 'facilitator-1',
-    facilitatorName: 'Dr. Maria Elena Santos',
+    facilitatorId: 'facilitator-demo-coastguard',
+    facilitatorName: 'Lt. Adrian Mercado',
     progress: 78,
     assessments: 6,
     status: 'active',
-    notes: 'On track with periodic module completion.',
+    notes: 'On track with maritime safety and coastal service activities.',
     updatedAt: now(),
   },
   {
@@ -915,14 +1041,14 @@ const DEFAULT_STUDENTS: NstpStudent[] = [
     studentId: '2024-1005',
     name: 'Sofia Rodriguez',
     email: 'sofia.rodriguez@university.edu',
-    component: 'CWTS',
+    component: 'CWTS-Sunday',
     municipality: 'Naval',
-    facilitatorId: 'facilitator-1',
-    facilitatorName: 'Dr. Maria Elena Santos',
     progress: 95,
     assessments: 9,
     status: 'active',
-    notes: 'High performer with strong attendance.',
+    facilitatorId: 'facilitator-demo-sunday',
+    facilitatorName: 'Prof. Elisa Cabal',
+    notes: 'High performer in the Sunday CWTS learning group.',
     updatedAt: now(),
   },
   {
@@ -943,6 +1069,8 @@ const DEFAULT_STUDENTS: NstpStudent[] = [
 
 const DEFAULT_GRADES: NstpGradeRecord[] = [
   { studentId: '2026-CW01', prelim: 91, midterm: 89, final: 90, remarks: 'Passed', released: true, updatedAt: now() },
+  { studentId: '2026-CG01', prelim: 89, midterm: 87, final: 90, remarks: 'Passed', released: true, updatedAt: now() },
+  { studentId: '2026-SU01', prelim: 90, midterm: 88, final: 91, remarks: 'Passed', released: true, updatedAt: now() },
   { studentId: '2026-LT01', prelim: 92, midterm: 94, final: 91, remarks: 'Passed', released: true, updatedAt: now() },
   { studentId: '2026-MT01', prelim: 88, midterm: 90, final: 89, remarks: 'Passed', released: true, updatedAt: now() },
   { studentId: '2024-0001', prelim: 88, midterm: 90, final: 0, remarks: 'In Progress', released: true, updatedAt: now() },
@@ -960,6 +1088,10 @@ const DEFAULT_TRAINING_GROUPS: NstpTrainingGroup[] = [
   { id: 'tg-2024-veruen', schoolYear: 'SY 2023-2024', semester: '2nd Semester', component: 'CWTS', facilitatorName: 'VERUEN, DONALD L.', programHandles: ['BA-Econ 1A', 'BA-Econ 1B', 'BA-Econ 1C', 'BSBA FM 1D'], studentCount: 108, maxRecommendedLoad: 100, sourceDocument: 'Distribution of training group per facilitators-without no. 2024.docx' },
   { id: 'tg-2024-salomon', schoolYear: 'SY 2023-2024', semester: '2nd Semester', component: 'CWTS', facilitatorName: 'SALOMON, JULITO', programHandles: ['BSHM 1A', 'BSHM 1B'], studentCount: 119, maxRecommendedLoad: 100, sourceDocument: 'Distribution of training group per facilitators-without no. 2024.docx' },
   { id: 'tg-2025-naval', schoolYear: 'SY 2025-2026', semester: '1st Semester', component: 'CWTS', facilitatorName: 'Dr. Maria Elena Santos', facilitatorId: 'facilitator-1', municipality: 'Naval', programHandles: ['Municipality: Naval', 'All approved CWTS students'], studentCount: 0, maxRecommendedLoad: 100, sourceDocument: 'Director-created municipality assignment' },
+  { id: 'tg-2025-coastguard-naval', schoolYear: 'SY 2025-2026', semester: '1st Semester', component: 'CWTS-Coastguard', facilitatorName: 'Lt. Adrian Mercado', facilitatorId: 'facilitator-demo-coastguard', municipality: 'Naval', programHandles: ['Municipality: Naval', 'CWTS-Coastguard learners'], studentCount: 0, maxRecommendedLoad: 80, sourceDocument: 'Director-created component assignment' },
+  { id: 'tg-2025-sunday-naval', schoolYear: 'SY 2025-2026', semester: '1st Semester', component: 'CWTS-Sunday', facilitatorName: 'Prof. Elisa Cabal', facilitatorId: 'facilitator-demo-sunday', municipality: 'Naval', programHandles: ['Municipality: Naval', 'Sunday CWTS learners'], studentCount: 0, maxRecommendedLoad: 80, sourceDocument: 'Director-created component assignment' },
+  { id: 'tg-2025-lts-naval', schoolYear: 'SY 2025-2026', semester: '1st Semester', component: 'LTS', facilitatorName: 'Prof. Daniel Flores', facilitatorId: 'facilitator-demo-lts', municipality: 'Naval', programHandles: ['Municipality: Naval', 'LTS learners'], studentCount: 0, maxRecommendedLoad: 80, sourceDocument: 'Director-created component assignment' },
+  { id: 'tg-2025-mts-naval', schoolYear: 'SY 2025-2026', semester: '1st Semester', component: 'MTS', facilitatorName: 'Capt. Ramon Villanueva', facilitatorId: 'facilitator-demo-mts', municipality: 'Naval', programHandles: ['Municipality: Naval', 'MTS learners'], studentCount: 0, maxRecommendedLoad: 80, sourceDocument: 'Director-created component assignment' },
 ];
 
 export function ensureNstpSeedData() {
@@ -969,14 +1101,19 @@ export function ensureNstpSeedData() {
     localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(DEFAULT_ACCOUNTS));
   } else {
     const existingAccounts = safeJsonParse<NstpAccount[]>(localStorage.getItem(ACCOUNTS_KEY), []);
-    const migratedAccounts = existingAccounts.map((account: any) => ({
-      ...account,
-      role: account.role === 'speaker' ? 'facilitator' : account.role,
-      email: account.email === 'speaker@nstp.edu' ? 'facilitator@nstp.edu' : account.email,
-      password: account.password === 'speaker' ? 'facilitator' : account.password,
-      title: account.role === 'speaker' ? account.title || 'Municipal NSTP Facilitator' : account.title,
-      municipalities: account.role === 'speaker' && !account.municipalities ? ['Naval'] : account.municipalities,
-    })) as NstpAccount[];
+    const migratedAccounts = existingAccounts.map((account: any) => {
+      const role = account.role === 'speaker' ? 'facilitator' : account.role;
+      return {
+        ...account,
+        role,
+        email: account.email === 'speaker@nstp.edu' ? 'facilitator@nstp.edu' : account.email,
+        password: account.password === 'speaker' ? 'facilitator' : account.password,
+        title: account.role === 'speaker' ? account.title || 'Municipal NSTP Facilitator' : account.title,
+        municipalities: account.role === 'speaker' && !account.municipalities ? ['Naval'] : account.municipalities,
+        preferredComponent: account.preferredComponent ? normalizeComponent(account.preferredComponent) : account.preferredComponent,
+        component: account.component ? normalizeComponent(account.component) : role === 'facilitator' ? 'CWTS' : account.component,
+      };
+    }) as NstpAccount[];
     const enrichedAccounts = migratedAccounts.map((existingAccount) => {
       const defaultAccount = DEFAULT_ACCOUNTS.find((account) => account.email.toLowerCase() === existingAccount.email.toLowerCase());
       return defaultAccount ? { ...defaultAccount, ...existingAccount, studentId: existingAccount.studentId || defaultAccount.studentId } : existingAccount;
@@ -1008,7 +1145,10 @@ export function ensureNstpSeedData() {
   if (!localStorage.getItem(MODULES_KEY)) {
     localStorage.setItem(MODULES_KEY, JSON.stringify(DEFAULT_MODULES));
   } else {
-    const existingModules = safeJsonParse<NstpModule[]>(localStorage.getItem(MODULES_KEY), []);
+    const existingModules = safeJsonParse<NstpModule[]>(localStorage.getItem(MODULES_KEY), []).map((module: any) => ({
+      ...module,
+      component: module.component && module.component !== 'Common' ? normalizeComponent(module.component) : module.component,
+    }));
     const missingModules = DEFAULT_MODULES.filter((defaultModule) => {
       return !existingModules.some((module) => module.id === defaultModule.id);
     });
@@ -1021,7 +1161,10 @@ export function ensureNstpSeedData() {
   if (!localStorage.getItem(STUDENTS_KEY)) {
     localStorage.setItem(STUDENTS_KEY, JSON.stringify(DEFAULT_STUDENTS));
   } else {
-    const existingStudents = safeJsonParse<NstpStudent[]>(localStorage.getItem(STUDENTS_KEY), []);
+    const existingStudents = safeJsonParse<NstpStudent[]>(localStorage.getItem(STUDENTS_KEY), []).map((student: any) => ({
+      ...student,
+      component: student.component === 'Common Phase' ? 'Common Phase' : normalizeComponent(student.component),
+    }));
     const enrichedStudents = existingStudents.map((existingStudent) => {
       const defaultStudent = DEFAULT_STUDENTS.find((student) => student.email.toLowerCase() === existingStudent.email.toLowerCase());
       return defaultStudent ? { ...defaultStudent, ...existingStudent, studentId: existingStudent.studentId || defaultStudent.studentId } : existingStudent;
@@ -1053,7 +1196,10 @@ export function ensureNstpSeedData() {
   if (!localStorage.getItem(TRAINING_GROUPS_KEY)) {
     localStorage.setItem(TRAINING_GROUPS_KEY, JSON.stringify(DEFAULT_TRAINING_GROUPS));
   } else {
-    const existingGroups = safeJsonParse<NstpTrainingGroup[]>(localStorage.getItem(TRAINING_GROUPS_KEY), []);
+    const existingGroups = safeJsonParse<NstpTrainingGroup[]>(localStorage.getItem(TRAINING_GROUPS_KEY), []).map((group: any) => ({
+      ...group,
+      component: normalizeComponent(group.component),
+    }));
     const missingGroups = DEFAULT_TRAINING_GROUPS.filter((defaultGroup) => {
       return !existingGroups.some((group) => group.id === defaultGroup.id);
     });
@@ -1067,12 +1213,20 @@ export function ensureNstpSeedData() {
 export function loadAccounts(): NstpAccount[] {
   if (typeof window === 'undefined') return DEFAULT_ACCOUNTS;
   ensureNstpSeedData();
-  return safeJsonParse<NstpAccount[]>(localStorage.getItem(ACCOUNTS_KEY), DEFAULT_ACCOUNTS);
+  return safeJsonParse<NstpAccount[]>(localStorage.getItem(ACCOUNTS_KEY), DEFAULT_ACCOUNTS).map((account: any) => ({
+    ...account,
+    preferredComponent: account.preferredComponent ? normalizeComponent(account.preferredComponent) : account.preferredComponent,
+    component: account.component ? normalizeComponent(account.component) : account.component,
+  }));
 }
 
 export function saveAccounts(accounts: NstpAccount[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts.map((account: any) => ({
+    ...account,
+    preferredComponent: account.preferredComponent ? normalizeComponent(account.preferredComponent) : account.preferredComponent,
+    component: account.component ? normalizeComponent(account.component) : account.component,
+  }))));
   window.dispatchEvent(new CustomEvent('nstp-accounts-updated'));
 }
 
@@ -1091,23 +1245,35 @@ export function saveAssessments(assessments: NstpAssessment[]) {
 export function loadModules(): NstpModule[] {
   if (typeof window === 'undefined') return DEFAULT_MODULES;
   ensureNstpSeedData();
-  return safeJsonParse<NstpModule[]>(localStorage.getItem(MODULES_KEY), DEFAULT_MODULES);
+  return safeJsonParse<NstpModule[]>(localStorage.getItem(MODULES_KEY), DEFAULT_MODULES).map((module: any) => ({
+    ...module,
+    component: module.component && module.component !== 'Common' ? normalizeComponent(module.component) : module.component,
+  }));
 }
 
 export function saveModules(modules: NstpModule[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(MODULES_KEY, JSON.stringify(modules));
+  localStorage.setItem(MODULES_KEY, JSON.stringify(modules.map((module: any) => ({
+    ...module,
+    component: module.component && module.component !== 'Common' ? normalizeComponent(module.component) : module.component,
+  }))));
 }
 
 export function loadStudents(): NstpStudent[] {
   if (typeof window === 'undefined') return DEFAULT_STUDENTS;
   ensureNstpSeedData();
-  return safeJsonParse<NstpStudent[]>(localStorage.getItem(STUDENTS_KEY), DEFAULT_STUDENTS);
+  return safeJsonParse<NstpStudent[]>(localStorage.getItem(STUDENTS_KEY), DEFAULT_STUDENTS).map((student: any) => ({
+    ...student,
+    component: student.component === 'Common Phase' ? 'Common Phase' : normalizeComponent(student.component),
+  }));
 }
 
 export function saveStudents(students: NstpStudent[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STUDENTS_KEY, JSON.stringify(students));
+  localStorage.setItem(STUDENTS_KEY, JSON.stringify(students.map((student: any) => ({
+    ...student,
+    component: student.component === 'Common Phase' ? 'Common Phase' : normalizeComponent(student.component),
+  }))));
   window.dispatchEvent(new CustomEvent('nstp-students-updated'));
 }
 
@@ -1115,12 +1281,17 @@ export function loadComponentApplicationState(): ComponentApplicationState {
   if (typeof window === 'undefined') return DEFAULT_COMPONENT_APPLICATION_STATE;
 
   const saved = safeJsonParse<Partial<ComponentApplicationState>>(localStorage.getItem(COMPONENT_APPLICATION_STATE_KEY), {});
+  const savedSlotLimits = Object.entries((saved as any).slotLimits || {}).reduce<Partial<Record<NstpComponent, number>>>((acc, [component, value]) => {
+    const normalized = normalizeComponent(component);
+    acc[normalized] = (acc[normalized] || 0) + (Number(value) || 0);
+    return acc;
+  }, {});
   return {
     ...DEFAULT_COMPONENT_APPLICATION_STATE,
     ...saved,
     slotLimits: {
       ...DEFAULT_COMPONENT_APPLICATION_STATE.slotLimits,
-      ...(saved.slotLimits || {}),
+      ...savedSlotLimits,
     },
     qualifyingScore: typeof saved.qualifyingScore === 'number' ? Math.max(0, Math.min(100, saved.qualifyingScore)) : DEFAULT_COMPONENT_APPLICATION_STATE.qualifyingScore,
     applicationClosed: typeof saved.applicationClosed === 'boolean' ? saved.applicationClosed : DEFAULT_COMPONENT_APPLICATION_STATE.applicationClosed,
@@ -1129,18 +1300,32 @@ export function loadComponentApplicationState(): ComponentApplicationState {
 
 export function saveComponentApplicationState(state: ComponentApplicationState) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(COMPONENT_APPLICATION_STATE_KEY, JSON.stringify(state));
+  localStorage.setItem(COMPONENT_APPLICATION_STATE_KEY, JSON.stringify({
+    ...state,
+    slotLimits: NSTP_COMPONENTS.reduce<Record<NstpComponent, number>>((acc, component) => {
+      acc[component] = Number(state.slotLimits[component]) || 0;
+      return acc;
+    }, {} as Record<NstpComponent, number>),
+  }));
   window.dispatchEvent(new CustomEvent('nstp-component-state-updated'));
 }
 
 export function loadQualifyingExamResults(): QualifyingExamResult[] {
   if (typeof window === 'undefined') return [];
-  return safeJsonParse<QualifyingExamResult[]>(localStorage.getItem(QUALIFYING_RESULTS_KEY), []);
+  return safeJsonParse<QualifyingExamResult[]>(localStorage.getItem(QUALIFYING_RESULTS_KEY), []).map((result: any) => ({
+    ...result,
+    preferredComponent: normalizeComponent(result.preferredComponent),
+    assignedComponent: result.assignedComponent ? normalizeComponent(result.assignedComponent) : result.assignedComponent,
+  }));
 }
 
 export function saveQualifyingExamResults(results: QualifyingExamResult[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(QUALIFYING_RESULTS_KEY, JSON.stringify(results));
+  localStorage.setItem(QUALIFYING_RESULTS_KEY, JSON.stringify(results.map((result: any) => ({
+    ...result,
+    preferredComponent: normalizeComponent(result.preferredComponent),
+    assignedComponent: result.assignedComponent ? normalizeComponent(result.assignedComponent) : result.assignedComponent,
+  }))));
   window.dispatchEvent(new CustomEvent('nstp-qualifying-results-updated'));
 }
 
@@ -1256,12 +1441,18 @@ export function saveGradeRecords(records: NstpGradeRecord[]) {
 export function loadTrainingGroups(): NstpTrainingGroup[] {
   if (typeof window === 'undefined') return DEFAULT_TRAINING_GROUPS;
   ensureNstpSeedData();
-  return safeJsonParse<NstpTrainingGroup[]>(localStorage.getItem(TRAINING_GROUPS_KEY), DEFAULT_TRAINING_GROUPS);
+  return safeJsonParse<NstpTrainingGroup[]>(localStorage.getItem(TRAINING_GROUPS_KEY), DEFAULT_TRAINING_GROUPS).map((group: any) => ({
+    ...group,
+    component: normalizeComponent(group.component),
+  }));
 }
 
 export function saveTrainingGroups(groups: NstpTrainingGroup[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(TRAINING_GROUPS_KEY, JSON.stringify(groups));
+  localStorage.setItem(TRAINING_GROUPS_KEY, JSON.stringify(groups.map((group: any) => ({
+    ...group,
+    component: normalizeComponent(group.component),
+  }))));
   window.dispatchEvent(new CustomEvent('nstp-training-groups-updated'));
 }
 

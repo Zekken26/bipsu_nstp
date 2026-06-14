@@ -5,6 +5,7 @@ import {
   loadModules,
   loadPendingStudentRegistrations,
   loadStudents,
+  normalizeComponent,
   type BiliranMunicipality,
   type NstpAccount,
   type NstpAssessment,
@@ -75,7 +76,14 @@ export type FacilitatorWorkspace = {
   setGradingSettings: (value: GradingSettings) => void;
 };
 
+const componentAllowedForUser = (user: NstpAccount, component?: NstpStudent['component'] | NstpSession['component'] | 'All Components') => {
+  if (!user.component) return true;
+  if (!component || component === 'Common' || component === 'Common Phase' || component === 'All Components') return false;
+  return normalizeComponent(component) === normalizeComponent(user.component);
+};
+
 const isAssignedStudent = (user: NstpAccount, student: NstpStudent) => {
+  if (!componentAllowedForUser(user, student.component)) return false;
   const municipalities = user.municipalities || [];
   if (municipalities.length > 0) return Boolean(student.municipality && municipalities.includes(student.municipality));
   return student.facilitatorId === user.id;
@@ -128,15 +136,15 @@ export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorW
     setAssessments(loadAssessments().filter((assessment) => assessment.ownerId === user.id));
     setGradeRecords(loadGradeRecords());
     setModules(loadModules());
-    setAttendanceState(loadAttendanceSheets().filter((sheet) => sheet.facilitatorId === user.id));
+    setAttendanceState(loadAttendanceSheets().filter((sheet) => sheet.facilitatorId === user.id && componentAllowedForUser(user, sheet.component)));
     setDetailedGradesState(loadDetailedGrades().filter((grade) => grade.facilitatorId === user.id));
     setMaterialsState(loadLearningMaterials(user.id));
     setNoticesState(loadFacilitatorNotices(user.id));
     setActivityState(loadFacilitatorActivity(user.id));
-    setSessionsState(loadSessions().filter((session) => session.facilitatorId === user.id));
+    setSessionsState(loadSessions().filter((session) => session.facilitatorId === user.id && componentAllowedForUser(user, session.component)));
     setNotesState(loadInterventionNotes().filter((note) => note.facilitatorId === user.id));
     setGradingSettingsState(loadGradingSettings());
-  }, [user.id]);
+  }, [user]);
 
   useEffect(() => {
     if (!assignedMunicipalities.length) {
@@ -181,12 +189,12 @@ export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorW
   );
   const scopedAttendance = useMemo(
     () => attendance
-      .filter((sheet) => sheet.facilitatorId === user.id && municipalityVisible(sheet.municipality))
+      .filter((sheet) => sheet.facilitatorId === user.id && componentAllowedForUser(user, sheet.component) && municipalityVisible(sheet.municipality))
       .map((sheet) => ({ ...sheet, entries: sheet.entries.filter((entry) => visibleStudentIds.has(entry.studentId)) })),
     [attendance, municipalityVisible, user.id, visibleStudentIds],
   );
   const scopedSessions = useMemo(
-    () => sessions.filter((session) => session.facilitatorId === user.id && municipalityVisible(session.municipality)),
+    () => sessions.filter((session) => session.facilitatorId === user.id && componentAllowedForUser(user, session.component) && municipalityVisible(session.municipality)),
     [municipalityVisible, sessions, user.id],
   );
   const scopedDetailedGrades = useMemo(
@@ -206,7 +214,7 @@ export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorW
 
   const setAttendance = (value: AttendanceSession[]) => {
     const incoming = value
-      .filter((sheet) => sheet.facilitatorId === user.id && municipalityAllowed(sheet.municipality))
+      .filter((sheet) => sheet.facilitatorId === user.id && componentAllowedForUser(user, sheet.component) && municipalityAllowed(sheet.municipality))
       .map((sheet) => ({ ...sheet, entries: sheet.entries.filter((entry) => assignedStudentIds.has(entry.studentId)) }));
     const incomingIds = new Set(incoming.map((sheet) => sheet.id));
     const current = loadAttendanceSheets();
@@ -231,7 +239,7 @@ export default function useFacilitatorWorkspace(user: NstpAccount): FacilitatorW
     setNoticesState(value);
   };
   const setSessions = (value: NstpSession[]) => {
-    const incoming = value.filter((session) => session.facilitatorId === user.id && municipalityAllowed(session.municipality));
+    const incoming = value.filter((session) => session.facilitatorId === user.id && componentAllowedForUser(user, session.component) && municipalityAllowed(session.municipality));
     const incomingIds = new Set(incoming.map((session) => session.id));
     const current = loadSessions();
     const others = current.filter((session) => session.facilitatorId !== user.id || !incomingIds.has(session.id));

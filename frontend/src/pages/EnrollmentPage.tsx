@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, Heart, Anchor, CheckCircle, LogOut, Sparkles } from 'lucide-react';
+import { Anchor, BookOpen, CalendarDays, CheckCircle, Heart, Shield, Sparkles, Users } from 'lucide-react';
 import RoleShell from '../components/layout/RoleShell';
 
 const NSTP_COMPONENTS = [
@@ -18,12 +18,40 @@ const NSTP_COMPONENTS = [
     ]
   },
   {
+    id: 'cwts-coastguard',
+    name: 'CWTS-Coastguard',
+    fullName: 'Civic Welfare Training Service - Coastguard',
+    description: 'Maritime civic welfare track for coastal safety, rescue readiness, and community preparedness.',
+    icon: Anchor,
+    color: 'bg-blue-600',
+    benefits: [
+      'Maritime safety orientation',
+      'Coastal service activities',
+      'Rescue-readiness drills',
+      'Water safety awareness'
+    ]
+  },
+  {
+    id: 'cwts-sunday',
+    name: 'CWTS-Sunday',
+    fullName: 'Civic Welfare Training Service - Sunday',
+    description: 'Sunday schedule option for CWTS learners who cannot attend regular Saturday sessions.',
+    icon: CalendarDays,
+    color: 'bg-cyan-600',
+    benefits: [
+      'Shared CWTS learning materials',
+      'Shared CWTS assessment structure',
+      'Independent Sunday attendance',
+      'Separate grades and reports'
+    ]
+  },
+  {
     id: 'lts',
     name: 'LTS',
     fullName: 'Literacy Training Service',
     description: 'Programs designed to train students to become teachers of literacy and numeracy skills.',
-    icon: Shield,
-    color: 'bg-blue-600',
+    icon: BookOpen,
+    color: 'bg-indigo-600',
     benefits: [
       'Teaching literacy to communities',
       'Educational outreach programs',
@@ -32,10 +60,10 @@ const NSTP_COMPONENTS = [
     ]
   },
   {
-    id: 'mts-army',
-    name: 'MTS (Army)',
-    fullName: 'Military Training Service - Army',
-    description: 'Military training program to motivate, train, organize and mobilize students for national defense.',
+    id: 'mts',
+    name: 'MTS',
+    fullName: 'Military Training Service',
+    description: 'Military preparedness program for discipline, leadership, readiness, and national defense support.',
     icon: Shield,
     color: 'bg-orange-600',
     benefits: [
@@ -43,20 +71,6 @@ const NSTP_COMPONENTS = [
       'Leadership development',
       'Physical fitness programs',
       'National defense preparation'
-    ]
-  },
-  {
-    id: 'mts-navy',
-    name: 'MTS (Navy)',
-    fullName: 'Military Training Service - Navy',
-    description: 'Naval training program focused on maritime defense and coastal community service.',
-    icon: Anchor,
-    color: 'bg-indigo-600',
-    benefits: [
-      'Naval operations training',
-      'Maritime safety and security',
-      'Coastal community service',
-      'Leadership at sea'
     ]
   }
 ];
@@ -96,7 +110,7 @@ export default function EnrollmentPage({ user, onEnroll, onLogout }: { user: any
           <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-5 shadow-sm dark:border-slate-700 dark:from-slate-900 dark:to-slate-800">
             <p className="text-xs uppercase tracking-[0.16em] font-semibold text-emerald-700 mb-2">Readiness</p>
             <h3 className="text-lg font-bold text-slate-900 mb-1 dark:text-slate-100">General Education completed</h3>
-            <p className="text-sm text-slate-600 dark:text-slate-300">You can now officially enroll in CWTS, LTS, or MTS tracks.</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">You can now officially enroll in CWTS, CWTS-Coastguard, CWTS-Sunday, LTS, or MTS.</p>
           </div>
         </div>
 
@@ -116,16 +130,15 @@ export default function EnrollmentPage({ user, onEnroll, onLogout }: { user: any
         </div>
 
         {/* Component Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 gap-5 mb-8 md:grid-cols-2 xl:grid-cols-5">
           {NSTP_COMPONENTS.map((component) => {
             const Icon = component.icon;
             const isSelected = selectedComponent?.id === component.id;
 
             return (
-              <button
+              <article
                 key={component.id}
-                onClick={() => setSelectedComponent(component)}
-                className={`text-left p-6 rounded-2xl border-2 transition-all ${
+                className={`flex min-h-[28rem] flex-col rounded-2xl border-2 p-5 transition-all ${
                   isSelected
                     ? 'border-amber-500 bg-amber-50 shadow-lg dark:border-amber-400 dark:bg-amber-500/10'
                     : 'border-slate-200 bg-white hover:border-amber-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-amber-400'
@@ -146,7 +159,7 @@ export default function EnrollmentPage({ user, onEnroll, onLogout }: { user: any
 
                 <p className="text-sm text-slate-700 mb-4 dark:text-slate-300">{component.description}</p>
 
-                <div className="space-y-2">
+                <div className="flex-1 space-y-2">
                   {component.benefits.map((benefit, idx) => (
                     <div key={idx} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                       <div className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" />
@@ -154,7 +167,17 @@ export default function EnrollmentPage({ user, onEnroll, onLogout }: { user: any
                     </div>
                   ))}
                 </div>
-              </button>
+                <div className="mt-5 grid gap-2">
+                  <button type="button" onClick={() => setSelectedComponent(component)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-800">
+                    <Users className="h-4 w-4" />
+                    Learn More
+                  </button>
+                  <button type="button" onClick={() => { setSelectedComponent(component); onEnroll(component.name); }} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-800">
+                    <Sparkles className="h-4 w-4" />
+                    Enter Module
+                  </button>
+                </div>
+              </article>
             );
           })}
         </div>

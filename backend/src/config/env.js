@@ -15,6 +15,7 @@ export const env = {
   port: Number(process.env.PORT || 8080),
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret: process.env.JWT_SECRET,
+  jwtExpiresInSeconds: toNumber(process.env.JWT_EXPIRES_IN_SECONDS, 7 * 24 * 60 * 60),
   corsOrigins: toCsv(process.env.CORS_ORIGIN, 'http://localhost:5173,http://127.0.0.1:5173'),
   rateLimit: {
     windowMs: toNumber(process.env.RATE_LIMIT_WINDOW_MS, 60_000),

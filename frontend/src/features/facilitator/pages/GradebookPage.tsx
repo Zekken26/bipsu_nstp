@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, ClipboardCheck, Download, GraduationCap, Save, SlidersHorizontal, TrendingUp, Users } from 'lucide-react';
+import { BarChart3, ClipboardCheck, GraduationCap, Save, SlidersHorizontal, TrendingUp, Users } from 'lucide-react';
 import { addAudit, finalGrade, type GradingSettings } from '../../../data/workflowData';
 import type { FacilitatorWorkspace } from '../hooks/useFacilitatorWorkspace';
 import type { FacilitatorGradeEntry, GradeStatus } from '../types';
 import { EmptyState, MunicipalityScopeBanner, PageIntro, Pager, Panel, SearchField, StatCard, StatusBadge } from '../components/FacilitatorUI';
+import { NSTP_COMPONENTS } from '../../../data/nstpData';
+import ExportButtonGroup from '../../../components/common/ExportButtonGroup';
+import { exportRows, type ExportColumn, type ExportFormat } from '../../../utils/exportRecords';
 
 const statuses: GradeStatus[] = ['Draft', 'In Progress', 'Submitted', 'Reviewed', 'Released'];
-const tracks = ['All Assigned', 'Common Phase', 'CWTS', 'LTS', 'MTS'] as const;
+const tracks = ['All Assigned', ...NSTP_COMPONENTS] as const;
 type Track = typeof tracks[number];
 const fields: Array<{ key: 'attendance' | 'assessments' | 'activities' | 'participation' | 'majorExam'; label: string }> = [
   { key: 'attendance', label: 'Attendance' },
@@ -55,9 +58,7 @@ export default function GradebookPage({ workspace, notify }: { workspace: Facili
     const query = search.trim().toLowerCase();
     return workspace.students.filter((student) => {
       const grade = drafts[student.id];
-      const componentMatch = track === 'All Assigned' || track === 'Common Phase' ||
-        (track === 'MTS' && student.component.toUpperCase().startsWith('MTS')) ||
-        student.component === track;
+      const componentMatch = track === 'All Assigned' || student.component === track;
       return (!query || `${student.name} ${student.studentId} ${student.component}`.toLowerCase().includes(query)) &&
         (statusFilter === 'all' || grade?.status === statusFilter) &&
         componentMatch;
@@ -108,44 +109,69 @@ export default function GradebookPage({ workspace, notify }: { workspace: Facili
     notify('Gradebook records saved. Released grades are visible to students.');
   };
 
-  const exportGradebook = async () => {
-    const XLSX = await import('xlsx');
+  const exportGradebook = async (format: ExportFormat) => {
     const rows = filtered.map((student) => {
       const grade = drafts[student.id] || entryFor(student.id, workspace);
-      return [
-        student.studentId,
-        student.name,
-        student.component,
-        grade.attendance ?? '',
-        grade.assessments ?? '',
-        grade.activities ?? '',
-        grade.participation ?? '',
-        grade.majorExam ?? '',
-        finalGrade(grade, settings) ?? '',
-        grade.overrideFinal ?? '',
-        grade.status,
-        grade.feedback,
-      ];
+      return {
+        studentId: student.studentId || student.id,
+        studentName: student.name,
+        component: student.component,
+        municipality: student.municipality || '',
+        facilitator: workspace.user.name,
+        assessmentTitle: 'Facilitator Gradebook',
+        attendance: grade.attendance ?? '',
+        assessments: grade.assessments ?? '',
+        activities: grade.activities ?? '',
+        participation: grade.participation ?? '',
+        majorExam: grade.majorExam ?? '',
+        score: finalGrade(grade, settings) ?? '',
+        totalPoints: 100,
+        percentage: finalGrade(grade, settings) ?? '',
+        override: grade.overrideFinal ?? '',
+        status: grade.status,
+        remarks: grade.feedback,
+        submittedAt: grade.updatedAt,
+        gradedAt: grade.updatedAt,
+      };
     });
     if (!rows.length) {
       notify('No gradebook records match the current filters.');
       return;
     }
-    const book = XLSX.utils.book_new();
-    const sheet = XLSX.utils.aoa_to_sheet([['Student ID', 'Student Name', 'Component', 'Attendance', 'Assessments', 'Activities / Outputs', 'Participation', 'Major Exam', 'Final Grade', 'Override', 'Workflow Status', 'Feedback'], ...rows]);
-    sheet['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 13 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 34 }];
-    if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };
-    const settingsSheet = XLSX.utils.aoa_to_sheet([
-      ['Grading Category', 'Weight'],
-      ...fields.map((field) => [field.label, `${settings[field.key]}%`]),
-      ['Manual Override Allowed', settings.allowOverride ? 'Yes' : 'No'],
+    const columns: ExportColumn<typeof rows[number]>[] = [
+      { header: 'Student Name', value: 'studentName', width: 28 },
+      { header: 'Student ID', value: 'studentId', width: 18 },
+      { header: 'Component', value: 'component', width: 18 },
+      { header: 'Municipality', value: 'municipality', width: 18 },
+      { header: 'Facilitator', value: 'facilitator', width: 28 },
+      { header: 'Assessment Title', value: 'assessmentTitle', width: 26 },
+      { header: 'Score', value: 'score', width: 12 },
+      { header: 'Total Points', value: 'totalPoints', width: 14 },
+      { header: 'Percentage', value: 'percentage', width: 14 },
+      { header: 'Remarks', value: 'remarks', width: 34 },
+      { header: 'Submission Date', value: (row) => row.submittedAt ? new Date(row.submittedAt).toLocaleString() : '', width: 22 },
+      { header: 'Grading Date', value: (row) => row.gradedAt ? new Date(row.gradedAt).toLocaleString() : '', width: 22 },
+      { header: 'Status', value: 'status', width: 16 },
+    ];
+    await exportRows(format, rows, columns, {
+      title: 'Facilitator Gradesheet',
+      dataType: 'Gradesheet',
+      scope: track,
+      generatedBy: workspace.user.name,
+      filters: { Municipality: workspace.activeMunicipality, Component: track, Status: statusFilter, Search: search || 'All' },
+      signatureLines: ['Prepared by', 'Reviewed by', 'NSTP Director'],
+    }, [
+      {
+        name: 'Computation Settings',
+        rows: [
+          ['Grading Category', 'Weight'],
+          ...fields.map((field) => [field.label, `${settings[field.key]}%`]),
+          ['Manual Override Allowed', settings.allowOverride ? 'Yes' : 'No'],
+        ],
+      },
     ]);
-    XLSX.utils.book_append_sheet(book, sheet, 'Gradebook Records');
-    XLSX.utils.book_append_sheet(book, settingsSheet, 'Computation Settings');
-    const exportTrack = track.toLowerCase().replace(/\s+/g, '-');
-    XLSX.writeFile(book, `gradebook-${exportTrack}-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    addAudit(workspace.user, 'Gradebook exported', 'Gradebook Export', track, 'Excel export generated.');
-    notify('Gradebook Excel export generated.');
+    addAudit(workspace.user, 'Gradebook exported', 'Gradebook Export', track, `${format.toUpperCase()} export generated.`);
+    notify(`Gradebook ${format.toUpperCase()} export generated.`);
   };
 
   return (
@@ -156,7 +182,7 @@ export default function GradebookPage({ workspace, notify }: { workspace: Facili
         description="Encode scoped academic records using the approved grading breakdown, inspect performance trends, and prepare grades for formal review and release."
         actions={(
           <>
-            <button type="button" onClick={exportGradebook} className="inline-flex items-center gap-2 rounded-xl border border-[#dbe5f2] bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 dark:border-blue-500/30 dark:bg-slate-950 dark:text-blue-200"><Download className="h-4 w-4" /> Export Excel</button>
+            <ExportButtonGroup compact label="Export gradebook" onExport={exportGradebook} disabled={!filtered.length} />
             <button type="button" onClick={saveGrades} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-700/15 transition hover:bg-blue-800"><Save className="h-4 w-4" /> Save grades</button>
           </>
         )}

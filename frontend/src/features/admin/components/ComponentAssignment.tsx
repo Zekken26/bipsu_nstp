@@ -104,12 +104,10 @@ export default function ComponentAssignment() {
     const nonQualifiedResults = sortedResults.filter((result: any) => result.score < qualifyingScore && !result.adminOverride);
 
     // Track slots filled per component
-    const slotsUsed: Record<string, number> = {
-      'CWTS': 0,
-      'LTS': 0,
-      'MTS (Army)': 0,
-      'MTS (Navy)': 0
-    };
+    const slotsUsed = COMPONENTS.reduce<Record<string, number>>((acc, component) => {
+      acc[component] = 0;
+      return acc;
+    }, {});
 
     const newAssignments: Record<string, any> = {};
     const unassignedQualified: any[] = [];

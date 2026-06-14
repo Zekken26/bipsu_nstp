@@ -3,6 +3,8 @@ import { BarChart3, CalendarCheck, ClipboardCheck, GraduationCap, TrendingUp } f
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { calculateFinalGrade, type FacilitatorWorkspace } from '../hooks/useFacilitatorWorkspace';
 import { EmptyState, PageIntro, Pager, Panel, StatCard, StatusBadge } from '../components/FacilitatorUI';
+import ExportButtonGroup from '../../../components/common/ExportButtonGroup';
+import { exportRows, type ExportFormat } from '../../../utils/exportRecords';
 
 export default function FacilitatorReportsPage({ workspace }: { workspace: FacilitatorWorkspace }) {
   const [gradePage, setGradePage] = useState(1);
@@ -35,6 +37,31 @@ export default function FacilitatorReportsPage({ workspace }: { workspace: Facil
     return { student, grade, final: calculateFinalGrade(grade) };
   }).filter((row) => row.grade);
   const displayedGrades = gradeRows.slice((gradePage - 1) * gradePageSize, gradePage * gradePageSize);
+  const exportReports = async (format: ExportFormat) => {
+    const rows = [
+      { metric: 'Attendance Rate', value: `${presentRate}%`, detail: 'Present across recorded sessions' },
+      { metric: 'Grade Completion', value: `${completedGrades}/${workspace.students.length}`, detail: 'Completed or released grades' },
+      { metric: 'Assessment Submissions', value: submissionData.reduce((total, item) => total + item.submissions, 0), detail: 'Recorded submissions' },
+      { metric: 'Average Student Progress', value: `${workspace.students.length ? Math.round(workspace.students.reduce((sum, item) => sum + item.progress, 0) / workspace.students.length) : 0}%`, detail: 'Assigned student scope' },
+    ];
+    await exportRows(format, rows, [
+      { header: 'Metric', value: 'metric', width: 28 },
+      { header: 'Value', value: 'value', width: 16 },
+      { header: 'Detail', value: 'detail', width: 40 },
+    ], {
+      title: 'Facilitator Reports Summary',
+      dataType: 'FacilitatorReports',
+      scope: `${workspace.user.component || 'All'}-${workspace.activeMunicipality}`,
+      generatedBy: workspace.user.name,
+      filters: { Municipality: workspace.activeMunicipality, Component: workspace.user.component || 'All' },
+      signatureLines: ['Prepared by', 'Reviewed by'],
+    }, [
+      { name: 'Attendance Source', rows: [['Date', 'Topic', 'Present', 'Absent', 'Late'], ...attendanceRows.map((row) => [row.date, row.topic, row.present, row.absent, row.late])], columnWidths: [16, 34, 12, 12, 12] },
+      { name: 'Progress Bands', rows: [['Band', 'Students'], ...progressData.map((row) => [row.name, row.value])], columnWidths: [18, 14] },
+      { name: 'Assessment Submissions', rows: [['Assessment', 'Submissions'], ...submissionData.map((row) => [row.name, row.submissions])], columnWidths: [34, 16] },
+      { name: 'Grade Completion', rows: [['Student ID', 'Student Name', 'Component', 'Final Grade', 'Status'], ...gradeRows.map(({ student, grade, final }) => [student.studentId || student.id, student.name, student.component, final ?? '', grade?.status || ''])], columnWidths: [18, 28, 18, 14, 16] },
+    ]);
+  };
 
   return (
     <>
@@ -42,6 +69,7 @@ export default function FacilitatorReportsPage({ workspace }: { workspace: Facil
         eyebrow="Monitoring and Evaluation"
         title="Facilitator Reports"
         description="Reports are generated only from your assigned student scope and facilitator-entered class records."
+        actions={<ExportButtonGroup compact label="Export reports" onExport={exportReports} />}
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Attendance Report" value={`${presentRate}%`} detail="Present across recorded sessions" icon={CalendarCheck} tone="emerald" progress={presentRate} />

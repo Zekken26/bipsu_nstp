@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BadgeCheck, Building2, Download, Filter, KeyRound, LockKeyhole, Mail, MoreVertical, Pencil, Plus, Save, Search, Trash2, Users, X } from 'lucide-react';
-import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, loadAccounts, loadStudents, NstpAccount, saveAccounts } from '../../../data/nstpData';
+import { BadgeCheck, Building2, Filter, KeyRound, LockKeyhole, Mail, MoreVertical, Pencil, Plus, Save, Search, Trash2, Users, X } from 'lucide-react';
+import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, NSTP_COMPONENTS, loadAccounts, loadStudents, normalizeComponent, NstpAccount, saveAccounts } from '../../../data/nstpData';
 import { Pager, useModalEscape } from '../../facilitator/components/FacilitatorUI';
+import ExportButtonGroup from '../../../components/common/ExportButtonGroup';
+import { exportRows, type ExportColumn, type ExportFormat } from '../../../utils/exportRecords';
 
 type Props = {
   admin: NstpAccount;
@@ -16,6 +18,7 @@ const emptyFacilitator = (): NstpAccount => ({
   title: 'NSTP Facilitator',
   bio: 'Facilitates assigned municipality groups, monitors attendance, validates outputs, and records grades.',
   municipalities: ['Naval'],
+  component: 'CWTS',
 });
 
 const initials = (name: string) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
@@ -53,11 +56,12 @@ export default function FacilitatorManagement({ admin }: Props) {
 
   const assignedStudentsFor = (facilitator: NstpAccount) => students.filter((student) => {
     const studentMunicipality = student.municipality as BiliranMunicipality | undefined;
-    return student.facilitatorId === facilitator.id || Boolean(studentMunicipality && facilitator.municipalities?.includes(studentMunicipality));
+    const componentMatches = facilitator.component ? student.component !== 'Common Phase' && normalizeComponent(student.component) === normalizeComponent(facilitator.component) : true;
+    return componentMatches && (student.facilitatorId === facilitator.id || Boolean(studentMunicipality && facilitator.municipalities?.includes(studentMunicipality)));
   });
 
   const filteredFacilitators = facilitators.filter((facilitator) => {
-    const haystack = `${facilitator.name} ${facilitator.email} ${(facilitator.municipalities || []).join(' ')}`.toLowerCase();
+    const haystack = `${facilitator.name} ${facilitator.email} ${facilitator.component || ''} ${(facilitator.municipalities || []).join(' ')}`.toLowerCase();
     const matchesQuery = haystack.includes(query.toLowerCase());
     const matchesMunicipality = municipalityFilter === 'all' || facilitator.municipalities?.includes(municipalityFilter as BiliranMunicipality);
     return matchesQuery && matchesMunicipality;
@@ -97,6 +101,7 @@ export default function FacilitatorManagement({ admin }: Props) {
       ...form,
       role: 'facilitator' as const,
       municipalities: form.municipalities?.length ? form.municipalities : ['Naval' as BiliranMunicipality],
+      component: form.component ? normalizeComponent(form.component) : 'CWTS',
     };
     const nextFacilitators = facilitators.some((facilitator) => facilitator.id === nextFacilitator.id)
       ? facilitators.map((facilitator) => (facilitator.id === nextFacilitator.id ? nextFacilitator : facilitator))
@@ -105,6 +110,28 @@ export default function FacilitatorManagement({ admin }: Props) {
     setSelectedId(nextFacilitator.id);
     setEditingId(null);
     setForm(null);
+  };
+
+  const exportFacilitators = async (format: ExportFormat, rows = filteredFacilitators, scope = 'Filtered') => {
+    if (!rows.length) return;
+    const columns: ExportColumn<NstpAccount>[] = [
+      { header: 'Facilitator Name', value: 'name', width: 28 },
+      { header: 'Email', value: 'email', width: 30 },
+      { header: 'Component', value: (row) => row.component || 'All', width: 18 },
+      { header: 'Municipalities', value: (row) => (row.municipalities || []).join('; '), width: 40 },
+      { header: 'Assigned Students', value: (row) => assignedStudentsFor(row).length, width: 18 },
+      { header: 'Title', value: (row) => row.title || '', width: 22 },
+      { header: 'Status', value: () => 'Active', width: 14 },
+      { header: 'Bio', value: (row) => row.bio || '', width: 42 },
+    ];
+    await exportRows(format, rows, columns, {
+      title: 'Facilitator Account and Workload Records',
+      dataType: 'FacilitatorRecords',
+      scope,
+      generatedBy: admin.name,
+      filters: { Search: query || 'All', Municipality: municipalityFilter },
+      signatureLines: ['Prepared by', 'Reviewed by', 'NSTP Director'],
+    });
   };
 
   return (
@@ -163,10 +190,7 @@ export default function FacilitatorManagement({ admin }: Props) {
                 Bulk Actions
               </button>
             </div>
-            <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-blue-50 dark:border-slate-800 dark:text-slate-100">
-              <Download className="h-4 w-4" />
-              Export
-            </button>
+            <ExportButtonGroup compact label="Export facilitators" onExport={(format) => exportFacilitators(format, filteredFacilitators, 'Filtered')} disabled={filteredFacilitators.length === 0} />
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
@@ -271,7 +295,7 @@ export default function FacilitatorManagement({ admin }: Props) {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{editingId === 'new' ? 'Create Account' : 'Edit Account'}</p>
                 <h3 className="text-2xl font-semibold text-slate-950 dark:text-white">{editingId === 'new' ? 'Create Facilitator' : 'Edit Facilitator'}</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Define login credentials and municipality coverage.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Define login credentials, component assignment, and municipality coverage.</p>
               </div>
               <button onClick={closeEditor} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
             </div>
@@ -279,6 +303,7 @@ export default function FacilitatorManagement({ admin }: Props) {
               <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Name</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></label>
               <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Email</span><div className="relative"><Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="w-full rounded-xl border border-slate-300 py-3 pl-9 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></div></label>
               <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Password</span><div className="relative"><KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input type="text" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="w-full rounded-xl border border-slate-300 py-3 pl-9 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></div></label>
+              <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>NSTP Component</span><select value={form.component || 'CWTS'} onChange={(event) => setForm({ ...form, component: normalizeComponent(event.target.value) })} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900">{NSTP_COMPONENTS.map((component) => <option key={component} value={component}>{component}</option>)}</select></label>
               <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Title</span><input value={form.title || ''} onChange={(event) => setForm({ ...form, title: event.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></label>
               <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200 md:col-span-2"><span>Bio</span><textarea value={form.bio || ''} onChange={(event) => setForm({ ...form, bio: event.target.value })} rows={3} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></label>
               <div className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200 md:col-span-2">

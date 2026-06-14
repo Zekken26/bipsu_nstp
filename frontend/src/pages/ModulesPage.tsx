@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Clock, CheckCircle, FileText, Video, Search, Sparkles, Gauge, ChevronRight, Plus, Trash2, Save, GripVertical, Play, ArrowLeft, ArrowUp, ArrowDown, Copy, Wrench } from 'lucide-react';
-import { createEmptyModule, loadAssessments, loadModules, loadStudents, safeJsonParse, saveModules, type NstpModule, type NstpModuleSection } from '../data/nstpData';
+import { contentComponentFor, createEmptyModule, loadAssessments, loadModules, loadStudents, safeJsonParse, saveModules, type NstpModule, type NstpModuleSection } from '../data/nstpData';
 
 const MODULE_VISIBILITY_KEY = 'nstp-module-visibility';
 
@@ -138,12 +138,13 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   }, [selectedModule, students]);
 
   const studentComponent = user.component || user.preferredComponent || 'Common';
+  const studentContentComponent = studentComponent === 'Common' ? 'Common' : contentComponentFor(studentComponent);
   const studentVisibleModules = isAdmin
     ? modules
     : modules.filter((module) => {
       const published = moduleVisibility[module.id] ?? true;
       const moduleComponent = module.component || 'Common';
-      return published && (moduleComponent === 'Common' || moduleComponent === studentComponent);
+      return published && (moduleComponent === 'Common' || moduleComponent === studentContentComponent);
     });
   const nextRecommendedModule = studentVisibleModules.find((module, index) => isModuleUnlocked(studentVisibleModules, index) && getModuleProgress(module) < 100) || studentVisibleModules[0] || null;
 

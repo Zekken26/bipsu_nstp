@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FileQuestion, ListChecks, Send } from 'lucide-react';
 import AssessmentManager from '../../assessments/components/AssessmentManager';
+import { usesCwtsContent } from '../../../data/nstpData';
 import type { FacilitatorWorkspace } from '../hooks/useFacilitatorWorkspace';
 import { EmptyState, PageIntro, Pager, Panel, StatusBadge } from '../components/FacilitatorUI';
 import CwtsAssessmentWorkspace from '../../cwts/components/CwtsAssessmentWorkspace';
@@ -69,13 +70,15 @@ export default function FacilitatorAssessmentsPage({ workspace }: { workspace: F
       <Panel>
         <AssessmentManager user={workspace.user} role="facilitator" />
       </Panel>
-      <CwtsAssessmentWorkspace
-        role="facilitator"
-        user={workspace.user}
-        students={workspace.students}
-        title="CWTS Performance Task Workspace"
-        description="Manage CWTS 1 and CWTS 2 reflections, journals, reports, videos, community immersion documents, proposals, and performance tasks extracted from the approved CWTS syllabi."
-      />
+      {usesCwtsContent(workspace.user.component) ? (
+        <CwtsAssessmentWorkspace
+          role="facilitator"
+          user={workspace.user}
+          students={workspace.students}
+          title={workspace.user.component === 'CWTS-Sunday' ? 'CWTS-Sunday Performance Task Workspace' : 'CWTS Performance Task Workspace'}
+          description={workspace.user.component === 'CWTS-Sunday' ? 'Manage Sunday CWTS learners with the shared CWTS 1 and CWTS 2 assessment structure while keeping submissions and grades separate.' : 'Manage CWTS 1 and CWTS 2 reflections, journals, reports, videos, community immersion documents, proposals, and performance tasks extracted from the approved CWTS syllabi.'}
+        />
+      ) : null}
     </>
   );
 }

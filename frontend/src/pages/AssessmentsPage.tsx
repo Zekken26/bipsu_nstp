@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { FileText, CheckCircle, Clock, Award, TrendingUp, History, AlertTriangle, ArrowLeft, ShieldCheck } from 'lucide-react';
-import { loadAssessments, loadModules, NstpAssessment, type NstpComponent, type NstpModule } from '../data/nstpData';
+import { contentComponentFor, loadAssessments, loadModules, NstpAssessment, type NstpComponent, type NstpModule } from '../data/nstpData';
 
 type AssessmentAudience = NstpComponent | 'MTS' | 'Common' | 'Common Phase';
 
 const componentFromUser = (user: any): NstpComponent | undefined => {
   if (user.component) return user.component;
   if (user.demoStage === 'cwts') return 'CWTS';
+  if (user.demoStage === 'cwts-coastguard') return 'CWTS-Coastguard';
+  if (user.demoStage === 'cwts-sunday') return 'CWTS-Sunday';
   if (user.demoStage === 'lts') return 'LTS';
-  if (user.demoStage === 'mts') return 'MTS (Army)';
+  if (user.demoStage === 'mts') return 'MTS';
   return undefined;
 };
 
@@ -25,8 +27,7 @@ const canAccessAssessment = (assessment: NstpAssessment, modules: NstpModule[], 
 
   if (!classified) return audience === 'Common' || audience === 'Common Phase';
   if (audience === 'Common' || audience === 'Common Phase') return true;
-  if (audience === 'MTS') return component?.startsWith('MTS');
-  return audience === component;
+  return component ? audience === contentComponentFor(component) : false;
 };
 
 export default function AssessmentsPage({ user, onBack, studentId }: { user: any; onBack?: () => void; studentId?: string }) {

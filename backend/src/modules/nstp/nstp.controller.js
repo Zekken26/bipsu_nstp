@@ -5,6 +5,17 @@ import { assertPayloadMunicipalityAllowed } from '../../middleware/authGuard.js'
 import { applyFacilitatorMunicipalityScope } from '../../utils/facilitatorScope.js';
 import { assertAllowedCollection, validateCollectionPayload } from '../../utils/nstpValidation.js';
 import { getAdminSummary, getDatabaseStatus, listCollection, upsertCollectionRecord } from './nstp.service.js';
+import {
+  EXPORTABLE_COLLECTIONS,
+  buildExportDataset,
+  buildExportFilename,
+  exportScopeFromQuery,
+  extractExportFilters,
+  renderCsvExport,
+  renderExcelXmlExport,
+  renderHtmlExport,
+  renderJsonExport,
+} from './nstpExport.service.js';
 
 export async function getDbTest(req, res) {
   const status = await getDatabaseStatus();
@@ -56,19 +67,19 @@ export async function upsertNstpCollectionRecord(req, res) {
 }
 
 export async function createNstpExportJob(req, res) {
-  assertAllowedCollection(req.params.collection);
+  if (req.params.collection !== 'all' && !EXPORTABLE_COLLECTIONS.includes(req.params.collection)) {
+    assertAllowedCollection(req.params.collection);
+  }
 
   const job = enqueueJob('reportExports', async () => {
-    const sourceRows = await listCollection(req.params.collection);
-    const rows = ['students', 'grades'].includes(req.params.collection)
-      ? applyFacilitatorMunicipalityScope(sourceRows, req)
-      : sourceRows;
+    const dataset = await buildExportDataset(req.params.collection, req, extractExportFilters(req.query));
     return {
       collection: req.params.collection,
-      rowCount: rows.length,
+      rowCount: dataset.rowCount,
       generatedAt: new Date().toISOString(),
     };
   });
+  addAuditEntry(req, 'export.queued', req.params.collection, job.id, `Queued export for ${req.params.collection}.`);
 
   return res.status(202).json({
     success: true,
@@ -78,5 +89,53 @@ export async function createNstpExportJob(req, res) {
       message: 'Export generation has been queued. Check the queue job endpoint for status.',
     },
   });
-  addAuditEntry(req, 'export.queued', req.params.collection, job.id, `Queued export for ${req.params.collection}.`);
+}
+
+export async function downloadNstpExport(req, res) {
+  const collection = req.params.collection;
+  if (collection !== 'all' && !EXPORTABLE_COLLECTIONS.includes(collection)) {
+    assertAllowedCollection(collection);
+  }
+
+  const format = String(req.query.format || 'csv').toLowerCase();
+  const normalizedFormat = format === 'xlsx' ? 'excel' : format;
+  const supported = new Set(['csv', 'json', 'excel', 'html', 'print']);
+  if (!supported.has(normalizedFormat)) {
+    return sendError(res, 'Unsupported export format.', 400, { supported: [...supported, 'xlsx'] });
+  }
+
+  const filters = extractExportFilters(req.query);
+  const scope = exportScopeFromQuery(req.query, req.user?.role === 'admin' ? 'AdminSuperAccess' : req.user?.role || 'Scoped');
+  const dataset = await buildExportDataset(collection, req, filters);
+  const metadata = {
+    title: `NSTP ${collection === 'all' ? 'All Records' : collection} Export`,
+    dataType: collection,
+    scope,
+    generatedBy: req.user?.name || req.user?.email || req.user?.id || req.user?.role || 'System user',
+    filters,
+  };
+
+  const content = normalizedFormat === 'json'
+    ? renderJsonExport(dataset, metadata)
+    : normalizedFormat === 'excel'
+      ? renderExcelXmlExport(dataset, metadata)
+      : normalizedFormat === 'html' || normalizedFormat === 'print'
+        ? renderHtmlExport(dataset, metadata)
+        : renderCsvExport(dataset);
+
+  const filename = buildExportFilename(collection, scope, normalizedFormat);
+  const contentType = normalizedFormat === 'json'
+    ? 'application/json; charset=utf-8'
+    : normalizedFormat === 'excel'
+      ? 'application/vnd.ms-excel; charset=utf-8'
+      : normalizedFormat === 'html' || normalizedFormat === 'print'
+        ? 'text/html; charset=utf-8'
+        : 'text/csv; charset=utf-8';
+
+  addAuditEntry(req, 'export.downloaded', collection, filename, `${dataset.rowCount} row(s) exported as ${normalizedFormat.toUpperCase()} with scope ${scope}.`);
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('X-NSTP-Export-Rows', String(dataset.rowCount));
+  res.setHeader('X-NSTP-Export-Scope', scope);
+  return res.send(content);
 }

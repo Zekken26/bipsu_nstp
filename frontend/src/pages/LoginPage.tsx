@@ -36,16 +36,27 @@ import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, ensureNstpSeedData, loadAc
 import { addAudit } from '../data/workflowData';
 import splashImage from '../assets/images/splash.png';
 import { useModalEscape } from '../features/facilitator/components/FacilitatorUI';
+import { apiErrorMessage, apiRequest, saveAuthSession } from '../services/apiClient';
+
+type AuthResponse = {
+  success: boolean;
+  data: {
+    token: string;
+    user: any;
+    source: 'database' | 'demo-fallback';
+  };
+};
 
 type LoginMode = 'login' | 'register';
-type ComponentKey = 'CWTS' | 'LTS' | 'MTS';
+type ComponentKey = 'CWTS' | 'CWTS-Coastguard' | 'CWTS-Sunday' | 'LTS' | 'MTS';
 type PublicView = 'home' | 'nstp' | 'school' | 'portal' | 'feature' | 'preview' | 'component';
 
 const componentCards = [
   { label: 'CWTS', title: 'Civic Welfare Training Service', copy: 'Community development, health, environment, disaster readiness, and service-learning projects.', icon: Users, accent: '#1856c8', fill: '#002147', value: 34 },
+  { label: 'CWTS-Coastguard', title: 'CWTS Coastguard', copy: 'Maritime safety, coastal service, rescue readiness, and water-safety awareness.', icon: Cloud, accent: '#0e7490', fill: '#155e75', value: 12 },
+  { label: 'CWTS-Sunday', title: 'CWTS Sunday', copy: 'Sunday CWTS schedule using the shared CWTS learning and assessment structure.', icon: CalendarDays, accent: '#0284c7', fill: '#075985', value: 14 },
   { label: 'LTS', title: 'Literacy Training Service', copy: 'Literacy, numeracy, tutoring, and learning support for partner schools and communities.', icon: BookOpen, accent: '#1856c8', fill: '#0b4ea2', value: 28 },
-  { label: 'MTS Army', title: 'Military Training Service - Army', copy: 'Discipline, leadership, physical readiness, and national defense preparation.', icon: ShieldCheck, accent: '#d4a719', fill: '#e5b73b', value: 22 },
-  { label: 'MTS Navy', title: 'Military Training Service - Navy', copy: 'Maritime awareness, coastal service, naval discipline, and emergency coordination.', icon: Award, accent: '#426db4', fill: '#7092c8', value: 16 },
+  { label: 'MTS', title: 'Military Training Service', copy: 'Discipline, leadership, physical readiness, and national defense preparation.', icon: ShieldCheck, accent: '#d4a719', fill: '#e5b73b', value: 22 },
 ];
 
 const landingComponents: Array<{ key: ComponentKey; title: string; copy: string; focus: string[]; icon: any; gold?: boolean }> = [
@@ -55,6 +66,20 @@ const landingComponents: Array<{ key: ComponentKey; title: string; copy: string;
     copy: 'Prepares students for organized community service through health, environment, disaster readiness, safety, livelihood, and local development initiatives.',
     focus: ['Community immersion', 'Disaster preparedness', 'Health and environment projects'],
     icon: Users,
+  },
+  {
+    key: 'CWTS-Coastguard',
+    title: 'CWTS-Coastguard',
+    copy: 'Organizes maritime-oriented civic welfare training through coastal service, water safety, rescue readiness, and community preparedness.',
+    focus: ['Water safety', 'Coastal service', 'Rescue-readiness activities'],
+    icon: Cloud,
+  },
+  {
+    key: 'CWTS-Sunday',
+    title: 'CWTS-Sunday',
+    copy: 'Provides a Sunday CWTS group for students who cannot attend regular Saturday classes while reusing CWTS content and assessments.',
+    focus: ['Sunday schedule', 'CWTS shared content', 'Separate attendance and grades'],
+    icon: CalendarDays,
   },
   {
     key: 'LTS',
@@ -103,6 +128,52 @@ const componentInformation = {
     resources: ['CWTS orientation and syllabus', 'Community project proposal guide', 'NSTP policy and service references'],
     coordinator: 'CWTS Component Coordination Office',
     coordinatorCopy: 'Project assignments, faculty contact details, and approved learning links are released inside the student portal.',
+  },
+  'CWTS-Coastguard': {
+    label: 'CWTS-Coastguard',
+    badge: 'Maritime safety and coastal service',
+    lead: 'Preparing students for coastal civic welfare through water safety, rescue readiness, and community preparedness.',
+    overview: [
+      'CWTS-Coastguard is a first-class NSTP component with its own facilitators, learners, attendance, grades, reports, and analytics.',
+      'Students work on maritime safety, coastal coordination, rescue-readiness exercises, and local service activities under assigned facilitators.',
+    ],
+    focus: [
+      { title: 'Water Safety', copy: 'Awareness and prevention for coastal communities.', icon: Cloud },
+      { title: 'Rescue Readiness', copy: 'Prepared response and coordination drills.', icon: ShieldCheck },
+      { title: 'Coastal Service', copy: 'Community work for maritime settings.', icon: Users },
+      { title: 'Preparedness', copy: 'Safety planning and response documentation.', icon: ClipboardList },
+    ],
+    activities: [
+      { title: 'Safety Orientation', copy: 'Learn water safety and local response protocols.', icon: ShieldCheck },
+      { title: 'Coastal Mapping', copy: 'Identify local hazards and service priorities.', icon: MapPinned },
+      { title: 'Readiness Drill', copy: 'Practice coordinated support during emergencies.', icon: ListChecks },
+    ],
+    resources: ['Coastal safety primer', 'Rescue-readiness activity guide', 'Component-specific reporting templates'],
+    coordinator: 'CWTS-Coastguard Component Coordination Office',
+    coordinatorCopy: 'Coastguard group assignments, activity schedules, and component records are released inside the student portal.',
+  },
+  'CWTS-Sunday': {
+    label: 'CWTS-Sunday',
+    badge: 'Sunday CWTS schedule',
+    lead: 'Supporting students who cannot attend regular Saturday CWTS classes through an independent Sunday group.',
+    overview: [
+      'CWTS-Sunday keeps its own students, facilitators, attendance, grades, reports, exports, and analytics.',
+      'Its learners reuse CWTS learning materials, content, and assessment structure while records remain separate from regular CWTS.',
+    ],
+    focus: [
+      { title: 'Sunday Schedule', copy: 'Independent schedule for Sunday learners.', icon: CalendarDays },
+      { title: 'Shared CWTS Content', copy: 'Same CWTS learning and assessment structure.', icon: BookOpen },
+      { title: 'Separate Records', copy: 'Independent attendance and grades.', icon: ClipboardList },
+      { title: 'Community Action', copy: 'CWTS service learning with dedicated facilitation.', icon: Users },
+    ],
+    activities: [
+      { title: 'Community Profiling', copy: 'Use the CWTS profiling structure in Sunday sessions.', icon: ClipboardList },
+      { title: 'Service Planning', copy: 'Prepare project outputs with a Sunday facilitator.', icon: Users },
+      { title: 'Reflection Outputs', copy: 'Submit CWTS journals and reports independently.', icon: FileText },
+    ],
+    resources: ['CWTS orientation and syllabus', 'Community project proposal guide', 'Sunday class schedule'],
+    coordinator: 'CWTS-Sunday Component Coordination Office',
+    coordinatorCopy: 'Sunday facilitator assignments, attendance, and component records are provided after login.',
   },
   LTS: {
     label: 'Literacy Training Service',
@@ -164,8 +235,12 @@ const componentInformation = {
 
 const componentFromPath = (): ComponentKey | null => {
   if (typeof window === 'undefined') return null;
-  const match = window.location.pathname.match(/^\/components\/(cwts|lts|mts)\/?$/i);
-  return match ? (match[1].toUpperCase() as ComponentKey) : null;
+  const match = window.location.pathname.match(/^\/components\/(cwts|cwts-coastguard|cwts-sunday|lts|mts)\/?$/i);
+  if (!match) return null;
+  const key = match[1].toLowerCase();
+  if (key === 'cwts-coastguard') return 'CWTS-Coastguard';
+  if (key === 'cwts-sunday') return 'CWTS-Sunday';
+  return key.toUpperCase() as ComponentKey;
 };
 
 const portalFeatures = [
@@ -220,12 +295,12 @@ const portalFeatures = [
   {
     icon: ShieldCheck,
     label: 'Classification',
-    value: 'Classify students into CWTS, LTS, MTS Army or Navy.',
+    value: 'Classify students into CWTS, CWTS-Coastguard, CWTS-Sunday, LTS, or MTS.',
     color: 'from-[#735c00] to-[#e5b73b]',
     metric: '4 tracks',
     status: 'Rules-assisted',
     audience: 'NSTP coordinators and students',
-    preview: 'Classification summarizes preferences, qualifying results, capacity, and official track assignment across CWTS, LTS, MTS Army, and MTS Navy.',
+    preview: 'Classification summarizes preferences, qualifying results, capacity, and official track assignment across all five NSTP components.',
     bullets: ['Component distribution is visible to admins', 'Students see their official assigned component', 'Reports can surface uneven distribution early'],
     data: [
       { name: 'CWTS', score: 34 },
@@ -293,7 +368,7 @@ const workflowSteps = [
 const dashboardStats = [
   { label: 'Common Phase', value: 'In Progress', icon: BookOpen, tone: 'bg-blue-50 text-blue-700' },
   { label: 'Assessments', value: 'Completed', icon: CheckCircle, tone: 'bg-emerald-50 text-emerald-700' },
-  { label: 'Classification', value: 'MTS Army', icon: ShieldCheck, tone: 'bg-violet-50 text-violet-700' },
+  { label: 'Classification', value: 'MTS', icon: ShieldCheck, tone: 'bg-violet-50 text-violet-700' },
   { label: 'NSTP Grade', value: '1.25', icon: Star, tone: 'bg-amber-50 text-amber-700' },
 ];
 
@@ -509,7 +584,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     setNotice(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -642,14 +717,38 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
       return;
     }
 
-    const match = accounts.find((account) => account.email.toLowerCase() === email.toLowerCase() && account.password === password);
-
-    if (match) {
+    try {
+      const result = await apiRequest<AuthResponse>('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const localAccount = accounts.find((account) => account.email.toLowerCase() === result.data.user.email.toLowerCase());
+      const authenticatedUser = {
+        ...localAccount,
+        ...result.data.user,
+        authSource: result.data.source,
+      };
+      saveAuthSession(result.data.token, authenticatedUser);
       setAuthAttemptTimestamps([]);
       setAuthCooldownUntil(0);
-      addAudit(match, 'Login successful', 'Account', match.id, match.email);
-      onLogin(match);
+      addAudit(authenticatedUser, 'Login successful', 'Account', authenticatedUser.id, `${authenticatedUser.email} / ${result.data.source}`);
+      onLogin(authenticatedUser);
       return;
+    } catch (authError) {
+      const match = accounts.find((account) => account.email.toLowerCase() === email.toLowerCase() && account.password === password);
+
+      if (match) {
+        setAuthAttemptTimestamps([]);
+        setAuthCooldownUntil(0);
+        addAudit(match, 'Login successful using local fallback', 'Account', match.id, match.email);
+        onLogin(match);
+        return;
+      }
+
+      if (authError instanceof Error) {
+        setError(apiErrorMessage(authError));
+      }
     }
 
     const pending = pendingRegistrations.find((registration) => registration.email.toLowerCase() === email.toLowerCase());
@@ -669,16 +768,22 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     }
 
     addAudit({ id: 'anonymous', name: email || 'Unknown user', role: 'guest' }, 'Login failed', 'Account', email || 'unknown', 'Invalid credentials');
-    setError('Invalid email or password.');
+    setError((current) => current || 'Invalid email or password.');
   };
 
-  const useDemo = (persona: 'admin' | 'facilitator' | 'common' | 'cwts' | 'lts' | 'mts') => {
+  const useDemo = (persona: 'admin' | 'facilitator' | 'facilitator-coastguard' | 'facilitator-sunday' | 'facilitator-lts' | 'facilitator-mts' | 'common' | 'cwts' | 'coastguard' | 'sunday' | 'lts' | 'mts') => {
     ensureNstpSeedData();
     const address = {
       admin: 'admin@nstp.edu',
       facilitator: 'facilitator@nstp.edu',
+      'facilitator-coastguard': 'coastguard.facilitator@nstp.edu',
+      'facilitator-sunday': 'sunday.facilitator@nstp.edu',
+      'facilitator-lts': 'lts.facilitator@nstp.edu',
+      'facilitator-mts': 'mts.facilitator@nstp.edu',
       common: 'common.phase@student.edu',
       cwts: 'cwts.student@student.edu',
+      coastguard: 'coastguard.student@student.edu',
+      sunday: 'sunday.student@student.edu',
       lts: 'lts.student@student.edu',
       mts: 'mts.student@student.edu',
     }[persona];
@@ -1007,11 +1112,17 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                 </div>
 
                 {mode === 'login' && (
-                  <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     <DemoButton icon={ShieldCheck} badge="Admin" label="Demo Admin" description="System oversight and classification workflow" onClick={() => useDemo('admin')} />
-                    <DemoButton icon={GraduationCap} badge="Facilitator" label="Demo Facilitator" description="Sessions, attendance, grading, and reports" onClick={() => useDemo('facilitator')} />
+                    <DemoButton icon={GraduationCap} badge="CWTS" label="Demo Facilitator - CWTS" description="Regular CWTS learners and records" onClick={() => useDemo('facilitator')} />
+                    <DemoButton icon={GraduationCap} badge="Coastguard" label="Demo Facilitator - CWTS-Coastguard" description="Maritime learners and records" onClick={() => useDemo('facilitator-coastguard')} />
+                    <DemoButton icon={GraduationCap} badge="Sunday" label="Demo Facilitator - CWTS-Sunday" description="Sunday CWTS learners and records" onClick={() => useDemo('facilitator-sunday')} />
+                    <DemoButton icon={GraduationCap} badge="LTS" label="Demo Facilitator - LTS" description="Literacy service learners and records" onClick={() => useDemo('facilitator-lts')} />
+                    <DemoButton icon={GraduationCap} badge="MTS" label="Demo Facilitator - MTS" description="Military training learners and records" onClick={() => useDemo('facilitator-mts')} />
                     <DemoButton icon={UserRound} badge="Common Phase" label="Demo Student - Common Phase" description="18 / 25 contact hours completed" onClick={() => useDemo('common')} />
                     <DemoButton icon={UserRound} badge="CWTS" label="Demo Student - CWTS" description="Classified with component records" onClick={() => useDemo('cwts')} />
+                    <DemoButton icon={UserRound} badge="Coastguard" label="Demo Student - CWTS-Coastguard" description="Maritime component workflow" onClick={() => useDemo('coastguard')} />
+                    <DemoButton icon={UserRound} badge="Sunday" label="Demo Student - CWTS-Sunday" description="Sunday CWTS workflow" onClick={() => useDemo('sunday')} />
                     <DemoButton icon={UserRound} badge="LTS" label="Demo Student - LTS" description="Literacy service learner workflow" onClick={() => useDemo('lts')} />
                     <DemoButton icon={UserRound} badge="MTS" label="Demo Student - MTS" description="Military training learner workflow" onClick={() => useDemo('mts')} />
                   </div>
@@ -1733,17 +1844,17 @@ function HomeSections({ onSelect }: { onSelect: (component: ComponentKey) => voi
             <p className="mt-4 text-sm text-[#3c568d] dark:text-slate-300">Choose your path. Each component builds skills, discipline, and service that strengthen<br className="hidden lg:block" /> our communities and the nation.</p>
           </div>
           <span className="landing-label self-start rounded-full border border-[#1856c8] px-5 py-3 text-xs font-bold uppercase tracking-wide text-[#1551bd] dark:border-blue-300/40 dark:text-blue-100 lg:self-center">
-            CWTS | LTS | MTS
+            CWTS | CWTS-Coastguard | CWTS-Sunday | LTS | MTS
           </span>
         </div>
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
           {componentCards.map((card) => {
             const Icon = card.icon;
             return (
               <button
                 type="button"
                 key={card.label}
-                onClick={() => onSelect(card.label.startsWith('MTS') ? 'MTS' : card.label as ComponentKey)}
+                onClick={() => onSelect(card.label as ComponentKey)}
                 className="group flex min-h-[15.5rem] flex-col rounded-xl border border-[#dae4f1] bg-white p-6 text-left transition hover:-translate-y-1 hover:border-[#b5cae7] hover:shadow-[0_22px_42px_-32px_rgba(0,33,71,0.48)] dark:border-white/10 dark:bg-[#081426]"
               >
                 <span className="flex items-start justify-between gap-3">

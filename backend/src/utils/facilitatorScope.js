@@ -1,5 +1,16 @@
 const BILIRAN_MUNICIPALITIES = ['Almeria', 'Biliran', 'Cabucgayan', 'Caibiran', 'Culaba', 'Kawayan', 'Maripipi', 'Naval'];
 
+export function normalizeComponent(value) {
+  const raw = String(value || '').trim();
+  const upper = raw.toUpperCase().replace(/\s+/g, '_').replace(/[()]/g, '');
+  if (raw === 'CWTS-Coastguard' || upper === 'CWTS_COASTGUARD') return 'CWTS-Coastguard';
+  if (raw === 'CWTS-Sunday' || upper === 'CWTS_SUNDAY') return 'CWTS-Sunday';
+  if (upper === 'LTS') return 'LTS';
+  if (upper === 'MTS' || upper === 'MTS_ARMY' || upper === 'MTS_NAVY' || upper.includes('MTS')) return 'MTS';
+  if (upper === 'CWTS') return 'CWTS';
+  return raw;
+}
+
 const splitScope = (value) => String(value || '')
   .split(',')
   .map((item) => item.trim())
@@ -14,9 +25,23 @@ export function getFacilitatorScope(req) {
 
   return {
     isFacilitator: role === 'facilitator' || role === 'speaker' || role === 'instructor',
+    component: normalizeComponent(req.user?.component || req.headers['x-user-component'] || req.query.component),
     assignedMunicipalities: assigned,
     activeMunicipality,
   };
+}
+
+export function componentFromRecord(record) {
+  const direct = record?.component
+    || record?.componentName
+    || record?.student?.component
+    || record?.studentProfile?.component
+    || record?.student?.studentProfile?.component
+    || record?.section?.component
+    || record?.student?.section?.component;
+
+  if (typeof direct === 'string') return normalizeComponent(direct);
+  return normalizeComponent(direct?.name || direct?.type);
 }
 
 export function municipalityFromRecord(record) {
@@ -48,6 +73,7 @@ export function applyFacilitatorMunicipalityScope(records, req) {
   if (!allowed.length) return [];
 
   return records.filter((record) => {
+    if (scope.component && componentFromRecord(record) !== scope.component) return false;
     const municipality = municipalityFromRecord(record);
     return Boolean(municipality && allowed.includes(municipality));
   });

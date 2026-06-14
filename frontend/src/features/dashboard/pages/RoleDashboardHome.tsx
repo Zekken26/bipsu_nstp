@@ -38,9 +38,10 @@ type RoleDashboardHomeProps = {
 
 const componentColors: Record<string, string> = {
   CWTS: '#10b981',
+  'CWTS-Coastguard': '#0891b2',
+  'CWTS-Sunday': '#0ea5e9',
   LTS: '#2563eb',
-  'MTS (Army)': '#f59e0b',
-  'MTS (Navy)': '#6366f1',
+  MTS: '#f59e0b',
 };
 
 const roleCopy = {

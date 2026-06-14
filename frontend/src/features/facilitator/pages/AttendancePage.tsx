@@ -4,6 +4,9 @@ import { addAudit, type AttendanceRecordStatus, type AttendanceSheet, type NstpS
 import type { FacilitatorWorkspace } from '../hooks/useFacilitatorWorkspace';
 import type { AttendanceStatus } from '../types';
 import { ConfirmDialog, EmptyState, MunicipalityScopeBanner, PageIntro, Pager, Panel, StatCard, StatusBadge, useModalEscape } from '../components/FacilitatorUI';
+import { exportSpreadsheetWorkbook } from '../../../utils/spreadsheetExport';
+import { exportRows, type ExportColumn } from '../../../utils/exportRecords';
+import { NSTP_COMPONENTS } from '../../../data/nstpData';
 
 const STATUSES: AttendanceStatus[] = ['present', 'absent', 'late', 'excused'];
 const SESSION_TYPES: SessionType[] = ['Orientation', 'Seminar', 'Workshop', 'Lecture', 'Activity', 'Assessment', 'Examination'];
@@ -434,22 +437,61 @@ export default function AttendancePage({ workspace, notify }: { workspace: Facil
       : 'border-slate-200 bg-white text-slate-500 hover:border-blue-200 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300';
   };
 
-  const exportSheets = async (chosen: AttendanceSheet[], format: 'excel' | 'pdf', filename: string) => {
+  const exportSheets = async (chosen: AttendanceSheet[], format: 'excel' | 'pdf' | 'csv' | 'print', filename: string) => {
     const end = chosen[0]?.date || activeSession.date;
-    const rows = chosen.flatMap((sheet) => sheet.entries.map((attendance) => {
+    const recordRows = chosen.flatMap((sheet) => sheet.entries.map((attendance) => {
       const student = workspace.students.find((value) => value.id === attendance.studentId);
-      return [sheet.date, `Session ${sheet.sessionNumber}`, sheet.topic, sheet.group, student?.studentId || attendance.studentId, student?.name || attendance.studentId, attendance.status, attendance.remarks, attendance.excuseAttachmentName || '', sheet.facilitatorName, new Date(sheet.updatedAt).toLocaleString()];
+      return {
+        date: sheet.date,
+        session: `Session ${sheet.sessionNumber}`,
+        eventTitle: sheet.topic,
+        group: sheet.group,
+        component: sheet.component,
+        municipality: sheet.municipality,
+        studentId: student?.studentId || attendance.studentId,
+        studentName: student?.name || attendance.studentId,
+        section: student?.programSection || student?.degreeProgram || '',
+        status: attendance.status,
+        remarks: attendance.remarks,
+        proofReference: attendance.excuseAttachmentName || '',
+        facilitator: sheet.facilitatorName,
+        createdAt: new Date(sheet.createdAt).toLocaleString(),
+        updatedAt: new Date(sheet.updatedAt).toLocaleString(),
+      };
     }));
+    const rows = recordRows.map((row) => [row.date, row.session, row.eventTitle, row.group, row.studentId, row.studentName, row.status, row.remarks, row.proofReference, row.facilitator, row.updatedAt]);
     if (!rows.length) {
       notify('No saved attendance records match this export selection.');
       return;
     }
+    if (format === 'csv' || format === 'print') {
+      const columns: ExportColumn<typeof recordRows[number]>[] = [
+        { header: 'Event Title', value: 'eventTitle', width: 34 },
+        { header: 'Attendance Date', value: 'date', width: 16 },
+        { header: 'Component', value: 'component', width: 18 },
+        { header: 'Municipality', value: 'municipality', width: 18 },
+        { header: 'Facilitator', value: 'facilitator', width: 28 },
+        { header: 'Student Name', value: 'studentName', width: 28 },
+        { header: 'Student ID', value: 'studentId', width: 18 },
+        { header: 'Section', value: 'section', width: 22 },
+        { header: 'Status', value: 'status', width: 14 },
+        { header: 'Remarks', value: 'remarks', width: 32 },
+        { header: 'Timestamp Created', value: 'createdAt', width: 22 },
+        { header: 'Timestamp Updated', value: 'updatedAt', width: 22 },
+      ];
+      await exportRows(format, recordRows, columns, {
+        title: 'Facilitator Attendance Records',
+        dataType: 'Attendance',
+        scope: `${workspace.activeMunicipality}-${filename}`,
+        generatedBy: workspace.user.name,
+        filters: { Municipality: workspace.activeMunicipality, Range: exportRange, EndDate: end },
+        signatureLines: ['Prepared by', 'Checked by'],
+      });
+      addAudit(workspace.user, 'Attendance exported', 'Attendance Export', filename, `${format.toUpperCase()} export generated`);
+      notify(`${format.toUpperCase()} attendance export generated.`);
+      return;
+    }
     if (format === 'excel') {
-      const XLSX = await import('xlsx');
-      const book = XLSX.utils.book_new();
-      const details = XLSX.utils.aoa_to_sheet([['Date', 'Session', 'Topic', 'Class Group', 'Student ID', 'Student', 'Status', 'Remarks', 'Proof Reference', 'Facilitator', 'Submitted / Updated'], ...rows]);
-      details['!cols'] = [{ wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 26 }, { wch: 18 }, { wch: 26 }, { wch: 14 }, { wch: 30 }, { wch: 28 }, { wch: 26 }, { wch: 23 }];
-      if (details['!ref']) details['!autofilter'] = { ref: details['!ref'] };
       const summaryRows = chosen.map((sheet) => [
         sheet.date,
         `Session ${sheet.sessionNumber}`,
@@ -462,11 +504,18 @@ export default function AttendancePage({ workspace, notify }: { workspace: Facil
         normalizeStage(sheet.status),
         new Date(sheet.updatedAt).toLocaleString(),
       ]);
-      const workbookSummary = XLSX.utils.aoa_to_sheet([['Date', 'Session', 'Topic', 'Class Group', 'Present', 'Absent', 'Late', 'Excused', 'Sheet Status', 'Submitted / Updated'], ...summaryRows]);
-      workbookSummary['!cols'] = [{ wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 26 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 23 }];
-      XLSX.utils.book_append_sheet(book, workbookSummary, 'Summary');
-      XLSX.utils.book_append_sheet(book, details, 'Attendance Records');
-      XLSX.writeFile(book, `${filename}.xlsx`);
+      exportSpreadsheetWorkbook(`${filename}.xls`, [
+        {
+          name: 'Summary',
+          rows: [['Date', 'Session', 'Topic', 'Class Group', 'Present', 'Absent', 'Late', 'Excused', 'Sheet Status', 'Submitted / Updated'], ...summaryRows],
+          columnWidths: [14, 14, 34, 26, 12, 12, 12, 12, 18, 23],
+        },
+        {
+          name: 'Attendance Records',
+          rows: [['Date', 'Session', 'Topic', 'Class Group', 'Student ID', 'Student', 'Status', 'Remarks', 'Proof Reference', 'Facilitator', 'Submitted / Updated'], ...rows],
+          columnWidths: [14, 14, 34, 26, 18, 26, 14, 30, 28, 26, 23],
+        },
+      ]);
     } else {
       const [{ default: JsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
       const doc = new JsPDF({ orientation: 'landscape' });
@@ -481,7 +530,7 @@ export default function AttendancePage({ workspace, notify }: { workspace: Facil
     notify(`${format === 'excel' ? 'Excel' : 'PDF'} attendance export generated.`);
   };
 
-  const exportAttendance = async (format: 'excel' | 'pdf') => {
+  const exportAttendance = async (format: 'excel' | 'pdf' | 'csv' | 'print') => {
     const end = activeSession.date;
     const startDate = new Date(`${end}T00:00:00`);
     if (exportRange === 'week') startDate.setDate(startDate.getDate() - 6);
@@ -504,12 +553,13 @@ export default function AttendancePage({ workspace, notify }: { workspace: Facil
       notify('No proof references have been submitted for this session.');
       return;
     }
-    const XLSX = await import('xlsx');
-    const book = XLSX.utils.book_new();
-    const sheetData = XLSX.utils.aoa_to_sheet([['Student ID', 'Student Name', 'Attendance Status', 'Excuse Reason', 'Proof Reference'], ...references]);
-    sheetData['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 18 }, { wch: 32 }, { wch: 44 }];
-    XLSX.utils.book_append_sheet(book, sheetData, 'Proof Register');
-    XLSX.writeFile(book, `attendance-proofs-${sheet.date}-session-${sheet.sessionNumber}.xlsx`);
+    exportSpreadsheetWorkbook(`attendance-proofs-${sheet.date}-session-${sheet.sessionNumber}.xls`, [
+      {
+        name: 'Proof Register',
+        rows: [['Student ID', 'Student Name', 'Attendance Status', 'Excuse Reason', 'Proof Reference'], ...references],
+        columnWidths: [18, 28, 18, 32, 44],
+      },
+    ]);
     notify('Proof reference register downloaded.');
   };
 
@@ -573,7 +623,7 @@ export default function AttendancePage({ workspace, notify }: { workspace: Facil
               <label className="text-xs font-semibold sm:col-span-2">Event / session title<input value={sessionDraft.title} onChange={(event) => setSessionDraft({ ...sessionDraft, title: event.target.value })} placeholder="NSTP orientation, seminar, workshop..." className={`${fieldClass} mt-1.5 w-full`} /></label>
               <label className="text-xs font-semibold">Session type<select value={sessionDraft.type} onChange={(event) => setSessionDraft({ ...sessionDraft, type: event.target.value as SessionType })} className={`${fieldClass} mt-1.5 w-full`}>{SESSION_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label>
               <label className="text-xs font-semibold">Date<input type="date" value={sessionDraft.date} onChange={(event) => setSessionDraft({ ...sessionDraft, date: event.target.value })} className={`${fieldClass} mt-1.5 w-full`} /></label>
-              <label className="text-xs font-semibold">NSTP component<select value={sessionDraft.component === 'Common' ? 'Common Phase' : sessionDraft.component} onChange={(event) => setSessionDraft({ ...sessionDraft, phase: event.target.value === 'Common Phase' ? 'Common Phase' : 'Component Proper', component: event.target.value === 'Common Phase' ? 'Common' : event.target.value as NstpSession['component'] })} className={`${fieldClass} mt-1.5 w-full`}><option>Common Phase</option><option>CWTS</option><option>LTS</option><option value="MTS (Army)">MTS</option><option value="MTS (Navy)">MTS - Navy</option></select></label>
+              <label className="text-xs font-semibold">NSTP component<select value={sessionDraft.component === 'Common' ? 'Common Phase' : sessionDraft.component} onChange={(event) => setSessionDraft({ ...sessionDraft, phase: event.target.value === 'Common Phase' ? 'Common Phase' : 'Component Proper', component: event.target.value === 'Common Phase' ? 'Common' : event.target.value as NstpSession['component'] })} className={`${fieldClass} mt-1.5 w-full`}><option>Common Phase</option>{NSTP_COMPONENTS.map((component) => <option key={component} value={component}>{component}</option>)}</select></label>
               <label className="text-xs font-semibold">Batch / class group<input list="attendance-groups" value={sessionDraft.group} onChange={(event) => setSessionDraft({ ...sessionDraft, group: event.target.value })} placeholder="Assigned class or batch" className={`${fieldClass} mt-1.5 w-full`} /><datalist id="attendance-groups">{Array.from(new Set(workspace.sessions.map((session) => session.group))).map((group) => <option key={group} value={group} />)}</datalist></label>
               <label className="text-xs font-semibold">Start time<input type="time" value={sessionDraft.startTime} onChange={(event) => setSessionDraft({ ...sessionDraft, startTime: event.target.value })} className={`${fieldClass} mt-1.5 w-full`} /></label>
               <label className="text-xs font-semibold">End time<input type="time" value={sessionDraft.endTime} onChange={(event) => setSessionDraft({ ...sessionDraft, endTime: event.target.value })} className={`${fieldClass} mt-1.5 w-full`} /></label>
@@ -695,7 +745,9 @@ export default function AttendancePage({ workspace, notify }: { workspace: Facil
               <span className="text-[0.67rem] font-bold uppercase tracking-[0.12em] text-slate-500">Export</span>
               <select aria-label="Attendance export range" value={exportRange} onChange={(event) => setExportRange(event.target.value as typeof exportRange)} className={fieldClass}><option value="date">Selected date</option><option value="week">Week</option><option value="month">Month</option><option value="semester">Semester</option></select>
               <button type="button" onClick={() => exportAttendance('excel')} className={secondaryBlueButton} title="Export Excel"><FileSpreadsheet className="h-4 w-4" /> Excel</button>
+              <button type="button" onClick={() => exportAttendance('csv')} className={secondaryBlueButton} title="Export CSV"><Download className="h-4 w-4" /> CSV</button>
               <button type="button" onClick={() => exportAttendance('pdf')} className={secondaryBlueButton} title="Export PDF"><Download className="h-4 w-4" /> PDF</button>
+              <button type="button" onClick={() => exportAttendance('print')} className={secondaryBlueButton} title="Print export"><Printer className="h-4 w-4" /> Print</button>
             </div>
           </div>
           {filteredStudents.length ? (
@@ -763,7 +815,7 @@ export default function AttendancePage({ workspace, notify }: { workspace: Facil
             <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} aria-label="Date from" className={fieldClass} />
             <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} aria-label="Date to" className={fieldClass} />
             <input value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)} placeholder="Topic search" className={fieldClass} />
-            <select value={componentFilter} onChange={(event) => setComponentFilter(event.target.value)} className={fieldClass}><option value="all">All components</option><option>Common</option>{['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'].map((item) => <option key={item}>{item}</option>)}</select>
+            <select value={componentFilter} onChange={(event) => setComponentFilter(event.target.value)} className={fieldClass}><option value="all">All components</option><option>Common</option>{NSTP_COMPONENTS.map((item) => <option key={item}>{item}</option>)}</select>
             <select value={municipalityFilter} onChange={(event) => setMunicipalityFilter(event.target.value)} className={fieldClass}><option value="all">All groups</option>{(workspace.user.municipalities || []).map((item) => <option key={item}>{item}</option>)}</select>
             <select aria-label="History record status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={`${fieldClass} capitalize`}><option value="all">Any attendance</option><option value="missing">Missing sheet</option>{SHEET_STAGES.map((stage) => <option key={stage}>{stage}</option>)}{STATUSES.map((item) => <option key={item}>{item}</option>)}</select>
           </div>

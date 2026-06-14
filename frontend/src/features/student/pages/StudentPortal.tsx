@@ -3,11 +3,13 @@ import { Award, Bell, BookOpen, CalendarCheck, ClipboardList, GraduationCap, Lay
 import { Toaster } from 'sonner';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import AssessmentsPage from '../../../pages/AssessmentsPage';
-import { loadAssessments, loadModules, loadStudents, safeJsonParse, type NstpAccount, type NstpAssessment, type NstpComponent, type NstpModule } from '../../../data/nstpData';
+import { contentComponentFor, loadAssessments, loadModules, loadStudents, safeJsonParse, usesCwtsContent, type NstpAccount, type NstpAssessment, type NstpComponent, type NstpModule } from '../../../data/nstpData';
 import { commonPhaseProgress, finalGrade, loadDetailedGrades, loadSessions, studentAttendance, workflowNoticesForStudent } from '../../../data/workflowData';
 import { EmptyState, PageIntro, Pager, Panel, StatCard, StatusBadge } from '../../facilitator/components/FacilitatorUI';
 import StudentLearningMaterialsPage from './StudentLearningMaterialsPage';
 import CwtsAssessmentWorkspace from '../../cwts/components/CwtsAssessmentWorkspace';
+import ExportButtonGroup from '../../../components/common/ExportButtonGroup';
+import { exportRows, type ExportFormat } from '../../../utils/exportRecords';
 
 type StudentPage = 'dashboard' | 'common-phase' | 'attendance' | 'grades' | 'assessments' | 'materials' | 'announcements' | 'enrollment';
 const pages: StudentPage[] = ['dashboard', 'common-phase', 'attendance', 'grades', 'assessments', 'materials', 'announcements', 'enrollment'];
@@ -24,8 +26,10 @@ function Tile({ children }: { children: ReactNode }) {
 const componentFromUser = (user: NstpAccount): NstpComponent | undefined => {
   if (user.component) return user.component;
   if (user.demoStage === 'cwts') return 'CWTS';
+  if (user.demoStage === 'cwts-coastguard') return 'CWTS-Coastguard';
+  if (user.demoStage === 'cwts-sunday') return 'CWTS-Sunday';
   if (user.demoStage === 'lts') return 'LTS';
-  if (user.demoStage === 'mts') return 'MTS (Army)';
+  if (user.demoStage === 'mts') return 'MTS';
   return undefined;
 };
 
@@ -36,8 +40,7 @@ const studentCanAccessAssessment = (assessment: NstpAssessment, modules: NstpMod
 
   if (!classified) return audience === 'Common' || audience === 'Common Phase';
   if (audience === 'Common' || audience === 'Common Phase') return true;
-  if (audience === 'MTS') return component?.startsWith('MTS');
-  return audience === component;
+  return component ? audience === contentComponentFor(component) : false;
 };
 
 export default function StudentPortal({ user, onLogout }: { user: NstpAccount; onLogout: () => void }) {
@@ -84,10 +87,105 @@ export default function StudentPortal({ user, onLogout }: { user: NstpAccount; o
   const completedAssessments = Object.keys(attempts).length;
   const openAssessmentWorkspace = () => navigate('assessments');
 
+  const exportPersonalSummary = async (format: ExportFormat) => {
+    const rows = [
+      { metric: 'Student Name', value: user.name, detail: student?.studentId || user.studentId || user.email },
+      { metric: 'Component', value: classified ? user.component || student?.component || 'Assigned' : 'Common Phase', detail: eligibility },
+      { metric: 'Contact Hours', value: `${completedHours}/25`, detail: `${remainingHours} remaining` },
+      { metric: 'Attendance Rate', value: `${attendancePercent}%`, detail: `${attendance.length} recorded sessions` },
+      { metric: 'Assessments', value: `${completedAssessments}/${publishedAssessments.length}`, detail: 'Recorded completions' },
+      { metric: 'Grade Status', value: grade?.status || 'Draft', detail: grade?.status === 'Released' ? 'Released' : 'Not released' },
+    ];
+    await exportRows(format, rows, [
+      { header: 'Record', value: 'metric', width: 28 },
+      { header: 'Value', value: 'value', width: 22 },
+      { header: 'Detail', value: 'detail', width: 36 },
+    ], {
+      title: 'Student Personal NSTP Summary',
+      dataType: 'StudentSummary',
+      scope: student?.studentId || user.studentId || user.id,
+      generatedBy: user.name,
+      filters: { Student: user.name },
+      signatureLines: ['Student', 'NSTP Office'],
+    });
+  };
+
+  const exportPersonalAttendance = async (format: ExportFormat) => {
+    if (!attendance.length) return;
+    const rows = attendance.map(({ sheet, entry }) => ({
+      eventTitle: sheet.topic,
+      date: sheet.date,
+      component: sheet.component,
+      municipality: sheet.municipality,
+      facilitator: sheet.facilitatorName,
+      studentName: user.name,
+      studentId: student?.studentId || user.studentId || user.id,
+      section: student?.programSection || student?.degreeProgram || '',
+      status: entry?.status || 'Not recorded',
+      remarks: entry?.remarks || '',
+      createdAt: sheet.createdAt ? new Date(sheet.createdAt).toLocaleString() : '',
+      updatedAt: sheet.updatedAt ? new Date(sheet.updatedAt).toLocaleString() : '',
+    }));
+    await exportRows(format, rows, [
+      { header: 'Event Title', value: 'eventTitle', width: 34 },
+      { header: 'Attendance Date', value: 'date', width: 16 },
+      { header: 'Component', value: 'component', width: 18 },
+      { header: 'Municipality', value: 'municipality', width: 18 },
+      { header: 'Facilitator', value: 'facilitator', width: 28 },
+      { header: 'Student Name', value: 'studentName', width: 28 },
+      { header: 'Student ID', value: 'studentId', width: 18 },
+      { header: 'Section', value: 'section', width: 22 },
+      { header: 'Status', value: 'status', width: 14 },
+      { header: 'Remarks', value: 'remarks', width: 32 },
+      { header: 'Timestamp Created', value: 'createdAt', width: 22 },
+      { header: 'Timestamp Updated', value: 'updatedAt', width: 22 },
+    ], {
+      title: 'My NSTP Attendance Records',
+      dataType: 'Attendance',
+      scope: student?.studentId || user.studentId || user.id,
+      generatedBy: user.name,
+      filters: { Student: user.name },
+      signatureLines: ['Student', 'NSTP Office'],
+    });
+  };
+
+  const exportPersonalGrades = async (format: ExportFormat) => {
+    if (!grade || grade.status !== 'Released') return;
+    const rows = [
+      { category: 'Assessments', score: grade.assessments ?? '', totalPoints: 100, percentage: grade.assessments ?? '', remarks: grade.feedback || '', status: grade.status },
+      { category: 'Attendance', score: grade.attendance ?? '', totalPoints: 100, percentage: grade.attendance ?? '', remarks: grade.feedback || '', status: grade.status },
+      { category: 'Activities', score: grade.activities ?? '', totalPoints: 100, percentage: grade.activities ?? '', remarks: grade.feedback || '', status: grade.status },
+      { category: 'Participation', score: grade.participation ?? '', totalPoints: 100, percentage: grade.participation ?? '', remarks: grade.feedback || '', status: grade.status },
+      { category: 'Major Exam', score: grade.majorExam ?? '', totalPoints: 100, percentage: grade.majorExam ?? '', remarks: grade.feedback || '', status: grade.status },
+      { category: 'Final Grade', score: finalGrade(grade) ?? '', totalPoints: 100, percentage: finalGrade(grade) ?? '', remarks: grade.feedback || '', status: grade.status },
+    ];
+    await exportRows(format, rows, [
+      { header: 'Assessment Title', value: 'category', width: 22 },
+      { header: 'Student Name', value: () => user.name, width: 28 },
+      { header: 'Student ID', value: () => student?.studentId || user.studentId || user.id, width: 18 },
+      { header: 'Component', value: () => user.component || student?.component || '', width: 18 },
+      { header: 'Municipality', value: () => student?.municipality || user.municipality || '', width: 18 },
+      { header: 'Facilitator', value: () => student?.facilitatorName || '', width: 26 },
+      { header: 'Score', value: 'score', width: 12 },
+      { header: 'Total Points', value: 'totalPoints', width: 14 },
+      { header: 'Percentage', value: 'percentage', width: 14 },
+      { header: 'Remarks', value: 'remarks', width: 34 },
+      { header: 'Grading Date', value: () => grade.updatedAt ? new Date(grade.updatedAt).toLocaleString() : '', width: 22 },
+      { header: 'Status', value: 'status', width: 16 },
+    ], {
+      title: 'My Released NSTP Gradesheet',
+      dataType: 'Gradesheet',
+      scope: student?.studentId || user.studentId || user.id,
+      generatedBy: user.name,
+      filters: { Student: user.name, Status: grade.status },
+      signatureLines: ['Student', 'NSTP Office'],
+    });
+  };
+
   const body = useMemo(() => {
     if (page === 'dashboard') return (
       <>
-        <PageIntro eyebrow={classified ? `${user.component} Student Workspace` : 'Common Phase Journey'} title={`Welcome, ${user.name.split(' ')[0]}`} description={classified ? `Your Common Phase eligibility is approved. Continue your ${user.component} sessions and released academic records.` : 'Complete the flexible 25 contact-hour Common Phase before component classification.'} />
+        <PageIntro eyebrow={classified ? `${user.component} Student Workspace` : 'Common Phase Journey'} title={`Welcome, ${user.name.split(' ')[0]}`} description={classified ? `Your Common Phase eligibility is approved. Continue your ${user.component} sessions and released academic records.` : 'Complete the flexible 25 contact-hour Common Phase before component classification.'} actions={<ExportButtonGroup compact label="Export my summary" onExport={exportPersonalSummary} />} />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <StatCard label="Enrollment Status" value={classified ? 'Classified' : 'In Progress'} detail={classified ? user.component || '' : 'Common Phase'} icon={GraduationCap} tone="blue" />
           <StatCard label="Contact Hours" value={`${completedHours}/25`} detail={`${remainingHours} hours remaining`} icon={TrendingUp} tone="indigo" />
@@ -146,19 +244,19 @@ export default function StudentPortal({ user, onLogout }: { user: NstpAccount; o
     );
     if (page === 'attendance') return (
       <>
-        <PageIntro eyebrow="Attendance Records" title="My Attendance" description="Date-based permanent session attendance recorded by your assigned facilitator." />
+        <PageIntro eyebrow="Attendance Records" title="My Attendance" description="Date-based permanent session attendance recorded by your assigned facilitator." actions={<ExportButtonGroup compact label="Export my attendance" onExport={exportPersonalAttendance} disabled={!attendance.length} />} />
         <div className="grid gap-4 sm:grid-cols-3"><StatCard label="Attendance Rate" value={`${attendancePercent}%`} detail="Credited attendance" icon={CalendarCheck} tone="emerald" /><StatCard label="Recorded Sessions" value={attendance.length} detail="Historical sheets" icon={ClipboardList} tone="blue" /><StatCard label="Absences" value={attendance.filter(({ entry }) => entry?.status === 'absent').length} detail="For review" icon={Lock} tone="rose" /></div>
         <Panel>{attendance.length ? <><div className="overflow-x-auto"><table className="w-full min-w-[780px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900"><tr><th className="p-3">Date</th><th className="p-3">Session / Topic</th><th className="p-3">Status</th><th className="p-3">Remarks</th><th className="p-3">Facilitator</th></tr></thead><tbody>{displayedAttendance.map(({ sheet, entry }) => <tr key={sheet.id} className="border-b dark:border-slate-800"><td className="p-3">{new Date(`${sheet.date}T00:00:00`).toLocaleDateString()}</td><td className="p-3 font-semibold">{sheet.topic}</td><td className="p-3"><StatusBadge value={entry!.status} /></td><td className="p-3">{entry!.remarks || '--'}</td><td className="p-3">{sheet.facilitatorName}</td></tr>)}</tbody></table></div><Pager page={attendancePage} totalPages={Math.ceil(attendance.length / attendancePageSize)} onPage={setAttendancePage} total={attendance.length} pageSize={attendancePageSize} onPageSize={(size) => { setAttendancePageSize(size); setAttendancePage(1); }} pageSizeOptions={[10, 25, 50]} /></> : <EmptyState title="No attendance history" body="Recorded attendance sheets will appear here by date." />}</Panel>
       </>
     );
     if (page === 'grades') return (
       <>
-        <PageIntro eyebrow="Academic Records" title="My Grades" description="Only grades released through the review workflow become visible to students." />
+        <PageIntro eyebrow="Academic Records" title="My Grades" description="Only grades released through the review workflow become visible to students." actions={<ExportButtonGroup compact label="Export my grades" onExport={exportPersonalGrades} disabled={!grade || grade.status !== 'Released'} />} />
         {!grade || grade.status !== 'Released' ? <Panel><EmptyState title="Grades not released yet" body={`Your current gradebook status is ${grade?.status || 'Draft'}. Records will display after review and release.`} /></Panel> : <Panel><div className="grid gap-3 sm:grid-cols-3">{[['Assessments', grade.assessments], ['Attendance', grade.attendance], ['Activities', grade.activities], ['Participation', grade.participation], ['Major Exam', grade.majorExam], ['Final Grade', finalGrade(grade)]].map(([label, value]) => <Tile key={String(label)}><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-2 text-2xl font-bold">{String(value ?? '--')}</p></Tile>)}</div><p className="mt-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-500/10 dark:text-blue-100">{grade.feedback || 'No facilitator feedback recorded.'}</p></Panel>}
       </>
     );
     if (page === 'assessments') {
-      const isCwtsStudent = componentFromUser(user) === 'CWTS' || student?.component === 'CWTS';
+      const isCwtsStudent = usesCwtsContent(componentFromUser(user)) || usesCwtsContent(student?.component);
       return isCwtsStudent
         ? <CwtsAssessmentWorkspace role="student" user={user} studentId={studentId} title="My CWTS Activities" description="Complete CWTS 1 and CWTS 2 reflections, journals, reports, videos, community immersion outputs, and performance tasks." />
         : <AssessmentsPage user={user} studentId={studentId} onBack={() => navigate('dashboard')} />;

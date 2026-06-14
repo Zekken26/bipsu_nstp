@@ -18,6 +18,7 @@ import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
 import { useModalEscape } from './features/facilitator/components/FacilitatorUI';
 import { ensureNstpSeedData, safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents } from './data/nstpData';
+import { clearAuthSession } from './services/apiClient';
 
 type ShellSection = 'overview' | 'modules' | 'assessments' | 'progress' | 'grades' | 'admin' | 'facilitator' | 'announcements' | 'reports';
 type AccountUtility = 'profile' | 'settings' | 'security' | 'accessibility' | 'activity' | 'help';
@@ -104,6 +105,8 @@ function AuthSplash({ mode, userName }: { mode: 'login' | 'logout' | 'boot'; use
           </div>
           <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold text-slate-700 dark:text-slate-200">
             <span className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 dark:border-blue-500/30 dark:bg-blue-500/10">CWTS</span>
+            <span className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 dark:border-cyan-500/30 dark:bg-cyan-500/10">CWTS-Coastguard</span>
+            <span className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 dark:border-sky-500/30 dark:bg-sky-500/10">CWTS-Sunday</span>
             <span className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 dark:border-blue-500/30 dark:bg-blue-500/10">LTS</span>
             <span className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-500/30 dark:bg-amber-500/10">MTS</span>
           </div>
@@ -242,6 +245,7 @@ export default function App() {
       }
     } else {
       setUser(null);
+      clearAuthSession();
       localStorage.removeItem('nstpUser');
       setActiveSection('overview');
     }
@@ -875,7 +879,7 @@ export default function App() {
           <p className="text-xs uppercase tracking-[0.18em] font-semibold text-blue-700 mb-2 dark:text-blue-300">Objective Readiness</p>
           <h2 className="text-2xl font-bold text-slate-900 mb-3 dark:text-slate-100">NSTP delivery, enrollment, assessment, and reporting are unified in one workspace.</h2>
           <p className="text-slate-600 dark:text-slate-300">
-            The system now foregrounds the required 25 contact hours, post-module assessments, major examinations, and component classification for CWTS, LTS, MTS (Army), and MTS (Navy).
+            The system now foregrounds the required 25 contact hours, post-module assessments, major examinations, and component classification for CWTS, CWTS-Coastguard, CWTS-Sunday, LTS, and MTS.
           </p>
           <div className="mt-5 grid gap-2 sm:grid-cols-2">
             {[

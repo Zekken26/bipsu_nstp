@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Bell, Send } from 'lucide-react';
-import { safeJsonParse } from '../../../data/nstpData';
+import { NSTP_COMPONENTS, safeJsonParse } from '../../../data/nstpData';
 import { addAudit, loadWorkflowNotices, saveWorkflowNotices, type WorkflowNotice } from '../../../data/workflowData';
 import type { FacilitatorWorkspace } from '../hooks/useFacilitatorWorkspace';
 import { EmptyState, PageIntro, Panel, SearchField, StatusBadge } from '../components/FacilitatorUI';
@@ -80,7 +80,7 @@ export default function FacilitatorAnnouncementsPage({ workspace, notify }: { wo
               </select>
               <select value={component} onChange={(event) => setComponent(event.target.value as WorkflowNotice['component'])} className="rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">
                 <option value="All">All stages</option>
-                {['Common', 'CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'].map((value) => <option key={value}>{value}</option>)}
+                {['Common', ...NSTP_COMPONENTS].map((value) => <option key={value}>{value}</option>)}
               </select>
             </div>
             <select value={priority} onChange={(event) => setPriority(event.target.value as WorkflowNotice['priority'])} className="w-full rounded-xl border border-[#dfe7f1] bg-[#fbfcfe] px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">

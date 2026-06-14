@@ -38,7 +38,7 @@ import {
   submissionStatusFor,
   upsertCwtsSubmission,
 } from '../../../data/cwtsAssessmentData';
-import { loadAccounts, loadStudents } from '../../../data/nstpData';
+import { loadAccounts, loadStudents, normalizeComponent, usesCwtsContent } from '../../../data/nstpData';
 import { addAudit } from '../../../data/workflowData';
 import { ConfirmDialog, EmptyState, MunicipalityScopeBanner, PageIntro, Pager, Panel, SearchField, StatusBadge, useModalEscape } from '../../facilitator/components/FacilitatorUI';
 
@@ -88,7 +88,9 @@ function downloadCsv(filename: string, rows: Array<Record<string, string | numbe
 }
 
 function studentComponent(user: NstpAccount) {
-  if (user.component === 'CWTS' || user.demoStage === 'cwts') return 'CWTS';
+  if (user.component) return user.component;
+  if (user.demoStage === 'cwts') return 'CWTS';
+  if (user.demoStage === 'cwts-sunday') return 'CWTS-Sunday';
   return user.component;
 }
 
@@ -571,14 +573,21 @@ export default function CwtsAssessmentWorkspace({ role, user, studentId, student
   }, []);
 
   const student = role === 'student' ? resolveStudent(user, studentId) : undefined;
-  const studentIsCwts = role !== 'student' || studentComponent(user) === 'CWTS' || student?.component === 'CWTS';
+  const scopeComponent = role === 'student' ? student?.component || studentComponent(user) : user.component;
+  const studentIsCwts = role !== 'student' || usesCwtsContent(studentComponent(user)) || usesCwtsContent(student?.component);
   const scopedStudents = useMemo(() => {
-    const source = (students?.length ? students : loadStudents()).filter((item) => item.component === 'CWTS');
+    const source = (students?.length ? students : loadStudents()).filter((item) => {
+      if (item.component === 'Common Phase') return false;
+      return scopeComponent ? normalizeComponent(item.component) === normalizeComponent(scopeComponent) : usesCwtsContent(item.component);
+    });
     const allowed = user.municipalities?.length ? source.filter((item) => item.municipality && user.municipalities?.includes(item.municipality)) : source;
     return municipality === 'All Assigned' ? allowed : allowed.filter((item) => item.municipality === municipality);
-  }, [students, user.municipalities, municipality]);
+  }, [students, user.municipalities, municipality, scopeComponent]);
   const assignedMunicipalities = Array.from(new Set(scopedStudents.map((item) => item.municipality).filter(Boolean))) as BiliranMunicipality[];
-  const allAssignedMunicipalities = Array.from(new Set(((students?.length ? students : loadStudents()).filter((item) => item.component === 'CWTS').map((item) => item.municipality).filter(Boolean)))) as BiliranMunicipality[];
+  const allAssignedMunicipalities = Array.from(new Set(((students?.length ? students : loadStudents()).filter((item) => {
+    if (item.component === 'Common Phase') return false;
+    return scopeComponent ? normalizeComponent(item.component) === normalizeComponent(scopeComponent) : usesCwtsContent(item.component);
+  }).map((item) => item.municipality).filter(Boolean)))) as BiliranMunicipality[];
 
   const visibleTasks = tasks.filter((task) => {
     if (role === 'student' && !canStudentAccessTask(task, student)) return false;
