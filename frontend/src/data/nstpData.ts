@@ -499,49 +499,6 @@ const DEFAULT_ACCOUNTS: NstpAccount[] = [
   },
 ];
 
-const SEED_MODULES: NstpModule[] = [
-  {
-    id: 'sem1', title: 'Seminar 1: Introduction to National Service', description: 'Overview of NSTP, its legal basis, and the role of civic consciousness in nation-building.',
-    component: 'Common', hours: 3, difficulty: 'Beginner', speaker: 'Dr. Reynold Garcia Bustillo', speakerPosition: 'NSTP Program Director',
-    scheduledDate: '2026-04-25', scheduledTime: '9:00 AM - 12:00 PM', updatedAt: '2026-04-01T00:00:00.000Z',
-  },
-  {
-    id: 'sem2', title: 'Seminar 2: Philippine Constitution and Citizenship', description: 'Understanding constitutional rights, duties, and responsibilities of Filipino citizens.',
-    component: 'Common', hours: 3, difficulty: 'Beginner', speaker: 'Atty. Carlos Reyes', speakerPosition: 'Constitutional Law Expert',
-    scheduledDate: '2026-04-26', scheduledTime: '1:00 PM - 4:00 PM', updatedAt: '2026-04-01T00:00:00.000Z',
-  },
-  {
-    id: 'sem3', title: 'Seminar 3: Community Development Strategies', description: 'Participatory approaches to community needs assessment and sustainable development.',
-    component: 'Common', hours: 3, difficulty: 'Beginner', speaker: 'Engr. Ramon Torres', speakerPosition: 'Community Development Specialist',
-    scheduledDate: '2026-04-28', scheduledTime: '9:00 AM - 12:00 PM', updatedAt: '2026-04-01T00:00:00.000Z',
-  },
-  {
-    id: 'sem4', title: 'Seminar 4: Leadership and Ethics', description: 'Developing ethical leadership, effective communication, and team collaboration skills.',
-    component: 'Common', hours: 3, difficulty: 'Beginner', speaker: 'Dr. Anna Marie Cruz', speakerPosition: 'Leadership Development Coach',
-    scheduledDate: '2026-04-29', scheduledTime: '2:00 PM - 5:00 PM', updatedAt: '2026-04-01T00:00:00.000Z',
-  },
-  {
-    id: 'sem5', title: 'Seminar 5: Disaster Risk Reduction and Management', description: 'Emergency preparedness, response protocols, and community-based disaster management.',
-    component: 'Common', hours: 4, difficulty: 'Intermediate', speaker: 'Col. Jose Villanueva (Ret.)', speakerPosition: 'DRRM Coordinator',
-    scheduledDate: '2026-05-02', scheduledTime: '8:00 AM - 12:00 PM', updatedAt: '2026-04-01T00:00:00.000Z',
-  },
-  {
-    id: 'sem6', title: 'Seminar 6: Public Health and Wellness', description: 'Health promotion, disease prevention, and mental health awareness in communities.',
-    component: 'Common', hours: 3, difficulty: 'Beginner', speaker: 'Dr. Sofia Mendoza', speakerPosition: 'Public Health Officer',
-    scheduledDate: '2026-05-05', scheduledTime: '1:00 PM - 4:00 PM', updatedAt: '2026-04-01T00:00:00.000Z',
-  },
-  {
-    id: 'sem7', title: 'Seminar 7: Environmental Conservation', description: 'Climate change, waste management, and sustainable environmental practices.',
-    component: 'Common', hours: 3, difficulty: 'Intermediate', speaker: 'Dr. Miguel Garcia', speakerPosition: 'Environmental Scientist',
-    scheduledDate: '2026-05-07', scheduledTime: '9:00 AM - 12:00 PM', updatedAt: '2026-04-01T00:00:00.000Z',
-  },
-  {
-    id: 'sem8', title: 'Seminar 8: Service Learning and Reflection', description: 'Integrating learning with community service, reflection, and documentation.',
-    component: 'Common', hours: 3, difficulty: 'Beginner', speaker: 'Prof. Isabel Fernandez', speakerPosition: 'Service Learning Coordinator',
-    scheduledDate: '2026-05-09', scheduledTime: '2:00 PM - 5:00 PM', updatedAt: '2026-04-01T00:00:00.000Z',
-  },
-];
-
 export function ensureNstpSeedData() {
   if (typeof window === 'undefined') return;
 
