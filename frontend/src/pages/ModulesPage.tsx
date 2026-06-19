@@ -1,26 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Clock, CheckCircle, FileText, Video, Search, Sparkles, Gauge, ChevronRight, Plus, Trash2, Save, GripVertical, Play, ArrowLeft, ArrowUp, ArrowDown, Copy, Wrench } from 'lucide-react';
-import { createEmptyModule, loadAssessments, loadModules, loadStudents, safeJsonParse, saveModules, type NstpModule, type NstpModuleSection } from '../data/nstpData';
+import { BookOpen, Clock, CheckCircle, Search, Sparkles, Gauge, ChevronRight, Plus, Trash2, Save, ArrowLeft, ArrowUp, ArrowDown, Copy, Wrench, Video, ExternalLink } from 'lucide-react';
+import { createEmptyModule, loadAssessments, loadModules, loadStudents, safeJsonParse, saveModules, type NstpModule } from '../data/nstpData';
 
 const MODULE_VISIBILITY_KEY = 'nstp-module-visibility';
 
-const SECTION_TEMPLATES: Record<string, NstpModuleSection[]> = {
-  'Community immersion pack': [
-    { id: 'template-prebrief', type: 'lesson', title: 'Community Pre-briefing', duration: '25 min' },
-    { id: 'template-fieldwork', type: 'lesson', title: 'Fieldwork Activity', duration: '45 min' },
-    { id: 'template-reflection', type: 'reading', title: 'Reflection Journal Guide', duration: '20 min' },
-  ],
-  'Safety and readiness pack': [
-    { id: 'template-safety-video', type: 'video', title: 'Safety Orientation', duration: '18 min' },
-    { id: 'template-checklist', type: 'reading', title: 'Preparedness Checklist', duration: '15 min' },
-    { id: 'template-drill', type: 'lesson', title: 'Readiness Drill', duration: '30 min' },
-  ],
-  'Leadership sprint pack': [
-    { id: 'template-leadership', type: 'lesson', title: 'Leadership Challenge', duration: '30 min' },
-    { id: 'template-teamwork', type: 'video', title: 'Team Dynamics Lab', duration: '20 min' },
-    { id: 'template-feedback', type: 'reading', title: 'Peer Feedback Framework', duration: '15 min' },
-  ],
-};
+function getEmbedUrl(url: string): string {
+  if (!url) return url;
+  const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+  if (youtubeMatch) {
+    return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
+  }
+  const youtubeEmbedMatch = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/);
+  if (youtubeEmbedMatch) {
+    return url;
+  }
+  return url;
+}
 
 export default function ModulesPage({ user, role = 'student', onBack }: { user: any; role?: 'student' | 'admin'; onBack?: () => void }) {
   const [modules, setModules] = useState<NstpModule[]>([]);
@@ -28,9 +23,8 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState('all');
-  const [progress, setProgress] = useState<Record<string, Record<string, boolean>>>({});
+  const [progress, setProgress] = useState<Record<string, boolean>>({});
   const [editorDraft, setEditorDraft] = useState<NstpModule | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState(Object.keys(SECTION_TEMPLATES)[0]);
 
   useEffect(() => {
     const storedModules = loadModules();
@@ -51,7 +45,7 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   useEffect(() => {
     const saved = localStorage.getItem(`progress-${user.id}`);
     if (saved) {
-      setProgress(safeJsonParse<Record<string, Record<string, boolean>>>(saved, {}));
+      setProgress(safeJsonParse<Record<string, boolean>>(saved, {}));
     }
   }, [user.id]);
 
@@ -86,21 +80,17 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
     localStorage.setItem(MODULE_VISIBILITY_KEY, JSON.stringify(nextVisibility));
   };
 
-  const completeSection = (moduleId: string, sectionId: string) => {
+  const toggleModuleComplete = (moduleId: string) => {
     const nextProgress = {
       ...progress,
-      [moduleId]: {
-        ...(progress[moduleId] || {}),
-        [sectionId]: true,
-      },
+      [moduleId]: !progress[moduleId],
     };
     setProgress(nextProgress);
     localStorage.setItem(`progress-${user.id}`, JSON.stringify(nextProgress));
   };
 
   const getModuleProgress = (module: NstpModule) => {
-    const completed = module.sections.filter((section) => Boolean(progress[module.id]?.[section.id])).length;
-    return module.sections.length > 0 ? Math.round((completed / module.sections.length) * 100) : 0;
+    return progress[module.id] ? 100 : 0;
   };
 
   const isModuleUnlocked = (moduleList: NstpModule[], moduleIndex: number) => {
@@ -128,11 +118,8 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
     const completed = students.reduce((count, student) => {
       const raw = localStorage.getItem(`progress-${student.id}`);
       if (!raw) return count;
-      const savedProgress = safeJsonParse<Record<string, Record<string, boolean>>>(raw, {});
-      const sectionProgress = savedProgress[selectedModule.id] || {};
-      const doneSections = Object.values(sectionProgress).filter(Boolean).length;
-      const pct = selectedModule.sections.length > 0 ? Math.round((doneSections / selectedModule.sections.length) * 100) : 0;
-      return count + (pct === 100 ? 1 : 0);
+      const savedProgress = safeJsonParse<Record<string, boolean>>(raw, {});
+      return count + (savedProgress[selectedModule.id] ? 1 : 0);
     }, 0);
     return Math.round((completed / students.length) * 100);
   }, [selectedModule, students]);
@@ -189,36 +176,6 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   const updateDraft = (patch: Partial<NstpModule>) => {
     if (!editorDraft) return;
     setEditorDraft({ ...editorDraft, ...patch, updatedAt: new Date().toISOString() });
-  };
-
-  const updateSection = (sectionId: string, patch: Partial<NstpModuleSection>) => {
-    if (!editorDraft) return;
-    setEditorDraft({
-      ...editorDraft,
-      updatedAt: new Date().toISOString(),
-      sections: editorDraft.sections.map((section) => (section.id === sectionId ? { ...section, ...patch } : section)),
-    });
-  };
-
-  const addSection = () => {
-    if (!editorDraft) return;
-    setEditorDraft({
-      ...editorDraft,
-      updatedAt: new Date().toISOString(),
-      sections: [
-        ...editorDraft.sections,
-        { id: `section-${Math.random().toString(36).slice(2, 10)}`, type: 'lesson', title: 'New section', duration: '20 min' },
-      ],
-    });
-  };
-
-  const removeSection = (sectionId: string) => {
-    if (!editorDraft) return;
-    setEditorDraft({
-      ...editorDraft,
-      updatedAt: new Date().toISOString(),
-      sections: editorDraft.sections.filter((section) => section.id !== sectionId),
-    });
   };
 
   const saveDraft = () => {
@@ -287,30 +244,12 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
       ...editorDraft,
       id: `module-${Math.random().toString(36).slice(2, 10)}`,
       title: `${editorDraft.title} (Copy)`,
-      sections: editorDraft.sections.map((section) => ({
-        ...section,
-        id: `section-${Math.random().toString(36).slice(2, 10)}`,
-      })),
       updatedAt: new Date().toISOString(),
     };
     const nextModules = [cloned, ...modules];
     persistModules(nextModules);
     setSelectedModuleId(cloned.id);
     setEditorDraft(cloned);
-  };
-
-  const addTemplateSections = () => {
-    if (!editorDraft) return;
-    const templateSections = SECTION_TEMPLATES[selectedTemplate] || [];
-    const nextSections = templateSections.map((section) => ({
-      ...section,
-      id: `section-${Math.random().toString(36).slice(2, 10)}`,
-    }));
-    setEditorDraft({
-      ...editorDraft,
-      updatedAt: new Date().toISOString(),
-      sections: [...editorDraft.sections, ...nextSections],
-    });
   };
 
   if (!selectedModule && !isAdmin) {
@@ -341,15 +280,6 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
     <div className="bento-screen grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
       <aside className="space-y-4">
         <div className="bento-panel p-5">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="module-btn clickable-button mb-4 px-3 py-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Dashboard
-            </button>
-          )}
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
               <p className="text-xs uppercase tracking-[0.16em] font-semibold text-blue-700">Module Library</p>
@@ -418,7 +348,7 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                   <div className="h-2 rounded-full bg-gradient-to-r from-blue-700 to-yellow-500" style={{ width: `${getModuleProgress(detailModule)}%` }} />
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>{detailModule.sections.length} sections</span>
+                  <span>{detailModule.hours} hrs</span>
                   <span>{getModuleProgress(detailModule)}% complete</span>
                 </div>
               </div>
@@ -472,7 +402,6 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                     </div>
                     <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
                       <span>{module.hours} hrs</span>
-                      <span>{module.sections.length} sections</span>
                       <span>{module.component || 'Common'}</span>
                     </div>
                   </button>
@@ -509,10 +438,6 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
                     <p className="text-xs text-slate-500">Learner completion</p>
                     <p className="text-xl font-bold text-slate-900">{moduleCompletionRate}%</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs text-slate-500">Sections</p>
-                    <p className="text-xl font-bold text-slate-900">{detailModule.sections.length}</p>
                   </div>
                 </div>
 
@@ -620,80 +545,72 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                     <option value="Advanced">Advanced</option>
                   </select>
                 </div>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-3 mb-4">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.16em] font-semibold text-blue-700">Sections</p>
-                  <h3 className="text-xl font-bold text-slate-900">Manage module sections</h3>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Video Link</label>
+                  <input
+                    value={detailModule.videoUrl || ''}
+                    onChange={(event) => updateDraft({ videoUrl: event.target.value })}
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  />
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={selectedTemplate}
-                    onChange={(event) => setSelectedTemplate(event.target.value)}
-                    className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                  >
-                    {Object.keys(SECTION_TEMPLATES).map((templateName) => (
-                      <option key={templateName} value={templateName}>{templateName}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={addTemplateSections}
-                    className="module-btn clickable-button"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Apply Template
-                  </button>
-                  <button
-                    onClick={addSection}
-                    className="module-btn clickable-button"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Section
-                  </button>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Meeting Link</label>
+                  <input
+                    value={detailModule.meetingLink || ''}
+                    onChange={(event) => updateDraft({ meetingLink: event.target.value })}
+                    placeholder="https://meet.google.com/... or https://zoom.us/j/..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  />
                 </div>
-              </div>
-
-              <div className="space-y-3">
-                {detailModule.sections.map((section, index) => (
-                  <div key={section.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-start gap-3">
-                      <GripVertical className="w-5 h-5 text-slate-400 mt-3" />
-                      <div className="flex-1 grid gap-3 md:grid-cols-[120px_minmax(0,1fr)_120px_64px]">
-                        <select
-                          value={section.type}
-                          onChange={(event) => updateSection(section.id, { type: event.target.value as NstpModuleSection['type'] })}
-                          className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                        >
-                          <option value="video">Video</option>
-                          <option value="reading">Reading</option>
-                          <option value="lesson">Lesson</option>
-                        </select>
-                        <input
-                          value={section.title}
-                          onChange={(event) => updateSection(section.id, { title: event.target.value })}
-                          className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                          placeholder="Section title"
-                        />
-                        <input
-                          value={section.duration}
-                          onChange={(event) => updateSection(section.id, { duration: event.target.value })}
-                          className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                          placeholder="20 min"
-                        />
-                        <button
-                          onClick={() => removeSection(section.id)}
-                          className="inline-flex items-center justify-center rounded-xl border border-rose-300 bg-white px-3 py-2.5 text-rose-700 hover:bg-rose-50 transition-colors"
-                          aria-label={`Remove section ${index + 1}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Document Link</label>
+                  <input
+                    value={detailModule.documentLink || ''}
+                    onChange={(event) => updateDraft({ documentLink: event.target.value })}
+                    placeholder="https://drive.google.com/... or .pdf / .docx URL"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2 border-t border-slate-200 pt-4 mt-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700 mb-3">Seminar / Speaker Info</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Speaker Name</label>
+                  <input
+                    value={detailModule.speaker || ''}
+                    onChange={(event) => updateDraft({ speaker: event.target.value })}
+                    placeholder="Dr. Reynold Garcia Bustillo"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Speaker Position</label>
+                  <input
+                    value={detailModule.speakerPosition || ''}
+                    onChange={(event) => updateDraft({ speakerPosition: event.target.value })}
+                    placeholder="NSTP Program Director"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Scheduled Date</label>
+                  <input
+                    type="date"
+                    value={detailModule.scheduledDate || ''}
+                    onChange={(event) => updateDraft({ scheduledDate: event.target.value })}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Scheduled Time</label>
+                  <input
+                    value={detailModule.scheduledTime || ''}
+                    onChange={(event) => updateDraft({ scheduledTime: event.target.value })}
+                    placeholder="9:00 AM - 12:00 PM"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -725,6 +642,13 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
               </div>
               <h1 className="text-2xl font-bold text-slate-900 mb-2">{detailModule.title}</h1>
               <p className="text-slate-600 mb-4">{detailModule.description}</p>
+              {(detailModule.speaker || detailModule.scheduledDate || detailModule.scheduledTime) && (
+                <div className="mb-4 grid gap-2 rounded-2xl border border-amber-100 bg-amber-50/70 p-4 text-sm text-amber-950 sm:grid-cols-3">
+                  {detailModule.speaker && <span><strong>Speaker:</strong> {detailModule.speaker}{detailModule.speakerPosition ? ` (${detailModule.speakerPosition})` : ''}</span>}
+                  {detailModule.scheduledDate && <span><strong>Date:</strong> {detailModule.scheduledDate}</span>}
+                  {detailModule.scheduledTime && <span><strong>Time:</strong> {detailModule.scheduledTime}</span>}
+                </div>
+              )}
               {(detailModule.schoolYear || detailModule.semester || detailModule.sourceDocument) && (
                 <div className="mb-4 grid gap-2 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-sm text-blue-950 sm:grid-cols-3">
                   <span><strong>School year:</strong> {detailModule.schoolYear || 'Unspecified'}</span>
@@ -747,7 +671,6 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                     <Clock className="w-4 h-4" />
                     {detailModule.hours} hours
                   </span>
-                  <span>{detailModule.sections.length} sections</span>
                   <span>{getModuleProgress(detailModule)}% complete</span>
                   <span>
                     {publishedAssessments.some((assessment) => assessment.moduleId === detailModule.id && assessment.type !== 'exam') ? 'Post-test available' : 'Post-test not published'}
@@ -774,49 +697,95 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              {detailModule.sections.map((section) => {
-                const isCompleted = Boolean(progress[detailModule.id]?.[section.id]);
-                const Icon = section.type === 'video' ? Video : section.type === 'reading' ? BookOpen : FileText;
-
-                return (
-                  <div key={section.id} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg cursor-pointer dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-start gap-4">
-                        <div className={`p-3 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-slate-100'}`}>
-                          <Icon className={`w-5 h-5 ${isCompleted ? 'text-green-600' : 'text-slate-600'}`} />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-slate-900 mb-1">{section.title}</h3>
-                          <p className="text-sm text-slate-600">{section.duration}</p>
-                        </div>
-                      </div>
-                      {isCompleted && <CheckCircle className="w-6 h-6 text-green-600" />}
-                    </div>
-
-                    <div className="bg-slate-50 rounded-xl p-4 mb-4 border border-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
-                      <p className="text-sm text-slate-600 mb-3">
-                        {section.type === 'video' && 'Watch the instructional video to learn about this topic.'}
-                        {section.type === 'reading' && 'Read the learning materials and documentation provided.'}
-                        {section.type === 'lesson' && 'Complete the interactive lesson and activities.'}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Play className="w-4 h-4 text-amber-600" />
-                        <span className="text-sm text-amber-700">Interactive learning content</span>
-                      </div>
-                    </div>
-
-                    {!isCompleted && (
-                      <button
-                        onClick={() => completeSection(detailModule.id, section.id)}
-                        className="module-btn-primary clickable-button px-6"
-                      >
-                        Mark as Complete
-                      </button>
-                    )}
+              {detailModule.videoUrl && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Video className="w-5 h-5 text-blue-600" />
+                    <h3 className="font-semibold text-slate-900">Module Video</h3>
                   </div>
-                );
-              })}
+                  <div className="aspect-video rounded-lg overflow-hidden mb-4 bg-slate-100">
+                    <iframe
+                      src={getEmbedUrl(detailModule.videoUrl)}
+                      className="w-full h-full"
+                      allowFullScreen
+                      title={`${detailModule.title} video`}
+                    />
+                  </div>
+                  <a
+                    href={detailModule.videoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-blue-700 hover:text-blue-800 font-medium"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Open in new tab
+                  </a>
+                </div>
+              )}
+              {detailModule.meetingLink && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <ExternalLink className="w-5 h-5 text-amber-600" />
+                    <h3 className="font-semibold text-slate-900">Live Session</h3>
+                  </div>
+                  <p className="text-sm text-slate-600 mb-4">
+                    Join the live session for this module through the meeting link below.
+                  </p>
+                  <a
+                    href={detailModule.meetingLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-white hover:bg-amber-600 transition-colors"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Join Meeting
+                  </a>
+                </div>
+              )}
+              {detailModule.documentLink && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <ExternalLink className="w-5 h-5 text-blue-600" />
+                    <h3 className="font-semibold text-slate-900">Reference Document</h3>
+                  </div>
+                  <p className="text-sm text-slate-600 mb-4">
+                    Download or view the reference document for this module.
+                  </p>
+                  <a
+                    href={detailModule.documentLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Open Document
+                  </a>
+                </div>
+              )}
+              {!detailModule.videoUrl && !detailModule.meetingLink && !detailModule.documentLink && (
+                <div className="md:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm text-center">
+                  <p className="text-slate-500">No content added yet for this module.</p>
+                </div>
+              )}
             </div>
+
+            {getModuleProgress(detailModule) < 100 && (
+              <div className="flex justify-center">
+                <button
+                  onClick={() => toggleModuleComplete(detailModule.id)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-700 to-yellow-500 px-8 py-4 text-sm font-semibold text-white shadow-sm hover:opacity-95 transition-opacity"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                  Mark Module as Complete
+                </button>
+              </div>
+            )}
+            {getModuleProgress(detailModule) === 100 && (
+              <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700 font-semibold">
+                <CheckCircle className="w-5 h-5" />
+                Module Completed
+              </div>
+            )}
           </>
         )}
       </section>

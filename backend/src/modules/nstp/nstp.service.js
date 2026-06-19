@@ -12,26 +12,11 @@ export async function getDatabaseStatus() {
 }
 
 const fallback = {
-  accounts: [
-    { id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' },
-    { id: 'speaker-1', name: 'Dr. Maria Elena Santos', email: 'speaker@nstp.edu', password: 'speaker', role: 'speaker', title: 'NSTP Program Director' },
-    { id: 'student-demo-1', studentId: '2024-0001', name: 'Juan Dela Cruz', email: 'juan.dela-cruz@student.edu', password: 'student', role: 'student', component: 'MTS (Army)', generalEducationComplete: true, preferredComponent: 'MTS (Army)', examTaken: true, examScore: 92 },
-  ],
-  modules: [
-    { id: 'm1', title: 'Module 1: Introduction to NSTP', description: 'Understanding NSTP, legal basis, and civic purpose.', hours: 3, difficulty: 'Beginner', sections: [], updatedAt: now() },
-    { id: 'm2', title: 'Module 2: Citizenship Training', description: 'Rights, responsibilities, and civic duties.', hours: 3, difficulty: 'Beginner', sections: [], updatedAt: now() },
-    { id: 'm3', title: 'Module 3: Community Development', description: 'Community profiling, planning, and service.', hours: 4, difficulty: 'Intermediate', sections: [], updatedAt: now() },
-  ],
-  assessments: [
-    { id: 'asmt-nstp-intro', title: 'Module 1 Quiz', type: 'quiz', description: 'NSTP fundamentals.', moduleId: 'm1', timeLimit: 15, passingScore: 70, ownerId: 'admin-1', ownerName: 'Administrator', ownerRole: 'admin', status: 'published', questions: [], updatedAt: now() },
-  ],
-  students: [
-    { id: 'student-1', studentId: '2024-1001', name: 'Maria Santos', email: 'maria.santos@university.edu', component: 'CWTS', progress: 85, assessments: 7, status: 'active', notes: 'Consistent participation.', updatedAt: now() },
-    { id: 'student-2', studentId: '2024-1002', name: 'Juan Dela Cruz', email: 'juan.delacruz@university.edu', component: 'LTS', progress: 92, assessments: 8, status: 'active', notes: 'Ready for peer mentoring.', updatedAt: now() },
-  ],
-  grades: [
-    { studentId: '2024-0001', prelim: 88, midterm: 90, final: 0, remarks: 'In Progress', released: true, updatedAt: now() },
-  ],
+  accounts: [],
+  modules: [],
+  assessments: [],
+  students: [],
+  grades: [],
   notices: [],
   supportTickets: [],
 };

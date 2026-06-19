@@ -8,6 +8,8 @@ import {
   CheckCircle,
   ChevronDown,
   ClipboardList,
+  Clock,
+  Download,
   FileQuestion,
   FileVideo,
   LayoutDashboard,
@@ -28,18 +30,25 @@ import {
   createEmptyStudent,
   loadAccounts,
   loadAssessments,
+  loadAttendanceRecords,
+  loadAttendanceSessions,
   loadGradeRecords,
   loadPendingStudentRegistrations,
   loadStudents,
   saveAccounts,
+  saveAttendanceRecords,
+  saveAttendanceSessions,
   saveGradeRecords,
   savePendingStudentRegistrations,
   saveStudents,
   NSTP_COMPONENTS,
   PendingStudentRegistration,
   NstpAssessment,
+  NstpAttendanceRecord,
+  NstpAttendanceSession,
   NstpGradeRecord,
   NstpStudent,
+  AttendanceStatus,
 } from '../../../data/nstpData';
 
 type FacilitatorLecture = {
@@ -49,7 +58,7 @@ type FacilitatorLecture = {
   uploadedAt: string;
 };
 
-const componentColors = ['#10b981', '#2563eb', '#f59e0b', '#8b5cf6'];
+const componentColors = ['#10b981', '#2563eb', '#f59e0b', '#8b5cf6', '#06b6d4'];
 const gradeColors = ['#10b981', '#2563eb', '#f59e0b', '#8b5cf6', '#ef4444'];
 
 const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'F';
@@ -65,12 +74,22 @@ export default function FacilitatorDashboard({
   onNavigate?: (target: string) => void;
   embedded?: boolean;
 }) {
+  type FacilitatorView = 'dashboard' | 'enrollment-requests' | 'attendance-sheet' | 'grade-book' | 'lecture-uploads' | 'assessment-builder' | 'reports';
+
+  const [view, setView] = useState<FacilitatorView>('dashboard');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [lectures, setLectures] = useState<FacilitatorLecture[]>([]);
   const [students, setStudents] = useState<NstpStudent[]>([]);
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingStudentRegistration[]>([]);
   const [gradeRecords, setGradeRecords] = useState<NstpGradeRecord[]>([]);
   const [assessments, setAssessments] = useState<NstpAssessment[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<NstpAttendanceRecord[]>([]);
+  const [attendanceSessions, setAttendanceSessions] = useState<NstpAttendanceSession[]>([]);
+  const [newSessionTitle, setNewSessionTitle] = useState('');
+  const [newSessionDate, setNewSessionDate] = useState('');
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editSessionTitle, setEditSessionTitle] = useState('');
+  const [editSessionDate, setEditSessionDate] = useState('');
   const [lectureTitle, setLectureTitle] = useState('');
   const [search, setSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -83,6 +102,8 @@ export default function FacilitatorDashboard({
     setPendingRegistrations(loadPendingStudentRegistrations());
     setGradeRecords(loadGradeRecords());
     setAssessments(loadAssessments());
+    setAttendanceRecords(loadAttendanceRecords());
+    setAttendanceSessions(loadAttendanceSessions());
   }, [storageKey]);
 
   const assignedMunicipalities = user.municipalities || [];
@@ -219,6 +240,229 @@ export default function FacilitatorDashboard({
     setGradeRecords(nextRecords);
   };
 
+  const getRecentSaturdays = (count: number): string[] => {
+    const dates: string[] = [];
+    const current = new Date();
+    current.setDate(current.getDate() - 30);
+    while (dates.length < count) {
+      if (current.getDay() === 6) {
+        dates.push(current.toISOString().split('T')[0]);
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  };
+
+  const createAttendanceSession = () => {
+    const date = newSessionDate || getRecentSaturdays(1)[0];
+    if (!date) return;
+    const existing = attendanceSessions.find((s) => s.date === date);
+    if (existing) return;
+    const session: NstpAttendanceSession = {
+      id: `ats-${Math.random().toString(36).slice(2, 10)}`,
+      date,
+      facilitatorId: user.id,
+      title: newSessionTitle.trim() || `NSTP Session - ${new Date(date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+      createdAt: new Date().toISOString(),
+    };
+    const nextSessions = [...attendanceSessions, session].sort((a, b) => b.date.localeCompare(a.date));
+    setAttendanceSessions(nextSessions);
+    saveAttendanceSessions(nextSessions);
+    setNewSessionTitle('');
+    setNewSessionDate('');
+  };
+
+  const startEditSession = (session: NstpAttendanceSession) => {
+    setEditingSessionId(session.id);
+    setEditSessionTitle(session.title);
+    setEditSessionDate(session.date);
+  };
+
+  const saveEditSession = () => {
+    if (!editingSessionId || !editSessionDate) return;
+    const nextSessions = attendanceSessions.map((s) =>
+      s.id === editingSessionId
+        ? { ...s, title: editSessionTitle.trim() || s.title, date: editSessionDate, updatedAt: new Date().toISOString() }
+        : s
+    );
+    setAttendanceSessions(nextSessions);
+    saveAttendanceSessions(nextSessions);
+    setEditingSessionId(null);
+  };
+
+  const cancelEditSession = () => {
+    setEditingSessionId(null);
+  };
+
+  const deleteAttendanceSession = (sessionId: string) => {
+    const nextSessions = attendanceSessions.filter((s) => s.id !== sessionId);
+    const nextRecords = attendanceRecords.filter((r) => r.sessionId !== sessionId);
+    setAttendanceSessions(nextSessions);
+    setAttendanceRecords(nextRecords);
+    saveAttendanceSessions(nextSessions);
+    saveAttendanceRecords(nextRecords);
+  };
+
+  const getStudentAttendance = (studentId: string, sessionId: string): AttendanceStatus | undefined => {
+    return attendanceRecords.find((r) => r.studentId === studentId && r.sessionId === sessionId)?.status;
+  };
+
+  const setAttendance = (student: NstpStudent, sessionId: string, status: AttendanceStatus) => {
+    const studentKey = student.studentId || student.id;
+    const existingIndex = attendanceRecords.findIndex((r) => r.studentId === studentKey && r.sessionId === sessionId);
+    let nextRecords: NstpAttendanceRecord[];
+    if (existingIndex >= 0) {
+      if (attendanceRecords[existingIndex].status === status) {
+        nextRecords = attendanceRecords.filter((_, i) => i !== existingIndex);
+      } else {
+        nextRecords = attendanceRecords.map((r, i) =>
+          i === existingIndex ? { ...r, status, updatedAt: new Date().toISOString() } : r
+        );
+      }
+    } else {
+      nextRecords = [...attendanceRecords, {
+        id: `atr-${Math.random().toString(36).slice(2, 10)}`,
+        studentId: studentKey,
+        sessionId,
+        status,
+        facilitatorId: user.id,
+        updatedAt: new Date().toISOString(),
+      }];
+    }
+    setAttendanceRecords(nextRecords);
+    saveAttendanceRecords(nextRecords);
+  };
+
+  const getAttendanceCounts = (sessionId: string) => {
+    const records = attendanceRecords.filter((r) => r.sessionId === sessionId);
+    return {
+      present: records.filter((r) => r.status === 'present').length,
+      absent: records.filter((r) => r.status === 'absent').length,
+      late: records.filter((r) => r.status === 'late').length,
+      excused: records.filter((r) => r.status === 'excused').length,
+    };
+  };
+
+  const exportReportsPdf = async () => {
+    const [jspdfModule, autoTableModule] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+    const JsPDF = jspdfModule.default;
+    const autoTable = autoTableModule.default;
+    const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 40;
+
+    doc.setFontSize(18);
+    doc.text('NSTP Class Report', pageW / 2, 40, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text(`Facilitator: ${user.name}`, margin, 62);
+    doc.text(`Municipality: ${assignedMunicipalities.join(', ') || 'N/A'}`, margin, 76);
+    doc.text(`Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`, margin, 90);
+    doc.setDrawColor(37, 99, 235);
+    doc.setLineWidth(1);
+    doc.line(margin, 98, pageW - margin, 98);
+
+    let yPos = 116;
+    doc.setFontSize(14);
+    doc.text('Grade Distribution', margin, yPos);
+    yPos += 18;
+
+    const gradeTableData = gradeDistribution
+      .filter((g) => g.value > 0)
+      .map((g) => [g.range, g.value.toString(), `${scopedStudents.length ? Math.round((g.value / scopedStudents.length) * 100) : 0}%`]);
+
+    if (gradeTableData.length) {
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Grade Range', 'Students', 'Percentage']],
+        body: gradeTableData,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [37, 99, 235] },
+        margin: { left: margin, right: margin },
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 24;
+    } else {
+      yPos += 14;
+    }
+
+    doc.setFontSize(14);
+    doc.text('Recent Assessments', margin, yPos);
+    yPos += 18;
+
+    const assessmentTableData = recentAssessments.map((a) => [
+      a.title,
+      a.moduleId || 'General',
+      a.status,
+      new Date(a.updatedAt).toLocaleDateString(),
+    ]);
+
+    if (assessmentTableData.length) {
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Assessment', 'Module', 'Status', 'Updated']],
+        body: assessmentTableData,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [37, 99, 235] },
+        margin: { left: margin, right: margin },
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 24;
+    } else {
+      yPos += 14;
+    }
+
+    doc.setFontSize(14);
+    doc.text('Attendance Summary', margin, yPos);
+    yPos += 18;
+
+    const attTableData = attendanceSessions.map((s) => {
+      const c = getAttendanceCounts(s.id);
+      return [
+        s.title,
+        new Date(s.date).toLocaleDateString(),
+        `${c.present}`,
+        `${c.absent}`,
+        `${c.late}`,
+        `${c.excused}`,
+      ];
+    });
+
+    if (attTableData.length) {
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Session', 'Date', 'Present', 'Absent', 'Late', 'Excused']],
+        body: attTableData,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [37, 99, 235] },
+        margin: { left: margin, right: margin },
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 24;
+    } else {
+      yPos += 14;
+    }
+
+    doc.setFontSize(14);
+    doc.text('Student Grade Book', margin, yPos);
+    yPos += 18;
+
+    const gradeBookData = scopedStudents.map((st) => {
+      const r = getGradeRecord(st);
+      const avg = r ? Math.round(([r.prelim, r.midterm, r.final].filter((g) => g > 0).reduce((s, g) => s + g, 0) / Math.max(1, [r.prelim, r.midterm, r.final].filter((g) => g > 0).length))) : 0;
+      return [st.name, st.component, `${st.progress}%`, `${r?.prelim || '-'}`, `${r?.midterm || '-'}`, `${r?.final || '-'}`, avg ? `${avg}` : '-', r?.remarks || st.status];
+    });
+
+    if (gradeBookData.length) {
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Student', 'Component', 'Progress', 'Prelim', 'Midterm', 'Final', 'Avg', 'Remarks']],
+        body: gradeBookData,
+        styles: { fontSize: 7 },
+        headStyles: { fillColor: [37, 99, 235] },
+        margin: { left: margin, right: margin },
+      });
+    }
+
+    doc.save(`nstp-report-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   const toggleTheme = () => {
     document.documentElement.classList.toggle('dark');
   };
@@ -226,30 +470,30 @@ export default function FacilitatorDashboard({
   const navGroups = [
     {
       label: 'Home',
-      items: [{ label: 'Dashboard', icon: LayoutDashboard, active: true, badge: null, target: 'facilitator' }],
+      items: [{ label: 'Dashboard', icon: LayoutDashboard, active: view === 'dashboard', badge: null, target: 'dashboard' as FacilitatorView }],
     },
     {
       label: 'Students',
       items: [
-        { label: 'My Students', icon: Users, active: false, badge: null, target: 'grade-book' },
-        { label: 'Student Approvals', icon: UserCheck, active: false, badge: scopedPending.length || null, target: 'enrollment-requests' },
-        { label: 'Attendance', icon: CalendarCheck, active: false, badge: null, target: 'class-overview' },
-        { label: 'Grades', icon: ClipboardList, active: false, badge: null, target: 'grade-book' },
+        { label: 'My Students', icon: Users, active: view === 'grade-book', badge: null, target: 'grade-book' as FacilitatorView },
+        { label: 'Student Approvals', icon: UserCheck, active: view === 'enrollment-requests', badge: scopedPending.length || null, target: 'enrollment-requests' as FacilitatorView },
+        { label: 'Attendance', icon: CalendarCheck, active: view === 'attendance-sheet', badge: null, target: 'attendance-sheet' as FacilitatorView },
+        { label: 'Grades', icon: ClipboardList, active: view === 'grade-book', badge: null, target: 'grade-book' as FacilitatorView },
       ],
     },
     {
       label: 'Assessments',
       items: [
-        { label: 'Assessment Management', icon: FileQuestion, active: false, badge: null, target: 'assessment-builder' },
-        { label: 'Lecture Uploads', icon: FileVideo, active: false, badge: lectures.length || null, target: 'lecture-uploads' },
-        { label: 'Question Banks', icon: BookOpen, active: false, badge: null, target: 'assessment-builder' },
+        { label: 'Assessment Management', icon: FileQuestion, active: view === 'assessment-builder', badge: null, target: 'assessment-builder' as FacilitatorView },
+        { label: 'Lecture Uploads', icon: FileVideo, active: view === 'lecture-uploads', badge: lectures.length || null, target: 'lecture-uploads' as FacilitatorView },
+        { label: 'Question Banks', icon: BookOpen, active: view === 'assessment-builder', badge: null, target: 'assessment-builder' as FacilitatorView },
       ],
     },
     {
       label: 'Reports',
       items: [
-        { label: 'Grade Book', icon: ClipboardList, active: false, badge: null, target: 'grade-book' },
-        { label: 'Reports', icon: BarChart3, active: false, badge: null, target: 'facilitator-analytics' },
+        { label: 'Grade Book', icon: ClipboardList, active: view === 'grade-book', badge: null, target: 'grade-book' as FacilitatorView },
+        { label: 'Reports', icon: BarChart3, active: view === 'reports', badge: null, target: 'reports' as FacilitatorView },
       ],
     },
   ];
@@ -259,7 +503,7 @@ export default function FacilitatorDashboard({
       onNavigate?.(target);
       return;
     }
-    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setView(target as FacilitatorView);
   };
 
   const kpis = [
@@ -375,32 +619,185 @@ export default function FacilitatorDashboard({
           </header>
 
           <div className="space-y-5 p-5">
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {kpis.map((stat) => {
-                const Icon = stat.icon;
-                return (
-                  <article key={stat.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                    <div className="flex items-start gap-4">
-                      <span className={`grid h-14 w-14 place-items-center rounded-2xl ${stat.toneClass}`}>
-                        <Icon className="h-7 w-7" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{stat.label}</p>
-                        <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">{stat.value}</p>
-                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{stat.detail}</p>
+            {view === 'dashboard' && (
+              <>
+                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {kpis.map((stat) => {
+                    const Icon = stat.icon;
+                    return (
+                      <article key={stat.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                        <div className="flex items-start gap-4">
+                          <span className={`grid h-14 w-14 place-items-center rounded-2xl ${stat.toneClass}`}>
+                            <Icon className="h-7 w-7" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{stat.label}</p>
+                            <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">{stat.value}</p>
+                            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{stat.detail}</p>
+                          </div>
+                        </div>
+                        <p className="mt-4 text-sm font-medium text-blue-700 dark:text-blue-300">{stat.action}</p>
+                      </article>
+                    );
+                  })}
+                </section>
+
+                <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+                  <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Student Approvals</h2>
+                      <button onClick={() => setView('enrollment-requests')} className="text-sm font-medium text-blue-700 dark:text-blue-300 hover:underline">View all</button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[720px] overflow-hidden rounded-2xl text-sm">
+                        <thead>
+                          <tr className="border-y border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                            <th className="px-4 py-3">Student</th>
+                            <th className="px-4 py-3">Municipality</th>
+                            <th className="px-4 py-3">Request Date</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visiblePending.slice(0, 5).map((registration) => (
+                            <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-600 text-xs font-semibold text-white">{initials(registration.name)}</span>
+                                  <span>
+                                    <span className="block font-medium text-slate-900 dark:text-slate-100">{registration.name}</span>
+                                    <span className="text-xs text-slate-500">{registration.studentId || registration.email}</span>
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.municipality}, Biliran</td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(registration.createdAt).toLocaleDateString()}</td>
+                              <td className="px-4 py-3"><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">Pending</span></td>
+                              <td className="px-4 py-3">
+                                <div className="flex gap-2">
+                                  <button onClick={() => approveRegistration(registration)} className="grid h-9 w-9 place-items-center rounded-full border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500/30 dark:hover:bg-emerald-500/10">
+                                    <Check className="h-4 w-4" />
+                                  </button>
+                                  <button onClick={() => rejectRegistration(registration)} className="grid h-9 w-9 place-items-center rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10">
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {visiblePending.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          No pending enrollment requests for your municipality scope.
+                        </div>
+                      ) : null}
+                    </div>
+                  </article>
+
+                  <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Class Overview</h2>
+                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300">View all students</span>
+                    </div>
+                    <div className="grid gap-5 sm:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-1 2xl:grid-cols-[220px_minmax(0,1fr)]">
+                      <div className="h-56 min-h-56 min-w-0">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                          <PieChart>
+                            <Pie data={componentData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={88} paddingAngle={2}>
+                              {componentData.map((entry, index) => <Cell key={entry.name} fill={componentColors[index % componentColors.length]} />)}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="space-y-4">
+                        {componentData.map((item, index) => (
+                          <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
+                            <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
+                              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: componentColors[index] }} />
+                              {item.name}
+                            </span>
+                            <span className="font-semibold text-slate-900 dark:text-white">{item.value} ({scopedStudents.length ? Math.round((item.value / scopedStudents.length) * 100) : 0}%)</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    <p className="mt-4 text-sm font-medium text-blue-700 dark:text-blue-300">{stat.action}</p>
                   </article>
-                );
-              })}
-            </section>
+                </section>
 
-            <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-              <article id="enrollment-requests" className="scroll-mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+                  <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Recent Assessments</h2>
+                      <button onClick={() => setView('assessment-builder')} className="text-sm font-medium text-blue-700 dark:text-blue-300 hover:underline">View all</button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[680px] text-sm">
+                        <thead>
+                          <tr className="border-y border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                            <th className="px-4 py-3">Assessment</th>
+                            <th className="px-4 py-3">Module</th>
+                            <th className="px-4 py-3">Submissions</th>
+                            <th className="px-4 py-3">Due Date</th>
+                            <th className="px-4 py-3">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recentAssessments.map((assessment, index) => (
+                            <tr key={assessment.id} className="border-b border-slate-100 dark:border-slate-800">
+                              <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{assessment.title}</td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{assessment.moduleId || 'General'}</td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{Math.max(0, scopedStudents.length - index * 4)} / {scopedStudents.length}</td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(assessment.updatedAt).toLocaleDateString()}</td>
+                              <td className="px-4 py-3">
+                                <span className={`rounded-full px-3 py-1 text-xs font-medium ${assessment.status === 'published' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                                  {assessment.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+
+                  <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Grade Distribution</h2>
+                      <button onClick={() => setView('grade-book')} className="text-sm font-medium text-blue-700 dark:text-blue-300 hover:underline">View grade book</button>
+                    </div>
+                    <div className="h-64 min-h-64 min-w-0">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                        <BarChart data={gradeDistribution} margin={{ top: 12, right: 8, left: -18, bottom: 0 }}>
+                          <XAxis dataKey="range" tickLine={false} axisLine={false} fontSize={12} />
+                          <YAxis tickLine={false} axisLine={false} fontSize={12} />
+                          <Tooltip />
+                          <Bar dataKey="value" radius={[10, 10, 0, 0]}>
+                            {gradeDistribution.map((entry, index) => <Cell key={entry.range} fill={gradeColors[index % gradeColors.length]} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </article>
+                </section>
+              </>
+            )}
+
+            {view === 'enrollment-requests' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Student Approvals</h2>
-                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">View all</span>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setView('dashboard')} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300">
+                      <ChevronDown className="h-4 w-4 rotate-90" />
+                    </button>
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Student Approvals</h2>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Approve or reject pending student registrations.</p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">{visiblePending.length} pending</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[720px] overflow-hidden rounded-2xl text-sm">
@@ -448,172 +845,401 @@ export default function FacilitatorDashboard({
                     </div>
                   ) : null}
                 </div>
-              </article>
+              </section>
+            )}
 
-              <article id="class-overview" className="scroll-mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            {view === 'grade-book' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Class Overview</h2>
-                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">View all students</span>
-                </div>
-                <div className="grid gap-5 sm:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-1 2xl:grid-cols-[220px_minmax(0,1fr)]">
-                  <div className="h-56 min-h-56 min-w-0">
-                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                      <PieChart>
-                        <Pie data={componentData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={88} paddingAngle={2}>
-                          {componentData.map((entry, index) => <Cell key={entry.name} fill={componentColors[index % componentColors.length]} />)}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setView('dashboard')} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300">
+                      <ChevronDown className="h-4 w-4 rotate-90" />
+                    </button>
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Grade Book</h2>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Manage student grades - Prelim, Midterm, and Final.</p>
+                    </div>
                   </div>
-                  <div className="space-y-4">
-                    {componentData.map((item, index) => (
-                      <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
-                        <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
-                          <span className="h-3 w-3 rounded-full" style={{ backgroundColor: componentColors[index] }} />
-                          {item.name}
-                        </span>
-                        <span className="font-semibold text-slate-900 dark:text-white">{item.value} ({scopedStudents.length ? Math.round((item.value / scopedStudents.length) * 100) : 0}%)</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </article>
-            </section>
-
-            <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-              <article id="facilitator-analytics" className="scroll-mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Recent Assessments</h2>
-                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">View all</span>
+                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">{scopedStudents.length} students</span>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[680px] text-sm">
+                  <table className="w-full min-w-[850px] text-sm">
                     <thead>
                       <tr className="border-y border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                        <th className="px-4 py-3">Assessment</th>
-                        <th className="px-4 py-3">Module</th>
-                        <th className="px-4 py-3">Submissions</th>
-                        <th className="px-4 py-3">Due Date</th>
-                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Student</th>
+                        <th className="px-4 py-3">Component</th>
+                        <th className="px-4 py-3">Progress</th>
+                        <th className="px-4 py-3">Prelim</th>
+                        <th className="px-4 py-3">Midterm</th>
+                        <th className="px-4 py-3">Final</th>
+                        <th className="px-4 py-3">Remarks</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {recentAssessments.map((assessment, index) => (
-                        <tr key={assessment.id} className="border-b border-slate-100 dark:border-slate-800">
-                          <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{assessment.title}</td>
-                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{assessment.moduleId || 'General'}</td>
-                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{Math.max(0, scopedStudents.length - index * 4)} / {scopedStudents.length}</td>
-                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(assessment.updatedAt).toLocaleDateString()}</td>
-                          <td className="px-4 py-3">
-                            <span className={`rounded-full px-3 py-1 text-xs font-medium ${assessment.status === 'published' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
-                              {assessment.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {scopedStudents.map((student) => {
+                        const record = getGradeRecord(student);
+                        return (
+                          <tr key={student.id} className="border-b border-slate-100 dark:border-slate-800">
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-slate-900 dark:text-slate-100">{student.name}</p>
+                              <p className="text-xs text-slate-500">{student.studentId || student.email}</p>
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{student.component}</td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{student.progress}%</td>
+                            {(['prelim', 'midterm', 'final'] as const).map((field) => (
+                              <td key={field} className="px-4 py-3">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  value={record?.[field] || 0}
+                                  onChange={(event) => updateGrade(student, field, Number(event.target.value))}
+                                  className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900"
+                                />
+                              </td>
+                            ))}
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{record?.remarks || student.status}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
+                  {scopedStudents.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700">No approved students assigned yet.</p> : null}
                 </div>
-              </article>
+              </section>
+            )}
 
-              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            {view === 'lecture-uploads' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Grade Distribution</h2>
-                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">View grade book</span>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setView('dashboard')} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300">
+                      <ChevronDown className="h-4 w-4 rotate-90" />
+                    </button>
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Lecture Uploads</h2>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Upload and manage lecture materials.</p>
+                    </div>
+                  </div>
+                  <button onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
+                    <Upload className="h-4 w-4" />
+                    Upload Lecture
+                  </button>
                 </div>
-                <div className="h-64 min-h-64 min-w-0">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                    <BarChart data={gradeDistribution} margin={{ top: 12, right: 8, left: -18, bottom: 0 }}>
-                      <XAxis dataKey="range" tickLine={false} axisLine={false} fontSize={12} />
-                      <YAxis tickLine={false} axisLine={false} fontSize={12} />
-                      <Tooltip />
-                      <Bar dataKey="value" radius={[10, 10, 0, 0]}>
-                        {gradeDistribution.map((entry, index) => <Cell key={entry.range} fill={gradeColors[index % gradeColors.length]} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </article>
-            </section>
+                <input ref={fileInputRef} type="file" accept="video/*" onChange={handleLectureUpload} className="hidden" />
+                <input
+                  value={lectureTitle}
+                  onChange={(event) => setLectureTitle(event.target.value)}
+                  placeholder="Optional lecture title before uploading"
+                  className="mb-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-400 dark:border-slate-800 dark:bg-slate-900"
+                />
+                {lectures.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+                    <FileVideo className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
+                    <p className="mt-3 text-sm font-medium text-slate-500 dark:text-slate-400">No lectures uploaded yet</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">Upload lecture videos for your assigned classes.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {lectures.map((lecture) => (
+                      <div key={lecture.id} className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{lecture.title}</p>
+                          <p className="text-xs text-slate-500">{lecture.fileName} &middot; {new Date(lecture.uploadedAt).toLocaleDateString()}</p>
+                        </div>
+                        <FileVideo className="h-5 w-5 shrink-0 text-blue-600" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
-            <section id="lecture-uploads" className="scroll-mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-              <span id="grade-book" className="block scroll-mt-5" />
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Lecture Uploads and Grade Book</h2>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Upload lecture materials and update grades without leaving the facilitator dashboard.</p>
+            {view === 'assessment-builder' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <div className="mb-4 flex items-center gap-3">
+                  <button onClick={() => setView('dashboard')} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300">
+                    <ChevronDown className="h-4 w-4 rotate-90" />
+                  </button>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">
+                    <CheckCircle className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Assessment Builder</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Create assessments and answer keys for your assigned classes.</p>
+                  </div>
                 </div>
-                <button onClick={() => fileInputRef.current?.click()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800">
-                  <Upload className="h-4 w-4" />
-                  Upload Lecture
-                </button>
-              </div>
-              <input ref={fileInputRef} type="file" accept="video/*" onChange={handleLectureUpload} className="hidden" />
-              <input
-                value={lectureTitle}
-                onChange={(event) => setLectureTitle(event.target.value)}
-                placeholder="Optional lecture title before uploading"
-                className="mb-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-400 dark:border-slate-800 dark:bg-slate-900"
-              />
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[850px] text-sm">
-                  <thead>
-                    <tr className="border-y border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                      <th className="px-4 py-3">Student</th>
-                      <th className="px-4 py-3">Component</th>
-                      <th className="px-4 py-3">Progress</th>
-                      <th className="px-4 py-3">Prelim</th>
-                      <th className="px-4 py-3">Midterm</th>
-                      <th className="px-4 py-3">Final</th>
-                      <th className="px-4 py-3">Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scopedStudents.map((student) => {
-                      const record = getGradeRecord(student);
+                <AssessmentManager user={user} role="facilitator" />
+              </section>
+            )}
+
+            {view === 'attendance-sheet' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <div className="mb-4 flex items-center gap-3">
+                  <button onClick={() => setView('dashboard')} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300">
+                    <ChevronDown className="h-4 w-4 rotate-90" />
+                  </button>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
+                    <CalendarCheck className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Attendance Sheet</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Track student attendance every NSTP Saturday session.</p>
+                  </div>
+                </div>
+
+                <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-end">
+                  <div className="flex-1">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Session Title</label>
+                    <input
+                      value={newSessionTitle}
+                      onChange={(e) => setNewSessionTitle(e.target.value)}
+                      placeholder="e.g. Week 1 - Orientation"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-950"
+                    />
+                  </div>
+                  <div className="sm:w-48">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Session Date</label>
+                    <input
+                      type="date"
+                      value={newSessionDate}
+                      onChange={(e) => setNewSessionDate(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-950"
+                    />
+                  </div>
+                  <button
+                    onClick={createAttendanceSession}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-700 px-5 text-sm font-semibold text-white hover:bg-blue-800"
+                  >
+                    <Check className="h-4 w-4" />
+                    Add Session
+                  </button>
+                </div>
+
+                {attendanceSessions.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+                    <CalendarCheck className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
+                    <p className="mt-3 text-sm font-medium text-slate-500 dark:text-slate-400">No attendance sessions yet</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">Add a session above to start tracking NSTP Saturday attendance.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {attendanceSessions.map((session) => {
+                      const counts = getAttendanceCounts(session.id);
                       return (
-                        <tr key={student.id} className="border-b border-slate-100 dark:border-slate-800">
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-slate-900 dark:text-slate-100">{student.name}</p>
-                            <p className="text-xs text-slate-500">{student.studentId || student.email}</p>
-                          </td>
-                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{student.component}</td>
-                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{student.progress}%</td>
-                          {(['prelim', 'midterm', 'final'] as const).map((field) => (
-                            <td key={field} className="px-4 py-3">
-                              <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                value={record?.[field] || 0}
-                                onChange={(event) => updateGrade(student, field, Number(event.target.value))}
-                                className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900"
-                              />
-                            </td>
-                          ))}
-                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{record?.remarks || student.status}</td>
-                        </tr>
+                        <div key={session.id} className="rounded-xl border border-slate-200 dark:border-slate-700">
+                          <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
+                            {editingSessionId === session.id ? (
+                              <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-end">
+                                <div className="flex-1">
+                                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Title</label>
+                                  <input
+                                    value={editSessionTitle}
+                                    onChange={(e) => setEditSessionTitle(e.target.value)}
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-400 dark:border-slate-600 dark:bg-slate-950"
+                                  />
+                                </div>
+                                <div className="sm:w-40">
+                                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Date</label>
+                                  <input
+                                    type="date"
+                                    value={editSessionDate}
+                                    onChange={(e) => setEditSessionDate(e.target.value)}
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-400 dark:border-slate-600 dark:bg-slate-950"
+                                  />
+                                </div>
+                                <div className="flex gap-1">
+                                  <button onClick={saveEditSession} className="inline-flex h-8 items-center gap-1 rounded-lg bg-blue-700 px-3 text-xs font-semibold text-white hover:bg-blue-800">
+                                    <Check className="h-3.5 w-3.5" /> Save
+                                  </button>
+                                  <button onClick={cancelEditSession} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300">
+                                    <X className="h-3.5 w-3.5" /> Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="min-w-0">
+                                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{session.title}</h3>
+                                  <p className="text-xs text-slate-500">
+                                    {new Date(session.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                    <span className="h-2 w-2 rounded-full bg-emerald-500" />{counts.present}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400">
+                                    <span className="h-2 w-2 rounded-full bg-rose-500" />{counts.absent}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                    <span className="h-2 w-2 rounded-full bg-amber-500" />{counts.late}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                                    <span className="h-2 w-2 rounded-full bg-blue-500" />{counts.excused}
+                                  </span>
+                                  <button
+                                    onClick={() => startEditSession(session)}
+                                    className="ml-1 grid h-7 w-7 place-items-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-600 dark:text-slate-500 dark:hover:bg-slate-800"
+                                    title="Edit session"
+                                  >
+                                    <ClipboardList className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => deleteAttendanceSession(session.id)}
+                                    className="grid h-7 w-7 place-items-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10"
+                                    title="Delete session"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[500px] text-sm">
+                              <thead>
+                                <tr className="border-b border-slate-100 bg-white text-left text-xs uppercase tracking-[0.06em] text-slate-500 dark:border-slate-800 dark:bg-slate-950">
+                                  <th className="px-4 py-3">Student</th>
+                                  <th className="px-4 py-3">Component</th>
+                                  <th className="px-4 py-3 text-center">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {scopedStudents.map((student) => {
+                                  const currentStatus = getStudentAttendance(student.studentId || student.id, session.id);
+                                  return (
+                                    <tr key={student.id} className="border-b border-slate-100 dark:border-slate-800">
+                                      <td className="px-4 py-3">
+                                        <p className="font-medium text-slate-900 dark:text-slate-100">{student.name}</p>
+                                        <p className="text-xs text-slate-500">{student.studentId || student.email}</p>
+                                      </td>
+                                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{student.component}</td>
+                                      <td className="px-4 py-3">
+                                        <div className="flex items-center justify-center gap-1">
+                                          {(['present', 'absent', 'late', 'excused'] as AttendanceStatus[]).map((status) => {
+                                            const isActive = currentStatus === status;
+                                            const btnColors: Record<AttendanceStatus, string> = {
+                                              present: 'border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:border-emerald-500/40 dark:text-emerald-200 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25',
+                                              absent: 'border-rose-300 text-rose-700 bg-rose-50 hover:bg-rose-100 dark:border-rose-500/40 dark:text-rose-200 dark:bg-rose-500/15 dark:hover:bg-rose-500/25',
+                                              late: 'border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:border-amber-500/40 dark:text-amber-200 dark:bg-amber-500/15 dark:hover:bg-amber-500/25',
+                                              excused: 'border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 dark:border-blue-500/40 dark:text-blue-200 dark:bg-blue-500/15 dark:hover:bg-blue-500/25',
+                                            };
+                                            const activeColors: Record<AttendanceStatus, string> = {
+                                              present: 'border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-700 dark:border-emerald-400 dark:bg-emerald-500 dark:text-white',
+                                              absent: 'border-rose-500 bg-rose-600 text-white hover:bg-rose-700 dark:border-rose-400 dark:bg-rose-500 dark:text-white',
+                                              late: 'border-amber-500 bg-amber-600 text-white hover:bg-amber-700 dark:border-amber-400 dark:bg-amber-500 dark:text-white',
+                                              excused: 'border-blue-500 bg-blue-600 text-white hover:bg-blue-700 dark:border-blue-400 dark:bg-blue-500 dark:text-white',
+                                            };
+                                            return (
+                                              <button
+                                                key={status}
+                                                onClick={() => setAttendance(student, session.id, status)}
+                                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold leading-none transition-all ${
+                                                  isActive ? activeColors[status] : btnColors[status]
+                                                }`}
+                                                title={status.charAt(0).toUpperCase() + status.slice(1)}
+                                              >
+                                                {status === 'present' && <CheckCircle className="h-3 w-3" />}
+                                                {status === 'absent' && <X className="h-3 w-3" />}
+                                                {status === 'late' && <Clock className="h-3 w-3" />}
+                                                {status === 'excused' && <Check className="h-3 w-3" />}
+                                                <span className="hidden sm:inline">{status.charAt(0).toUpperCase() + status.slice(1)}</span>
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                            {scopedStudents.length === 0 && (
+                              <div className="p-6 text-center text-sm text-slate-500">
+                                No students assigned to your municipality yet.
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
-                {scopedStudents.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700">No approved students assigned yet.</p> : null}
-              </div>
-            </section>
+                  </div>
+                )}
+              </section>
+            )}
 
-            <section id="assessment-builder" className="scroll-mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-              <div className="mb-4 flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">
-                  <CheckCircle className="h-5 w-5" />
-                </span>
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Assessment Builder</h2>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Create assessments and answer keys for your assigned classes.</p>
+            {view === 'reports' && (
+              <section className="space-y-5">
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setView('dashboard')} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300">
+                    <ChevronDown className="h-4 w-4 rotate-90" />
+                  </button>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Reports</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Class analytics and grade distribution.</p>
+                  </div>
+                  <button
+                    onClick={exportReportsPdf}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800"
+                  >
+                    <Download className="h-4 w-4" />
+                    Export PDF
+                  </button>
                 </div>
-              </div>
-              <AssessmentManager user={user} role="facilitator" />
-            </section>
+                <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+                  <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Recent Assessments</h2>
+                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300">{recentAssessments.length} total</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[680px] text-sm">
+                        <thead>
+                          <tr className="border-y border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                            <th className="px-4 py-3">Assessment</th>
+                            <th className="px-4 py-3">Module</th>
+                            <th className="px-4 py-3">Submissions</th>
+                            <th className="px-4 py-3">Due Date</th>
+                            <th className="px-4 py-3">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recentAssessments.map((assessment, index) => (
+                            <tr key={assessment.id} className="border-b border-slate-100 dark:border-slate-800">
+                              <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{assessment.title}</td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{assessment.moduleId || 'General'}</td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{Math.max(0, scopedStudents.length - index * 4)} / {scopedStudents.length}</td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(assessment.updatedAt).toLocaleDateString()}</td>
+                              <td className="px-4 py-3">
+                                <span className={`rounded-full px-3 py-1 text-xs font-medium ${assessment.status === 'published' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                                  {assessment.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+                  <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                    <h2 className="mb-4 text-lg font-semibold text-slate-950 dark:text-white">Grade Distribution</h2>
+                    <div className="h-64 min-h-64 min-w-0">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                        <BarChart data={gradeDistribution} margin={{ top: 12, right: 8, left: -18, bottom: 0 }}>
+                          <XAxis dataKey="range" tickLine={false} axisLine={false} fontSize={12} />
+                          <YAxis tickLine={false} axisLine={false} fontSize={12} />
+                          <Tooltip />
+                          <Bar dataKey="value" radius={[10, 10, 0, 0]}>
+                            {gradeDistribution.map((entry, index) => <Cell key={entry.range} fill={gradeColors[index % gradeColors.length]} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </article>
+                </section>
+              </section>
+            )}
           </div>
         </main>
       </div>

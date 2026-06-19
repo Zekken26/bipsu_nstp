@@ -6,7 +6,8 @@ import AssessmentManager from '../../assessments/components/AssessmentManager';
 import ModulesPage from '../../../pages/ModulesPage';
 import FacilitatorManagement from '../components/FacilitatorManagement';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
-import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups } from '../../../data/nstpData';
+import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups } from '../../../data/nstpData';
+import { apiPost } from '../../../services/apiClient';
 
 type AdminAuditEntry = {
   id: string;
@@ -203,6 +204,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const publishedAssessmentCount = assessments.filter((assessment) => assessment.status === 'published').length;
   const modules = loadModules();
   const facilitatorAccounts = useMemo(() => loadAccounts().filter((account) => account.role === 'facilitator'), [accountVersion]);
+  const currentAdmin = useMemo(() => loadAccounts().find((account) => account.role === 'admin') || null, [accountVersion]);
 
   const persistStudents = (nextStudents: NstpStudent[]) => {
     saveStudents(nextStudents);
@@ -357,7 +359,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     const statusIdx = indexOf('status');
     const notesIdx = indexOf('notes');
 
-    const componentValues: NstpStudent['component'][] = ['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)'];
+    const componentValues: NstpStudent['component'][] = ['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)', 'CWTS (Coast Guard)'];
     const statusValues: NstpStudent['status'][] = ['active', 'pending', 'graduated'];
 
     const importedRows = lines.slice(1).map((line) => parseCsvLine(line));
@@ -395,7 +397,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     event.target.value = '';
   };
 
-  const approveRegistration = (registration: PendingStudentRegistration) => {
+  const approveRegistration = async (registration: PendingStudentRegistration) => {
     const allAccounts = loadAccounts();
     const approvedStudentId = registration.studentId || `LEGACY-${registration.id.slice(-4).toUpperCase()}`;
     const duplicate = allAccounts.find((account) =>
@@ -408,6 +410,9 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       persistPendingRegistrations(pendingRegistrations.filter((item) => item.id !== registration.id));
       return;
     }
+
+    // Save to PostgreSQL via backend API
+    await apiPost('/auth/register', registration, null);
 
     const nextAccount = {
       id: `student-${Math.random().toString(36).slice(2, 10)}`,
@@ -888,50 +893,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     URL.revokeObjectURL(link.href);
   };
 
-  const loadDemoCohort = () => {
-    const firstNames = ['Althea', 'Miguel', 'Jasmine', 'Rafael', 'Bianca', 'Carlo', 'Louise', 'Mark', 'Angelica', 'Reynaldo', 'Kyla', 'Daryl'];
-    const lastNames = ['Santos', 'Reyes', 'Abad', 'Villanueva', 'Dela Cruz', 'Torres', 'Garcia', 'Navarro', 'Tan', 'Ramos', 'Lim', 'Mendoza'];
-    const baseYears = [2024, 2025, 2026];
-    const demoStudents: NstpStudent[] = Array.from({ length: 1200 }, (_, index) => {
-      const year = baseYears[index % baseYears.length];
-      const municipality = BILIRAN_MUNICIPALITIES[index % BILIRAN_MUNICIPALITIES.length];
-      const component = NSTP_COMPONENTS[index % NSTP_COMPONENTS.length];
-      const progress = Math.min(100, Math.max(28, 45 + ((index * 17) % 56)));
-      const status: NstpStudent['status'] = progress >= 96 ? 'graduated' : progress < 64 ? 'pending' : 'active';
-      const facilitator = facilitatorAccounts.find((account) => account.municipalities?.includes(municipality));
-      return {
-        id: `demo-${year}-${index + 1}`,
-        studentId: `${year}-${String(index + 1).padStart(5, '0')}`,
-        name: `${firstNames[index % firstNames.length]} ${lastNames[(index * 3) % lastNames.length]}`,
-        email: `demo.${year}.${index + 1}@student.bipsu.edu.ph`,
-        component,
-        municipality,
-        facilitatorId: facilitator?.id,
-        facilitatorName: facilitator?.name,
-        progress,
-        assessments: Math.min(publishedAssessmentCount || 9, 3 + ((index * 5) % 7)),
-        status,
-        notes: `Demo ${getStudentSchoolYear({ studentId: `${year}-00000` } as NstpStudent)} student from ${municipality}.`,
-        updatedAt: new Date().toISOString(),
-      };
-    });
-
-    const withoutOldDemo = students.filter((student) => !student.id.startsWith('demo-'));
-    persistStudents([...withoutOldDemo, ...demoStudents]);
-    const demoGrades: NstpGradeRecord[] = demoStudents.slice(0, 180).map((student, index) => ({
-      studentId: student.studentId || student.id,
-      prelim: 72 + (index % 25),
-      midterm: 70 + ((index * 2) % 27),
-      final: student.progress >= 75 ? 74 + ((index * 3) % 24) : 0,
-      remarks: student.progress >= 75 ? 'Passed' : 'For Completion',
-      released: student.progress >= 80,
-      updatedAt: new Date().toISOString(),
-    }));
-    const demoGradeIds = new Set(demoGrades.map((record) => record.studentId));
-    persistGradeRecords([...gradeRecords.filter((record) => !demoGradeIds.has(record.studentId)), ...demoGrades]);
-    logAudit('Loaded demo cohort', 'Generated 1,200 multi-year demo students for analytics and module testing');
-  };
-
   const schoolYearStudents = useMemo(() => students.filter((student) => getStudentSchoolYear(student) === schoolYear), [students, schoolYear]);
   const totalStudents = schoolYearStudents.length;
   const avgProgress = totalStudents === 0 ? 0 : Math.round(schoolYearStudents.reduce((acc, s) => acc + s.progress, 0) / totalStudents);
@@ -939,6 +900,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
 
   const componentCounts = useMemo(() => ({
     'CWTS': schoolYearStudents.filter((s) => s.component === 'CWTS').length,
+    'CWTS (Coast Guard)': schoolYearStudents.filter((s) => s.component === 'CWTS (Coast Guard)').length,
     'LTS': schoolYearStudents.filter((s) => s.component === 'LTS').length,
     'MTS (Army)': schoolYearStudents.filter((s) => s.component === 'MTS (Army)').length,
     'MTS (Navy)': schoolYearStudents.filter((s) => s.component === 'MTS (Navy)').length,
@@ -983,10 +945,8 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       const completed = schoolYearStudents.reduce((count, student) => {
         const saved = localStorage.getItem(`progress-${student.id}`);
         if (!saved) return count;
-        const parsed = safeJsonParse<Record<string, Record<string, boolean>>>(saved, {});
-        const sectionState = parsed[module.id] || {};
-        const completedSections = Object.values(sectionState).filter(Boolean).length;
-        return count + (module.sections.length > 0 ? Math.round((completedSections / module.sections.length) * 100) : 0);
+        const parsed = safeJsonParse<Record<string, boolean>>(saved, {});
+        return count + (parsed[module.id] ? 100 : 0);
       }, 0);
       return accumulator + (schoolYearStudents.length > 0 ? Math.round(completed / schoolYearStudents.length) : 0);
     }, 0) / modules.length)
@@ -1326,14 +1286,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     if (!studentForm) return;
     setStudentForm({ ...studentForm, [field]: value });
   };
-
-  if (false && view === 'assessments') {
-    return <AssessmentManager user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" />;
-  }
-
-  if (false && view === 'modules') {
-    return <ModulesPage user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" onBack={() => setView('overview')} />;
-  }
 
   if (false && view === 'assignments') {
     return (
@@ -1907,7 +1859,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
               ]}
               avatarLabel={adminInitials}
               accountLabel="Administrator"
-              accountTitle="Dr. Maria Elena Santos"
+              accountTitle="Dr. Reynold Garcia Bustillo"
               accountSubtitle="NSTP Director"
               onLogout={onLogout}
             />
@@ -1950,7 +1902,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 </button>
                 <button onClick={() => setProfileOpen((open) => !open)} className="flex min-h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-950">
                   <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-700 text-sm font-semibold text-white">{adminInitials}</span>
-                  <span className="hidden text-sm font-medium text-slate-800 dark:text-slate-100 sm:block">Dr. Maria Elena Santos</span>
+                  <span className="hidden text-sm font-medium text-slate-800 dark:text-slate-100 sm:block">Dr. Reynold Garcia Bustillo</span>
                   <ChevronDown className="h-4 w-4 text-slate-400" />
                 </button>
               </div>
@@ -1965,7 +1917,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   ) : (
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">Signed in</p>
-                      <p className="mt-2 font-semibold text-slate-950 dark:text-white">Dr. Maria Elena Santos</p>
+                      <p className="mt-2 font-semibold text-slate-950 dark:text-white">Dr. Reynold Garcia Bustillo</p>
                       <button onClick={() => setView('settings')} className="mt-3 w-full rounded-xl bg-blue-50 p-3 text-left text-sm font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">System Settings</button>
                       <button onClick={onLogout} className="mt-2 w-full rounded-xl bg-rose-50 p-3 text-left text-sm font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-200">Logout</button>
                     </div>
@@ -2091,6 +2043,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                       <select value={filter} onChange={(event) => setFilter(event.target.value)} className="min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                         <option value="all">All Components</option>
                         <option value="CWTS">CWTS</option>
+                        <option value="CWTS (Coast Guard)">CWTS Coast Guard</option>
                         <option value="LTS">LTS</option>
                         <option value="MTS (Army)">MTS Army</option>
                         <option value="MTS (Navy)">MTS Navy</option>
@@ -2259,7 +2212,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     )}
                   </section>
                 ) : view === 'facilitators' ? (
-                  <FacilitatorManagement admin={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} />
+                  <FacilitatorManagement admin={(currentAdmin || { id: 'admin-1', name: 'Administrator', email: 'bipsu_nstp_admin', password: '', role: 'admin' }) as NstpAccount} />
                 ) : view === 'municipalities' ? (
                   <section className="space-y-5">
                     <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 dark:border-slate-800 lg:flex-row lg:items-end lg:justify-between">
@@ -2421,14 +2374,9 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                           </div>
                         </section>
                         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                          <div className="mb-4 flex items-center justify-between"><h3 className="text-lg font-semibold text-slate-950 dark:text-white">Recent Activity</h3><button className="text-sm font-semibold text-blue-700 dark:text-blue-300">View all</button></div>
+                          <div className="mb-4 flex items-center justify-between"><h3 className="text-lg font-semibold text-slate-950 dark:text-white">Recent Activity</h3></div>
                           <div className="space-y-3">
-                            {['Biliran municipality updated', 'JM assigned to Almeria', 'New facilitator created'].map((item, index) => (
-                              <div key={item} className="flex gap-3 rounded-2xl border border-slate-100 p-3 dark:border-slate-800">
-                                <span className="grid h-10 w-10 place-items-center rounded-full bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{index === 0 ? <Building2 className="h-4 w-4" /> : index === 1 ? <Users className="h-4 w-4" /> : <Plus className="h-4 w-4" />}</span>
-                                <div><p className="font-medium text-slate-900 dark:text-white">{item}</p><p className="text-xs text-slate-500 dark:text-slate-400">May 24, 2024 - 9:{index}0 AM</p></div>
-                              </div>
-                            ))}
+                            <p className="text-sm text-slate-500 dark:text-slate-400">No recent activity.</p>
                           </div>
                         </section>
                       </aside>
@@ -2513,14 +2461,14 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                       <h2 className="text-2xl font-semibold text-slate-950 dark:text-white">Module Library</h2>
                     </div>
                     <div className="overflow-visible">
-                      <ModulesPage user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" onBack={() => setView('overview')} />
+                      <ModulesPage user={(currentAdmin || { id: 'admin-1', name: 'Administrator', email: 'bipsu_nstp_admin', password: '', role: 'admin' }) as NstpAccount} role="admin" onBack={() => setView('overview')} />
                     </div>
                   </section>
                 ) : view === 'assessments' ? (
                   <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Assessment Module</p>
                     <h2 className="mb-4 text-2xl font-semibold text-slate-950 dark:text-white">Assessment Bank</h2>
-                    <AssessmentManager user={{ id: 'admin-1', name: 'Administrator', email: 'admin@nstp.edu', password: 'admin', role: 'admin' }} role="admin" />
+                    <AssessmentManager user={(currentAdmin || { id: 'admin-1', name: 'Administrator', email: 'bipsu_nstp_admin', password: '', role: 'admin' }) as NstpAccount} role="admin" />
                   </section>
                 ) : view === 'assignments' ? (
                   <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -2733,7 +2681,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-100">System Settings</p>
                           <h2 className="mt-2 text-3xl font-semibold tracking-tight">Director Control Center</h2>
-                          <p className="mt-2 max-w-2xl text-sm text-blue-50">Tune display, routing, exports, school-year scope, and demo data from one place.</p>
+                          <p className="mt-2 max-w-2xl text-sm text-blue-50">Tune display, routing, exports, and school-year scope from one place.</p>
                         </div>
                         <div className="grid grid-cols-3 gap-2 rounded-2xl bg-white/12 p-2 text-center backdrop-blur">
                           <div className="rounded-xl bg-white/15 px-3 py-2"><p className="text-lg font-semibold">{schoolYearStudents.length}</p><p className="text-[11px] text-blue-100">Students</p></div>
@@ -2776,10 +2724,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                           </select>
                           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">This filters dashboard metrics, rosters, and analytics.</p>
                         </label>
-                        <button onClick={loadDemoCohort} className="flex w-full items-center gap-3 rounded-2xl bg-blue-700 p-4 text-left text-white shadow-lg shadow-blue-900/20 transition hover:bg-blue-800">
-                          <Users className="h-6 w-6" />
-                          <span><span className="block font-semibold">Load 1,200 Demo Students</span><span className="text-xs text-blue-100">Stress-test filters and charts</span></span>
-                        </button>
                         <button onClick={() => exportStudentsCsv(schoolYearStudents)} className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left text-slate-800 hover:border-blue-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                           <FileDown className="h-5 w-5 text-blue-700 dark:text-blue-200" />
                           <span><span className="block font-semibold">Export Current Year</span><span className="text-xs text-slate-500 dark:text-slate-400">{schoolYearStudents.length} visible records</span></span>
@@ -3069,23 +3013,19 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                         </tr>
                       </thead>
                       <tbody>
-                        {(pendingRegistrations.length ? pendingRegistrations : [
-                          { id: 'demo-1', name: 'Juan Miguel Dela Cruz', email: 'demo1@bipsu.edu.ph', password: '', municipality: 'Naval' as BiliranMunicipality, createdAt: new Date().toISOString() },
-                          { id: 'demo-2', name: 'Angelica Mae Santos', email: 'demo2@bipsu.edu.ph', password: '', municipality: 'Almeria' as BiliranMunicipality, createdAt: new Date().toISOString() },
-                          { id: 'demo-3', name: 'Mark Joseph Abad', email: 'demo3@bipsu.edu.ph', password: '', municipality: 'Biliran' as BiliranMunicipality, createdAt: new Date().toISOString() },
-                        ]).slice(0, 5).map((registration, index) => (
+                        {pendingRegistrations.slice(0, 5).map((registration) => (
                           <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
                             <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{registration.name}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.municipality || 'Naval'}</td>
-                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.degreeProgram || ['BSIT', 'BSEd', 'BSN', 'BSA', 'BECED'][index % 5]}</td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.degreeProgram || '—'}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(registration.createdAt).toLocaleDateString()}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">Facilitator - {registration.municipality || 'Naval'}</td>
                             <td className="px-4 py-3">
                               <div className="flex gap-2">
-                                <button onClick={() => !registration.id.startsWith('demo') && approveRegistration(registration)} className="grid h-8 w-8 place-items-center rounded-full border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500/30 dark:hover:bg-emerald-500/10">
+                                <button onClick={() => approveRegistration(registration)} className="grid h-8 w-8 place-items-center rounded-full border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500/30 dark:hover:bg-emerald-500/10">
                                   <Check className="h-4 w-4" />
                                 </button>
-                                <button onClick={() => !registration.id.startsWith('demo') && rejectRegistration(registration.id)} className="grid h-8 w-8 place-items-center rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10">
+                                <button onClick={() => rejectRegistration(registration.id)} className="grid h-8 w-8 place-items-center rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10">
                                   <X className="h-4 w-4" />
                                 </button>
                               </div>
@@ -3134,11 +3074,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     <button onClick={() => setView('facilitators')} className="text-sm font-medium text-blue-700 dark:text-blue-300">View all</button>
                   </div>
                   <div className="space-y-3">
-                    {(facilitatorAccounts.length ? facilitatorAccounts : [
-                      { id: 'demo-f-1', name: 'Juan Dela Cruz', municipalities: ['Naval'] },
-                      { id: 'demo-f-2', name: 'Maria Angela Reyes', municipalities: ['Almeria'] },
-                      { id: 'demo-f-3', name: 'Mark Christian Abad', municipalities: ['Biliran'] },
-                    ]).slice(0, 5).map((facilitator: any, index) => (
+                    {facilitatorAccounts.slice(0, 5).map((facilitator) => (
                       <div key={facilitator.id} className="flex items-center gap-3 rounded-xl p-2 hover:bg-slate-50 dark:hover:bg-slate-900">
                         <span className="grid h-9 w-9 place-items-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700 dark:bg-violet-500/15 dark:text-violet-200">
                           {facilitator.name.split(' ').slice(0, 2).map((part: string) => part[0]).join('')}
@@ -3147,7 +3083,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                           <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">{facilitator.name}</span>
                           <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{facilitator.municipalities?.join(', ') || 'Unassigned'}</span>
                         </span>
-                        <span className="text-xs text-slate-400">May {24 - index * 2}, 2024</span>
                       </div>
                     ))}
                   </div>
@@ -3233,6 +3168,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button onClick={() => assignSpotlightComponent('CWTS')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">CWTS</button>
+                    <button onClick={() => assignSpotlightComponent('CWTS (Coast Guard)')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">CWTS Coast Guard</button>
                     <button onClick={() => assignSpotlightComponent('LTS')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">LTS</button>
                     <button onClick={() => assignSpotlightComponent('MTS (Army)')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">MTS Army</button>
                     <button onClick={() => assignSpotlightComponent('MTS (Navy)')} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">MTS Navy</button>
@@ -3563,6 +3499,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 <button onClick={() => applyBulkPatch({ status: 'graduated', progress: 100 })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Set graduated</button>
                 <select value={bulkComponent} onChange={(e) => setBulkComponent(e.target.value as NstpStudent['component'])} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                   <option value="CWTS">CWTS</option>
+                  <option value="CWTS (Coast Guard)">CWTS (Coast Guard)</option>
                   <option value="LTS">LTS</option>
                   <option value="MTS (Army)">MTS (Army)</option>
                   <option value="MTS (Navy)">MTS (Navy)</option>
@@ -3646,6 +3583,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     <span>Component</span>
                     <select value={studentForm.component} onChange={(e) => updateForm('component', e.target.value as NstpStudent['component'])} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                       <option value="CWTS">CWTS</option>
+                      <option value="CWTS (Coast Guard)">CWTS (Coast Guard)</option>
                       <option value="LTS">LTS</option>
                       <option value="MTS (Army)">MTS (Army)</option>
                       <option value="MTS (Navy)">MTS (Navy)</option>
@@ -3836,6 +3774,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
               >
                 <option value="all">All Components</option>
                 <option value="CWTS">CWTS</option>
+                <option value="CWTS (Coast Guard)">CWTS (Coast Guard)</option>
                 <option value="LTS">LTS</option>
                 <option value="MTS (Army)">MTS (Army)</option>
                 <option value="MTS (Navy)">MTS (Navy)</option>

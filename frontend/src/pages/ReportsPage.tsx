@@ -208,8 +208,8 @@ export default function ReportsCenter({ user }: { user: any }) {
     ]);
 
     const moduleSheet = XLSX.utils.aoa_to_sheet([
-      ['Module', 'Difficulty', 'Hours', 'Sections', 'Updated At'],
-      ...modules.map((module) => [module.title, module.difficulty, module.hours, module.sections.length, module.updatedAt]),
+      ['Module', 'Difficulty', 'Hours', 'Updated At'],
+      ...modules.map((module) => [module.title, module.difficulty, module.hours, module.updatedAt]),
     ]);
 
     const assessmentSheet = XLSX.utils.aoa_to_sheet([
@@ -301,12 +301,11 @@ export default function ReportsCenter({ user }: { user: any }) {
 
       addReportTable('Student Roster', ['Student ID', 'Name', 'Email', 'Program', 'Municipality', 'Facilitator', 'Component', 'Progress', 'Assessments', 'Status'], reportRows, [15, 118, 110]);
       addReportTable('Grade Records', ['Student ID', 'Prelim', 'Midterm', 'Final', 'Remarks', 'Release', 'Updated'], gradeRows, [37, 99, 235]);
-      addReportTable('Module Library', ['Module', 'Component', 'Difficulty', 'Hours', 'Sections', 'Source'], modules.map((module) => [
+      addReportTable('Module Library', ['Module', 'Component', 'Difficulty', 'Hours', 'Source'], modules.map((module) => [
         module.title,
         module.component || 'Common',
         module.difficulty,
         String(module.hours),
-        String(module.sections.length),
         module.sourceDocument || 'System',
       ]), [79, 70, 229]);
       addReportTable('Assessment Bank', ['Assessment', 'Type', 'Status', 'Owner', 'Passing', 'Questions'], roleScopedAssessments.map((assessment) => [
@@ -362,6 +361,7 @@ export default function ReportsCenter({ user }: { user: any }) {
     });
     const componentBreakdown = [
       { name: 'CWTS', value: student.component === 'CWTS' ? 56 : 18, avg: student.component === 'CWTS' ? overallAverage : 91, color: '#10b981' },
+      { name: 'CWTS (Coast Guard)', value: student.component === 'CWTS (Coast Guard)' ? 56 : 10, avg: student.component === 'CWTS (Coast Guard)' ? overallAverage : 90, color: '#06b6d4' },
       { name: 'LTS', value: student.component === 'LTS' ? 56 : 22, avg: student.component === 'LTS' ? overallAverage : 91, color: '#2563eb' },
       { name: 'MTS (Army)', value: student.component === 'MTS (Army)' ? 56 : 11, avg: student.component === 'MTS (Army)' ? overallAverage : 90, color: '#f97316' },
       { name: 'MTS (Navy)', value: student.component === 'MTS (Navy)' ? 56 : 11, avg: student.component === 'MTS (Navy)' ? overallAverage : 93, color: '#7c3aed' },

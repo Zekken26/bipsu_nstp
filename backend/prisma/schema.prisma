@@ -40,12 +40,14 @@ model User {
   email             String             @unique
   passwordHash      String
   role              UserRole           @default(STUDENT)
+  data              Json?              @default("{}")
   studentProfile    StudentProfile?
   instructorProfile InstructorProfile?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
   @@index([role])
+  @@map("user")
 }
 
 model StudentProfile {
@@ -67,6 +69,7 @@ model StudentProfile {
 
   @@index([sectionId])
   @@index([componentId])
+  @@map("student_profile")
 }
 
 model InstructorProfile {
@@ -78,8 +81,9 @@ model InstructorProfile {
   user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   sections       Section[]
   modules        Module[]
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  @@map("instructor_profile")
 }
 
 model Section {
@@ -99,6 +103,7 @@ model Section {
 
   @@index([componentId])
   @@index([instructorId])
+  @@map("section")
 }
 
 model NSTPComponent {
@@ -112,6 +117,7 @@ model NSTPComponent {
   enrollments Enrollment[]
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
+  @@map("nstp_component")
 }
 
 model Module {
@@ -135,6 +141,7 @@ model Module {
 
   @@index([componentId])
   @@index([instructorId])
+  @@map("module")
 }
 
 model Lesson {
@@ -149,6 +156,7 @@ model Lesson {
   updatedAt   DateTime     @updatedAt
 
   @@index([moduleId])
+  @@map("lesson")
 }
 
 model Quiz {
@@ -165,6 +173,7 @@ model Quiz {
   updatedAt   DateTime     @updatedAt
 
   @@index([moduleId])
+  @@map("quiz")
 }
 
 model Question {
@@ -182,6 +191,7 @@ model Question {
 
   @@index([quizId])
   @@index([examId])
+  @@map("question")
 }
 
 model Assignment {
@@ -198,6 +208,7 @@ model Assignment {
   updatedAt   DateTime     @updatedAt
 
   @@index([moduleId])
+  @@map("assignment")
 }
 
 model Exam {
@@ -216,6 +227,7 @@ model Exam {
   updatedAt   DateTime     @updatedAt
 
   @@index([moduleId])
+  @@map("exam")
 }
 
 model Submission {
@@ -243,6 +255,7 @@ model Submission {
   @@index([quizId])
   @@index([assignmentId])
   @@index([examId])
+  @@map("submission")
 }
 
 model Enrollment {
@@ -261,6 +274,7 @@ model Enrollment {
   @@unique([studentId, componentId, sectionId])
   @@index([componentId])
   @@index([sectionId])
+  @@map("enrollment")
 }
 
 model Grade {
@@ -286,4 +300,5 @@ model Grade {
   @@index([quizId])
   @@index([assignmentId])
   @@index([examId])
+  @@map("grade")
 }

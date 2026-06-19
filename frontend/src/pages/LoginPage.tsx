@@ -10,6 +10,8 @@ import {
   ClipboardList,
   Cloud,
   Download,
+  Eye,
+  EyeOff,
   FileText,
   GraduationCap,
   IdCard,
@@ -29,18 +31,19 @@ import {
   Star,
   SunMedium,
   TrendingUp,
-  UserRound,
   Users,
 } from 'lucide-react';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, ensureNstpSeedData, loadAccounts, loadPendingStudentRegistrations, savePendingStudentRegistrations } from '../data/nstpData';
+import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, loadAccounts, loadPendingStudentRegistrations, savePendingStudentRegistrations } from '../data/nstpData';
 import splashImage from '../assets/images/splash.png';
+import { apiPost } from '../services/apiClient';
 
 type LoginMode = 'login' | 'register';
 type PublicView = 'home' | 'nstp' | 'school' | 'portal' | 'feature' | 'preview';
 
 const componentCards = [
   { label: 'CWTS', title: 'Civic Welfare Training Service', copy: 'Community development, health, environment, disaster readiness, and service-learning projects.', color: 'from-emerald-500 to-teal-500', fill: '#10b981', value: 34 },
+  { label: 'CWTS (Coast Guard)', title: 'Civic Welfare Training Service - Coast Guard', copy: 'Coastal defense, maritime safety, search and rescue, and community service along Philippine waters.', color: 'from-cyan-500 to-sky-600', fill: '#06b6d4', value: 20 },
   { label: 'LTS', title: 'Literacy Training Service', copy: 'Literacy, numeracy, tutoring, and learning support for partner schools and communities.', color: 'from-blue-600 to-cyan-500', fill: '#2563eb', value: 28 },
   { label: 'MTS Army', title: 'Military Training Service - Army', copy: 'Discipline, leadership, physical readiness, and national defense preparation.', color: 'from-amber-500 to-orange-600', fill: '#f59e0b', value: 22 },
   { label: 'MTS Navy', title: 'Military Training Service - Navy', copy: 'Maritime awareness, coastal service, naval discipline, and emergency coordination.', color: 'from-indigo-500 to-violet-600', fill: '#6366f1', value: 16 },
@@ -50,8 +53,8 @@ const landingComponents = [
   {
     key: 'CWTS',
     title: 'Civic Welfare Training Service',
-    copy: 'Prepares students for organized community service through health, environment, disaster readiness, safety, livelihood, and local development initiatives.',
-    focus: ['Community immersion', 'Disaster preparedness', 'Health and environment projects'],
+    copy: 'Prepares students for organized community service through health, environment, disaster readiness, safety, livelihood, and local development initiatives. Includes Coast Guard track focusing on maritime safety, coastal defense, and search and rescue.',
+    focus: ['Community immersion', 'Disaster preparedness', 'Health and environment projects', 'Maritime safety and search and rescue'],
   },
   {
     key: 'LTS',
@@ -121,7 +124,7 @@ const portalFeatures = [
     label: 'Classification',
     value: 'Classify students into CWTS, LTS, MTS Army or Navy.',
     color: 'from-amber-400 to-orange-600',
-    metric: '4 tracks',
+    metric: '5 tracks',
     status: 'Rules-assisted',
     audience: 'NSTP coordinators and students',
     preview: 'Classification summarizes preferences, qualifying results, capacity, and official track assignment across CWTS, LTS, MTS Army, and MTS Navy.',
@@ -232,23 +235,7 @@ const BIPSU_PROGRAMS = [
   },
   {
     school: 'School of Teacher Education - Naval Campus',
-    programs: ['Bachelor of Elementary Education', 'Bachelor of Secondary Education', 'Bachelor of Physical Education'],
-  },
-  {
-    school: 'School of Teacher Education - Biliran Campus',
-    programs: ['Bachelor of Elementary Education', 'Bachelor of Secondary Education'],
-  },
-  {
-    school: 'School of Agri-Fisheries',
-    programs: ['Bachelor of Science in Agriculture', 'Bachelor of Science in Fisheries'],
-  },
-  {
-    school: 'School of Agribusiness and Forest Resource Management',
-    programs: ['Bachelor of Science in Agribusiness', 'Bachelor of Science in Forestry'],
-  },
-  {
-    school: 'School of Graduate Studies',
-    programs: ['Master in Public Management', 'Master of Arts in Education', 'Doctor of Philosophy in Education'],
+    programs: ['Bachelor of Early Childhood Education', 'Bachelor of Elementary Education', 'Bachelor of Physical Education', 'Bachelor of Secondary Education', 'Bachelor of Special Needs Education', 'Bachelor of Technology & Livelihood Education'],
   },
 ];
 
@@ -256,12 +243,21 @@ const YEAR_LEVEL_OPTIONS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 const INDUSTRIAL_TECHNOLOGY_PROGRAM = 'BS in Industrial Technology';
 const INDUSTRIAL_TECHNOLOGY_MAJORS = [
   'Automotive Technology',
-  'Drafting Technology',
-  'Electricity Technology',
-  'Foods Technology',
-  'Garments Technology',
-  'Handicraft Technology',
-  'Refrigeration and Air-Conditioning Technology',
+  'Architectural Drafting Technology',
+  'Electrical Technology',
+  'Electronics Technology',
+  'Culinary Technology',
+  'Apparel and Fashion Design Technology',
+  'HVAC-R Technology',
+];
+
+const SECONDARY_EDUCATION_PROGRAM = 'Bachelor of Secondary Education';
+const SECONDARY_EDUCATION_MAJORS = [
+  'English',
+  'Mathematics',
+  'Science',
+  'Social Studies',
+  'Filipino',
 ];
 
 const buildOfficialName = (firstName: string, middleName: string, surname: string) => (
@@ -279,6 +275,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
   const [publicView, setPublicView] = useState<PublicView>('home');
   const [mode, setMode] = useState<LoginMode>('login');
   const [showAuth, setShowAuth] = useState(false);
+  const [loginRole, setLoginRole] = useState<'student' | 'facilitator' | 'admin'>('student');
   const [surname, setSurname] = useState('');
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
@@ -348,14 +345,14 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     setShowAuth(true);
     setError(null);
     setNotice(null);
+    setLoginRole('student');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setNotice(null);
     setError(null);
 
-    ensureNstpSeedData();
     const accounts = loadAccounts();
     const pendingRegistrations = loadPendingStudentRegistrations();
 
@@ -366,7 +363,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         return;
       }
 
-      if (!surname.trim() || !firstName.trim() || !school || !degreeProgram.trim() || !gender.trim() || !birthdate.trim() || !contactNumber.trim() || !email.trim() || !password || !confirmPassword) {
+      if (!surname.trim() || !firstName.trim() || !school || !degreeProgram.trim() || !gender.trim() || !birthdate.trim() || !barangay.trim() || !municipality || !contactNumber.trim() || !email.trim() || !password || !confirmPassword) {
         setError('Complete the required official student profile fields before submission.');
         return;
       }
@@ -376,8 +373,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         return;
       }
 
-      if (degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM && !major) {
-        setError('Major is required for BS in Industrial Technology.');
+      if ((degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM || degreeProgram === SECONDARY_EDUCATION_PROGRAM) && !major) {
+        setError(`Major is required for ${degreeProgram}.`);
         return;
       }
 
@@ -435,7 +432,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         department: school,
         degreeProgram: degreeProgram.trim(),
         yearLevel,
-        ...(degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM ? { major } : {}),
+        ...((degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM || degreeProgram === SECONDARY_EDUCATION_PROGRAM) ? { major } : {}),
         gender,
         birthdate,
         houseStreetPurok: houseStreetPurok.trim(),
@@ -448,7 +445,9 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         createdAt: new Date().toISOString(),
       };
 
+      // Save to localStorage pending registrations (admin approval required before PostgreSQL save)
       savePendingStudentRegistrations([pendingRequest, ...pendingRegistrations]);
+
       setNotice('Registration submitted. Please wait for admin approval before signing in.');
       setSurname('');
       setFirstName('');
@@ -473,31 +472,48 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
       return;
     }
 
-    const match = accounts.find((account) => account.email.toLowerCase() === email.toLowerCase() && account.password === password);
+    const loginInput = email.trim();
+
+    // Try backend login first
+    const apiResult = await apiPost('/auth/login', { identifier: loginInput, password }, null);
+    if (apiResult?.success && apiResult?.data) {
+      const userData = apiResult.data.user;
+      const matchAccount = accounts.find((account) => {
+        if (account.role !== loginRole) return false;
+        if (loginRole === 'student') {
+          return account.studentId?.toLowerCase() === loginInput.toLowerCase() && account.password === password;
+        }
+        return account.email.toLowerCase() === loginInput.toLowerCase() && account.password === password;
+      });
+      onLogin({ ...matchAccount, ...userData, id: userData.id || matchAccount?.id, token: apiResult.data.token });
+      return;
+    }
+
+    // Fall back to localStorage login
+    const match = accounts.find((account) => {
+      if (account.role !== loginRole) return false;
+      if (loginRole === 'student') {
+        return account.studentId?.toLowerCase() === loginInput.toLowerCase() && account.password === password;
+      }
+      return account.email.toLowerCase() === loginInput.toLowerCase() && account.password === password;
+    });
 
     if (match) {
       onLogin(match);
       return;
     }
 
-    const pending = pendingRegistrations.find((registration) => registration.email.toLowerCase() === email.toLowerCase());
-    if (pending) {
-      setError('Your account is still pending admin approval.');
-      return;
+    if (loginRole === 'student') {
+      const pending = pendingRegistrations.find((registration) =>
+        registration.studentId?.toLowerCase() === loginInput.toLowerCase()
+      );
+      if (pending) {
+        setError('Your account is still pending admin approval.');
+        return;
+      }
     }
 
-    setError('Invalid email or password.');
-  };
-
-  const useDemo = (role: 'student' | 'admin' | 'facilitator') => {
-    const demo = {
-      student: ['juan.dela-cruz@student.edu', 'student'],
-      admin: ['admin@nstp.edu', 'admin'],
-      facilitator: ['facilitator@nstp.edu', 'facilitator'],
-    }[role];
-    setEmail(demo[0]);
-    setPassword(demo[1]);
-    openAuth('login');
+    setError(`Invalid ${loginRole === 'student' ? 'Student ID' : 'email'} or password.`);
   };
 
   return (
@@ -770,6 +786,9 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                       onClick={() => {
                         setMode(item);
                         setError(null);
+                        setEmail('');
+                        setPassword('');
+                        setConfirmPassword('');
                       }}
                       className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${mode === item ? 'bg-blue-700 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
                     >
@@ -777,14 +796,6 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                     </button>
                   ))}
                 </div>
-
-                {mode === 'login' && (
-                  <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <DemoButton icon={UserRound} label="Student" onClick={() => useDemo('student')} />
-                    <DemoButton icon={ShieldCheck} label="Admin" onClick={() => useDemo('admin')} />
-                    <DemoButton icon={GraduationCap} label="Facilitator" onClick={() => useDemo('facilitator')} />
-                  </div>
-                )}
 
                 {notice && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">{notice}</div>}
                 {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100">{error}</div>}
@@ -819,7 +830,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                           value={degreeProgram}
                           onChange={(value) => {
                             setDegreeProgram(value);
-                            if (value !== INDUSTRIAL_TECHNOLOGY_PROGRAM) setMajor('');
+                            if (value !== INDUSTRIAL_TECHNOLOGY_PROGRAM && value !== SECONDARY_EDUCATION_PROGRAM) setMajor('');
                           }}
                           required
                           options={selectedSchoolPrograms}
@@ -834,13 +845,13 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                           options={YEAR_LEVEL_OPTIONS}
                           placeholder="Select year level"
                         />
-                        {degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM && (
+                        {(degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM || degreeProgram === SECONDARY_EDUCATION_PROGRAM) && (
                           <SelectField
                             label="Major"
                             value={major}
                             onChange={setMajor}
                             required
-                            options={INDUSTRIAL_TECHNOLOGY_MAJORS}
+                            options={degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM ? INDUSTRIAL_TECHNOLOGY_MAJORS : SECONDARY_EDUCATION_MAJORS}
                             placeholder="Select major"
                           />
                         )}
@@ -887,7 +898,31 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                     </FormSection>
                   ) : (
                     <>
-                      <Field label="Email Address" icon={Mail} type="email" value={email} onChange={setEmail} placeholder="student@bipsu.edu.ph" required />
+                      <div className="flex gap-2">
+                        {(['student', 'facilitator', 'admin'] as const).map((role) => (
+                          <button
+                            key={role}
+                            type="button"
+                            onClick={() => { setLoginRole(role); setEmail(''); setPassword(''); }}
+                            className={`flex-1 rounded-xl px-3 py-2.5 text-center text-sm font-bold uppercase tracking-tight transition-colors ${
+                              loginRole === role
+                                ? 'bg-blue-700 text-white shadow-sm'
+                                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                            }`}
+                          >
+                            {role}
+                          </button>
+                        ))}
+                      </div>
+                      <Field
+                        label={loginRole === 'student' ? 'Student ID' : 'Email'}
+                        icon={Mail}
+                        type="text"
+                        value={email}
+                        onChange={setEmail}
+                        placeholder={loginRole === 'student' ? 'Enter your Student ID' : 'Enter your email'}
+                        required
+                      />
                       <Field label="Password" icon={Lock} type="password" value={password} onChange={setPassword} placeholder="Enter your password" required />
                     </>
                   )}
@@ -898,14 +933,6 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                   </button>
                 </form>
 
-                {mode === 'login' && (
-                  <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                    <p className="font-bold text-slate-800 dark:text-slate-100">Demo Credentials</p>
-                    <p>Admin: admin@nstp.edu / admin</p>
-                    <p>Facilitator: facilitator@nstp.edu / facilitator</p>
-                    <p>Student: juan.dela-cruz@student.edu / student / ID 2024-0001</p>
-                  </div>
-                )}
               </section>
             </div>
           </div>
@@ -1079,15 +1106,6 @@ function TrustBand() {
   );
 }
 
-function DemoButton({ icon: Icon, label, onClick }: { icon: any; label: string; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
-      <Icon className="h-4 w-4 text-blue-700 dark:text-blue-300" />
-      {label}
-    </button>
-  );
-}
-
 function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4 dark:border-slate-700 dark:bg-slate-900/50">
@@ -1104,6 +1122,9 @@ function RequiredMark({ required, optional }: { required?: boolean; optional?: b
 }
 
 function Field({ label, icon: Icon, value, onChange, placeholder, type = 'text', required = false, optional = false, helper, readOnly = false }: { label: string; icon?: any; value: string; onChange: (value: string) => void; placeholder: string; type?: string; required?: boolean; optional?: boolean; helper?: string; readOnly?: boolean }) {
+  const isPassword = type === 'password';
+  const [showPassword, setShowPassword] = useState(false);
+  const resolvedType = isPassword ? (showPassword ? 'text' : 'password') : type;
   return (
     <label className="block">
       <span className="mb-2 flex items-center justify-between gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
@@ -1113,14 +1134,19 @@ function Field({ label, icon: Icon, value, onChange, placeholder, type = 'text',
       <span className="relative block">
         {Icon && <Icon className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />}
         <input
-          type={type}
+          type={resolvedType}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className={`w-full rounded-xl border border-blue-200 py-3 ${Icon ? 'pl-10' : 'pl-4'} pr-4 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:text-slate-100 ${readOnly ? 'bg-blue-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300' : 'bg-white dark:bg-slate-900'}`}
+          className={`w-full rounded-xl border border-blue-200 py-3 ${Icon ? 'pl-10' : 'pl-4'} ${isPassword ? 'pr-12' : 'pr-4'} text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:text-slate-100 ${readOnly ? 'bg-blue-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300' : 'bg-white dark:bg-slate-900'}`}
           placeholder={placeholder}
           required={required}
           readOnly={readOnly}
         />
+        {isPassword && (
+          <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" tabIndex={-1}>
+            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </button>
+        )}
       </span>
       {helper && <span className="mt-2 block text-xs font-medium text-slate-500 dark:text-slate-400">{helper}</span>}
     </label>
@@ -1320,7 +1346,7 @@ function HomeSections({ onStart }: { onStart: () => void }) {
             <h2 className="section-title">Official tracks students can enter after the Common Module.</h2>
           </div>
           <span className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
-            CWTS | LTS | MTS
+            CWTS | CWTS Coast Guard | LTS | MTS
           </span>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

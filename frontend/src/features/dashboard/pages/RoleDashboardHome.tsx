@@ -41,6 +41,7 @@ const componentColors: Record<string, string> = {
   LTS: '#2563eb',
   'MTS (Army)': '#f59e0b',
   'MTS (Navy)': '#6366f1',
+  'CWTS (Coast Guard)': '#06b6d4',
 };
 
 const roleCopy = {

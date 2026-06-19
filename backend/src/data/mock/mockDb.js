@@ -1,8 +1,4 @@
-const modules = new Map([
-  ['m1', { id: 'm1', title: 'Module 1', published: true, updatedAt: new Date().toISOString(), sections: 3 }],
-  ['m2', { id: 'm2', title: 'Module 2', published: true, updatedAt: new Date().toISOString(), sections: 4 }],
-  ['m3', { id: 'm3', title: 'Module 3', published: false, updatedAt: new Date().toISOString(), sections: 2 }],
-]);
+const modules = new Map();
 
 const followCounts = new Map();
 

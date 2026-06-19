@@ -17,18 +17,6 @@ type Notice = {
 
 const NOTICE_KEY = 'nstp-system-notices';
 
-const defaultNotices: Notice[] = [
-  {
-    id: 'notice-welcome',
-    title: 'Welcome to NSTP Program Portal',
-    message: 'Use your role navigation to access modules, assessments, reports, and announcements.',
-    audience: 'all',
-    priority: 'normal',
-    createdBy: 'System',
-    createdAt: new Date().toISOString(),
-  },
-];
-
 export default function AnnouncementsCenter({ user }: { user: any }) {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [query, setQuery] = useState('');
@@ -43,12 +31,7 @@ export default function AnnouncementsCenter({ user }: { user: any }) {
 
   useEffect(() => {
     const savedNotices = safeJsonParse<Notice[]>(localStorage.getItem(NOTICE_KEY), []);
-    if (!savedNotices || savedNotices.length === 0) {
-      localStorage.setItem(NOTICE_KEY, JSON.stringify(defaultNotices));
-      setNotices(defaultNotices);
-    } else {
-      setNotices(savedNotices);
-    }
+    setNotices(savedNotices || []);
 
     const savedReads = safeJsonParse<string[]>(localStorage.getItem(readKey), []);
     setReadIds(savedReads || []);
@@ -264,7 +247,7 @@ export default function AnnouncementsCenter({ user }: { user: any }) {
       <div className="bento-panel p-4">
         <div className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
           <Bell className="w-4 h-4 text-blue-700" />
-          Announcement state is saved in browser storage for this demo system.
+          Announcement state is saved in browser storage.
         </div>
       </div>
     </div>

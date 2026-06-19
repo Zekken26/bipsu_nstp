@@ -1,6 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Building2, Download, Filter, KeyRound, LockKeyhole, Mail, MoreVertical, Pencil, Plus, Save, Search, Trash2, Users, X } from 'lucide-react';
-import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, loadAccounts, loadStudents, NstpAccount, saveAccounts } from '../../../data/nstpData';
+import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, COURSES, DEPARTMENTS, NSTP_COMPONENTS, loadAccounts, loadStudents, NstpAccount, saveAccounts } from '../../../data/nstpData';
+
+const SCHOOL_PROGRAMS: Record<string, string[]> = {
+  'School of Arts and Sciences': ['BA Economics'],
+  'School of Criminal Justice Education': ['BS Criminology'],
+  'School of Management and Entrepreneurship': ['BS Business Administration', 'BS Business Administration major in Financial Management', 'BS Hospitality Management'],
+  'School of Nursing and Health Sciences': ['BS Nursing'],
+  'School of Engineering': ['BS Civil Engineering', 'BS Electrical Engineering', 'BS Mechanical Engineering', 'BS Computer Engineering'],
+  'School of Technology and Computer Studies': ['BS Information Technology', 'BS Computer Science', 'BS Information Systems'],
+  'School of Teacher Education - Naval Campus': ['BS Elementary Education', 'BS Secondary Education'],
+  'School of Teacher Education - Biliran Campus': ['BS Elementary Education', 'BS Secondary Education'],
+  'School of Agri-Fisheries': ['BS Agriculture'],
+  'School of Agribusiness and Forest Resource Management': ['BS Agriculture'],
+  'School of Graduate Studies': COURSES,
+};
 
 type Props = {
   admin: NstpAccount;
@@ -12,9 +26,11 @@ const emptyFacilitator = (): NstpAccount => ({
   email: `facilitator-${Math.random().toString(36).slice(2, 5)}@nstp.edu`,
   password: 'facilitator123',
   role: 'facilitator',
-  title: 'NSTP Facilitator',
+  title: '',
   bio: 'Facilitates assigned municipality groups, monitors attendance, validates outputs, and records grades.',
   municipalities: ['Naval'],
+  department: '',
+  degreeProgram: '',
 });
 
 const initials = (name: string) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
@@ -32,6 +48,15 @@ export default function FacilitatorManagement({ admin }: Props) {
     setFacilitators(nextFacilitators);
     setSelectedId(nextFacilitators[0]?.id ?? null);
   }, []);
+
+  useEffect(() => {
+    if (editingId) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [editingId]);
 
   const students = useMemo(() => loadStudents(), [facilitators]);
   const coveredMunicipalities = useMemo(() => new Set(facilitators.flatMap((facilitator) => facilitator.municipalities || [])).size, [facilitators]);
@@ -97,7 +122,7 @@ export default function FacilitatorManagement({ admin }: Props) {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Facilitator Module</p>
           <h2 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">Facilitator Management</h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Create and manage facilitator accounts. Assign municipalities and monitor workload.</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Create and manage facilitator accounts. Assign department, courses, and municipalities.</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <label className="flex min-h-12 w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:w-96">
@@ -159,10 +184,10 @@ export default function FacilitatorManagement({ admin }: Props) {
                 <tr>
                   <th className="px-4 py-3"><input type="checkbox" className="h-4 w-4 rounded border-slate-300" /></th>
                   <th className="px-4 py-3">Facilitator</th>
+                  <th className="px-4 py-3">Department</th>
+                  <th className="px-4 py-3">Courses Handled</th>
                   <th className="px-4 py-3">Municipalities</th>
-                  <th className="px-4 py-3">Students Assigned</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Last Active</th>
+                  <th className="px-4 py-3">Students</th>
                   <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
@@ -183,6 +208,12 @@ export default function FacilitatorManagement({ admin }: Props) {
                         </div>
                       </td>
                       <td className="px-4 py-3">
+                        <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-200">{facilitator.department || 'Unassigned'}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-200">{facilitator.degreeProgram || 'None'}</span>
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1.5">
                           {(facilitator.municipalities || []).slice(0, 2).map((municipality) => <span key={municipality} className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{municipality}</span>)}
                           {(facilitator.municipalities || []).length > 2 && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">+{(facilitator.municipalities || []).length - 2}</span>}
@@ -190,8 +221,6 @@ export default function FacilitatorManagement({ admin }: Props) {
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{facilitator.municipalities?.length || 0} municipalit{facilitator.municipalities?.length === 1 ? 'y' : 'ies'}</p>
                       </td>
                       <td className="px-4 py-3"><p className="font-semibold text-slate-900 dark:text-slate-100">{assignedStudents.length}</p><p className="text-xs text-slate-500 dark:text-slate-400">students</p></td>
-                      <td className="px-4 py-3"><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">Active</span></td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">May {24 - index}, 2024<br /><span className="text-xs text-slate-500">9:{index}0 AM</span></td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button onClick={(event) => { event.stopPropagation(); startEdit(facilitator); }} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-700 hover:bg-blue-50 dark:border-slate-800 dark:text-slate-100"><Pencil className="h-4 w-4" /></button>
@@ -217,68 +246,114 @@ export default function FacilitatorManagement({ admin }: Props) {
             <button onClick={() => setSelectedId(null)} className="grid h-8 w-8 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
           </div>
           {selectedFacilitator ? (
-            <div className="space-y-5">
-              <div className="text-center">
-                <span className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-indigo-50 text-2xl font-semibold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200">{initials(selectedFacilitator.name)}</span>
-                <h3 className="mt-4 text-lg font-semibold text-slate-950 dark:text-white">{selectedFacilitator.name}</h3>
-                <span className="mt-2 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">Active</span>
-                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{selectedFacilitator.email}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Facilitator since May 15, 2023</p>
-              </div>
-              <button className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:border-slate-800 dark:text-blue-200"><LockKeyhole className="h-4 w-4" /> Reset Password</button>
-              <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Assigned Municipalities ({selectedFacilitator.municipalities?.length || 0})</p>
-                <div className="space-y-2">
-                  {(selectedFacilitator.municipalities || []).map((municipality) => (
-                    <div key={municipality} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm dark:bg-slate-900">
-                      <span className="font-medium text-slate-900 dark:text-white">{municipality}</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">{students.filter((student) => student.municipality === municipality).length} students</span>
-                    </div>
-                  ))}
+              <div className="space-y-5">
+                <div className="text-center">
+                  <span className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-indigo-50 text-2xl font-semibold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200">{initials(selectedFacilitator.name)}</span>
+                  <h3 className="mt-4 text-lg font-semibold text-slate-950 dark:text-white">{selectedFacilitator.name}</h3>
+                  <span className="mt-2 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">Active</span>
+                  <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{selectedFacilitator.email}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Facilitator since May 15, 2023</p>
+                </div>
+                <button className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:border-slate-800 dark:text-blue-200"><LockKeyhole className="h-4 w-4" /> Reset Password</button>
+                <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Department</p>
+                  <span className="rounded-full bg-violet-50 px-3 py-1.5 text-sm font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-200">{selectedFacilitator.department || 'Not assigned'}</span>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Degree Program</p>
+                  <span className="rounded-full bg-cyan-50 px-3 py-1.5 text-sm font-semibold text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-200">{selectedFacilitator.degreeProgram || 'Not assigned'}</span>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Assigned Municipalities ({selectedFacilitator.municipalities?.length || 0})</p>
+                  <div className="space-y-2">
+                    {(selectedFacilitator.municipalities || []).map((municipality) => (
+                      <div key={municipality} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm dark:bg-slate-900">
+                        <span className="font-medium text-slate-900 dark:text-white">{municipality}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{students.filter((student) => student.municipality === municipality).length} students</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Load Summary</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Total Students</span><span className="font-semibold text-slate-900 dark:text-white">{selectedStudents.length}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Municipalities</span><span className="font-semibold text-slate-900 dark:text-white">{selectedFacilitator.municipalities?.length || 0}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Average per Municipality</span><span className="font-semibold text-slate-900 dark:text-white">{Math.round(selectedStudents.length / Math.max(1, selectedFacilitator.municipalities?.length || 1))}</span></div>
+                  </div>
+                  <span className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">Balanced Load</span>
                 </div>
               </div>
-              <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Load Summary</p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Total Students</span><span className="font-semibold text-slate-900 dark:text-white">{selectedStudents.length}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Municipalities</span><span className="font-semibold text-slate-900 dark:text-white">{selectedFacilitator.municipalities?.length || 0}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Average per Municipality</span><span className="font-semibold text-slate-900 dark:text-white">{Math.round(selectedStudents.length / Math.max(1, selectedFacilitator.municipalities?.length || 1))}</span></div>
-                </div>
-                <span className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">Balanced Load</span>
-              </div>
-            </div>
           ) : <p className="text-sm text-slate-500 dark:text-slate-400">Select a facilitator to view details.</p>}
         </aside>
       </div>
 
       {editingId && form && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
+        <div className="fixed inset-0 z-50 grid items-start justify-center overflow-y-auto bg-slate-950/50 px-4 pb-10 pt-10 md:pt-16">
           <div className="max-h-[90dvh] w-full max-w-4xl overflow-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
             <div className="mb-6 flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{editingId === 'new' ? 'Create Account' : 'Edit Account'}</p>
                 <h3 className="text-2xl font-semibold text-slate-950 dark:text-white">{editingId === 'new' ? 'Create Facilitator' : 'Edit Facilitator'}</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Define login credentials and municipality coverage.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Define login credentials, department, courses handled, and municipality coverage.</p>
               </div>
               <button onClick={() => { setEditingId(null); setForm(null); }} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Name</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></label>
-              <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Email</span><div className="relative"><Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="w-full rounded-xl border border-slate-300 py-3 pl-9 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></div></label>
-              <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Password</span><div className="relative"><KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input type="text" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="w-full rounded-xl border border-slate-300 py-3 pl-9 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></div></label>
-              <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Title</span><input value={form.title || ''} onChange={(event) => setForm({ ...form, title: event.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></label>
-              <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200 md:col-span-2"><span>Bio</span><textarea value={form.bio || ''} onChange={(event) => setForm({ ...form, bio: event.target.value })} rows={3} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900" /></label>
-              <div className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200 md:col-span-2">
-                <span>Assigned Municipalities</span>
+            <div className="grid gap-5 md:grid-cols-2">
+              <label className="block space-y-1.5">
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Name <span className="text-rose-600 dark:text-rose-300">*</span></span>
+                <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Email <span className="text-rose-600 dark:text-rose-300">*</span></span>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 pl-9 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                </div>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Password <span className="text-rose-600 dark:text-rose-300">*</span></span>
+                <div className="relative">
+                  <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input type="text" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 pl-9 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                </div>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">NSTP Component <span className="text-rose-600 dark:text-rose-300">*</span></span>
+                <select value={form.title || ''} onChange={(event) => setForm({ ...form, title: event.target.value })} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                  <option value="">Select component</option>
+                  {NSTP_COMPONENTS.map((component) => <option key={component} value={component}>{component}</option>)}
+                </select>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">School / College / Department <span className="text-rose-600 dark:text-rose-300">*</span></span>
+                <select value={form.department || ''} onChange={(event) => { setForm({ ...form, department: event.target.value, degreeProgram: '' }); }} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-950">
+                  <option value="">Select your school</option>
+                  {DEPARTMENTS.map((dept) => <option key={dept} value={dept}>{dept}</option>)}
+                </select>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Degree Program <span className="text-rose-600 dark:text-rose-300">*</span></span>
+                <select value={form.degreeProgram || ''} onChange={(event) => setForm({ ...form, degreeProgram: event.target.value })} disabled={!form.department} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-950">
+                  <option value="">{form.department ? 'Select your degree program' : 'Select a school first'}</option>
+                  {form.department && (SCHOOL_PROGRAMS[form.department] || []).map((prog) => <option key={prog} value={prog}>{prog}</option>)}
+                </select>
+              </label>
+              <label className="block space-y-1.5 md:col-span-2">
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Bio</span>
+                <textarea value={form.bio || ''} onChange={(event) => setForm({ ...form, bio: event.target.value })} rows={2} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+              </label>
+              <div className="space-y-1.5 md:col-span-2">
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Assigned Municipalities <span className="text-rose-600 dark:text-rose-300">*</span></span>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {BILIRAN_MUNICIPALITIES.map((item) => {
                     const selected = form.municipalities?.includes(item) || false;
                     return (
-                      <label key={item} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm ${selected ? 'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200' : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'}`}>
+                      <label key={item} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${selected ? 'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200' : 'border-blue-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'}`}>
                         <input type="checkbox" checked={selected} onChange={(event) => {
                           const current = form.municipalities || [];
                           setForm({ ...form, municipalities: event.target.checked ? [...current, item] : current.filter((municipality) => municipality !== item) });
-                        }} />
+                        }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30" />
                         {item}
                       </label>
                     );

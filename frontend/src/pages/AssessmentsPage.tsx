@@ -6,6 +6,7 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
   const [library, setLibrary] = useState<NstpAssessment[]>([]);
   const [results, setResults] = useState<Record<string, any>>({});
   const [activeAssessment, setActiveAssessment] = useState<NstpAssessment | null>(null);
+  const [shuffledQuestions, setShuffledQuestions] = useState<NstpAssessment['questions']>([]);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [attemptHistory, setAttemptHistory] = useState<Record<string, any[]>>({});
@@ -38,7 +39,19 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
     return () => clearInterval(timer);
   }, [timeLeft, activeAssessment]);
 
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const copy = [...array];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
+
   const startAssessment = (assessment: NstpAssessment) => {
+    const shuffled = shuffleArray(assessment.questions);
+    const count = assessment.questionsToShow > 0 ? Math.min(assessment.questionsToShow, shuffled.length) : shuffled.length;
+    setShuffledQuestions(shuffled.slice(0, count));
     setActiveAssessment(assessment);
     setAnswers({});
     setTimeLeft(assessment.timeLimit * 60);
@@ -47,10 +60,10 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
   const handleSubmit = () => {
     if (!activeAssessment) return;
 
-    const correct = activeAssessment.questions.reduce((acc, question, index) => {
+    const correct = shuffledQuestions.reduce((acc, question, index) => {
       return answers[index] === question.correctIndex ? acc + 1 : acc;
     }, 0);
-    const total = activeAssessment.questions.length;
+    const total = shuffledQuestions.length;
     const score = total > 0 ? Math.round((correct / total) * 100) : 0;
 
     const nextResults = {
@@ -107,9 +120,9 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-6 text-sm text-slate-600 dark:text-slate-300">
-              <span>{activeAssessment.questions.length} questions</span>
+              <span>{shuffledQuestions.length} questions</span>
               <span>Passing score: {activeAssessment.passingScore}%</span>
-              <span>{answeredCount}/{activeAssessment.questions.length} answered</span>
+              <span>{answeredCount}/{shuffledQuestions.length} answered</span>
             </div>
             {timeLeft !== null && timeLeft <= 120 && (
               <div className="mt-4 inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-100 text-rose-700 text-sm font-medium dark:bg-rose-500/15 dark:text-rose-100">
@@ -120,7 +133,7 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
           </div>
 
           <div className="space-y-6 mb-6">
-            {activeAssessment.questions.map((question, index) => (
+            {shuffledQuestions.map((question, index) => (
               <div key={question.id} className="bg-white rounded-2xl border border-slate-200 p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                 <h3 className="font-semibold text-slate-900 mb-4 dark:text-slate-100">{index + 1}. {question.prompt}</h3>
                 <div className="space-y-3">
@@ -147,7 +160,7 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
           <div className="bg-white rounded-2xl border border-slate-200 p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-300">Questions answered: {answeredCount} / {activeAssessment.questions.length}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">Questions answered: {answeredCount} / {shuffledQuestions.length}</p>
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setActiveAssessment(null)} className="px-6 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>
@@ -242,7 +255,7 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
                     <h3 className="mb-2 break-words text-lg font-semibold text-slate-900 dark:text-slate-100">{assessment.title}</h3>
                     <p className="text-sm text-slate-600 mb-3 dark:text-slate-300">{assessment.description}</p>
                     <div className="mb-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600 dark:text-slate-300">
-                      <span className="flex items-center gap-1"><FileText className="w-4 h-4" />{assessment.questions.length} questions</span>
+                      <span className="flex items-center gap-1"><FileText className="w-4 h-4" />{assessment.questionsToShow > 0 ? `${Math.min(assessment.questionsToShow, assessment.questions.length)}/${assessment.questions.length}` : assessment.questions.length} questions</span>
                       <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{assessment.timeLimit} minutes</span>
                       <span>Passing: {assessment.passingScore}%</span>
                       <span className="min-w-0 break-words">Owner: {assessment.ownerName}</span>

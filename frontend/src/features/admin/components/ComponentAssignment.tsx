@@ -103,6 +103,7 @@ export default function ComponentAssignment() {
     // Track slots filled per component
     const slotsUsed: Record<string, number> = {
       'CWTS': 0,
+      'CWTS (Coast Guard)': 0,
       'LTS': 0,
       'MTS (Army)': 0,
       'MTS (Navy)': 0

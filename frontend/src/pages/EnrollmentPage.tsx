@@ -18,6 +18,20 @@ const NSTP_COMPONENTS = [
     ]
   },
   {
+    id: 'cwts-coast-guard',
+    name: 'CWTS (Coast Guard)',
+    fullName: 'Civic Welfare Training Service - Coast Guard',
+    description: 'Coastal defense, maritime safety, search and rescue, and community service along Philippine waters.',
+    icon: Anchor,
+    color: 'bg-cyan-600',
+    benefits: [
+      'Maritime safety and security',
+      'Search and rescue operations',
+      'Coastal community service',
+      'Disaster response and preparedness'
+    ]
+  },
+  {
     id: 'lts',
     name: 'LTS',
     fullName: 'Literacy Training Service',

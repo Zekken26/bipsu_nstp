@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Save, Eye, EyeOff, UserPlus, BookOpen, Clock3, MessageSquareText, ChevronUp, ChevronDown, LayoutPanelLeft, Sparkles } from 'lucide-react';
-import { createEmptyAssessment, createEmptyStudent, loadAssessments, loadAccounts, loadStudents, saveAssessments, saveAccounts, saveStudents, NstpAccount, NstpAssessment, NstpQuestion, NstpRole, NstpStudent } from '../../../data/nstpData';
+import { createEmptyAssessment, createEmptyStudent, loadAssessments, loadAccounts, loadStudents, saveAssessments, saveStudents, NstpAccount, NstpAssessment, NstpQuestion, NstpStudent } from '../../../data/nstpData';
 
 type Props = {
   user: NstpAccount;
@@ -29,16 +29,6 @@ type AttemptRow = {
   manualStatus?: AttemptStatus;
 };
 
-const emptyAccount = (): NstpAccount => ({
-  id: `acct-${Math.random().toString(36).slice(2, 10)}`,
-  name: 'New Account',
-  email: `user-${Math.random().toString(36).slice(2, 6)}@nstp.edu`,
-  password: 'password123',
-  role: 'student',
-  title: 'NSTP Facilitator',
-  bio: '',
-});
-
 export default function AssessmentManager({ user, role }: Props) {
   const [assessments, setAssessments] = useState<NstpAssessment[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -46,8 +36,6 @@ export default function AssessmentManager({ user, role }: Props) {
   const [accounts, setAccounts] = useState<NstpAccount[]>([]);
   const [globalPassingScore, setGlobalPassingScore] = useState(70);
   const [selectedAttemptStudent, setSelectedAttemptStudent] = useState('all');
-  const [accountEditingId, setAccountEditingId] = useState<string | null>(null);
-  const [accountForm, setAccountForm] = useState<NstpAccount | null>(null);
   const [attemptRefreshKey, setAttemptRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -233,69 +221,6 @@ export default function AssessmentManager({ user, role }: Props) {
     setAttemptRefreshKey((value) => value + 1);
   };
 
-  const startNewAccount = () => {
-    setAccountEditingId('new');
-    setAccountForm(emptyAccount());
-  };
-
-  const startEditAccount = (account: NstpAccount) => {
-    setAccountEditingId(account.id);
-    setAccountForm({ ...account });
-  };
-
-  const cancelAccountEdit = () => {
-    setAccountEditingId(null);
-    setAccountForm(null);
-  };
-
-  const saveAccount = () => {
-    if (!accountForm) return;
-
-    const duplicate = accounts.find((account) => account.email.toLowerCase() === accountForm.email.toLowerCase() && account.id !== accountForm.id);
-    if (duplicate) {
-      window.alert('An account with this email already exists.');
-      return;
-    }
-
-    const normalizedRole = accountForm.role as NstpRole;
-    const nextAccount = {
-      ...accountForm,
-      role: normalizedRole,
-      title: normalizedRole === 'facilitator' ? accountForm.title || 'NSTP Facilitator' : undefined,
-      bio: normalizedRole === 'facilitator' ? accountForm.bio || '' : undefined,
-    };
-
-    const nextAccounts = accounts.some((account) => account.id === nextAccount.id)
-      ? accounts.map((account) => account.id === nextAccount.id ? nextAccount : account)
-      : [nextAccount, ...accounts];
-
-    saveAccounts(nextAccounts);
-    setAccounts(nextAccounts);
-
-    if (nextAccount.role === 'student') {
-      upsertStudentFromAccount(nextAccount);
-    } else {
-      removeStudentFromAccount(nextAccount.id);
-    }
-
-    cancelAccountEdit();
-  };
-
-  const removeAccount = (accountId: string) => {
-    if (accountId === user.id) {
-      window.alert('You cannot delete your own active admin account.');
-      return;
-    }
-
-    const nextAccounts = accounts.filter((account) => account.id !== accountId);
-    saveAccounts(nextAccounts);
-    setAccounts(nextAccounts);
-    removeStudentFromAccount(accountId);
-    if (accountEditingId === accountId) {
-      cancelAccountEdit();
-    }
-  };
-
   return (
     <div className="min-h-full overflow-visible bg-[#f4f8fd] text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-7xl p-2 md:p-4">
@@ -400,6 +325,16 @@ export default function AssessmentManager({ user, role }: Props) {
                       type="number"
                       value={form.timeLimit}
                       onChange={(e) => setForm({ ...form, timeLimit: Number(e.target.value) })}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>Questions to Show (0 = all)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.questionsToShow}
+                      onChange={(e) => setForm({ ...form, questionsToShow: Math.max(0, Number(e.target.value)) })}
                       className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                     />
                   </label>
@@ -510,7 +445,7 @@ export default function AssessmentManager({ user, role }: Props) {
                     <p>{form.description || 'No description yet.'}</p>
                     <div className="flex items-center gap-3 text-xs">
                       <span className="inline-flex items-center gap-1"><Clock3 className="w-3.5 h-3.5" /> {form.timeLimit} mins</span>
-                      <span className="inline-flex items-center gap-1"><MessageSquareText className="w-3.5 h-3.5" /> {form.questions.length} questions</span>
+                      <span className="inline-flex items-center gap-1"><MessageSquareText className="w-3.5 h-3.5" /> {form.questions.length} questions{form.questionsToShow > 0 ? ` (show ${Math.min(form.questionsToShow, form.questions.length)})` : ''}</span>
                     </div>
                   </div>
 
@@ -702,103 +637,6 @@ export default function AssessmentManager({ user, role }: Props) {
               )}
             </div>
 
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900">Account Directory</h3>
-                  <p className="text-sm text-slate-600">Create and manage NSTP accounts for administrators, facilitators, and students.</p>
-                </div>
-                <button
-                  onClick={startNewAccount}
-                  className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-700 to-cyan-500 text-white px-5 py-3 rounded-xl hover:opacity-95 transition-opacity"
-                >
-                  <Plus className="w-4 h-4" />
-                  New Account
-                </button>
-              </div>
-
-              {accountForm && (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 mb-5">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <label className="space-y-2 text-sm font-medium text-slate-700">
-                      <span>Name</span>
-                      <input value={accountForm.name} onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })} className="w-full px-4 py-3 rounded-xl border border-slate-300" />
-                    </label>
-                    <label className="space-y-2 text-sm font-medium text-slate-700">
-                      <span>Email</span>
-                      <input value={accountForm.email} onChange={(e) => setAccountForm({ ...accountForm, email: e.target.value })} className="w-full px-4 py-3 rounded-xl border border-slate-300" />
-                    </label>
-                    <label className="space-y-2 text-sm font-medium text-slate-700">
-                      <span>Password</span>
-                      <input value={accountForm.password} onChange={(e) => setAccountForm({ ...accountForm, password: e.target.value })} className="w-full px-4 py-3 rounded-xl border border-slate-300" />
-                    </label>
-                    <label className="space-y-2 text-sm font-medium text-slate-700">
-                      <span>Role</span>
-                      <select value={accountForm.role} onChange={(e) => setAccountForm({ ...accountForm, role: e.target.value as NstpRole })} className="w-full px-4 py-3 rounded-xl border border-slate-300">
-                        <option value="admin">Admin</option>
-                        <option value="facilitator">NSTP Facilitator</option>
-                        <option value="student">Student</option>
-                      </select>
-                    </label>
-                    {accountForm.role === 'facilitator' && (
-                      <>
-                        <label className="space-y-2 text-sm font-medium text-slate-700">
-                          <span>Title</span>
-                          <input value={accountForm.title || ''} onChange={(e) => setAccountForm({ ...accountForm, title: e.target.value })} className="w-full px-4 py-3 rounded-xl border border-slate-300" />
-                        </label>
-                        <label className="space-y-2 text-sm font-medium text-slate-700">
-                          <span>Bio</span>
-                          <input value={accountForm.bio || ''} onChange={(e) => setAccountForm({ ...accountForm, bio: e.target.value })} className="w-full px-4 py-3 rounded-xl border border-slate-300" />
-                        </label>
-                      </>
-                    )}
-                  </div>
-                  <div className="mt-4 flex justify-end gap-3">
-                    <button onClick={cancelAccountEdit} className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100">Cancel</button>
-                    <button onClick={saveAccount} className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-700 to-cyan-500 text-white px-5 py-2.5 rounded-xl hover:opacity-95 transition-opacity">
-                      <Save className="w-4 h-4" />
-                      Save Account
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-slate-200">
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Name</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Email</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Role</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {accounts.map((account) => (
-                      <tr key={account.id} className="border-b border-slate-100">
-                        <td className="py-3 px-4 font-medium text-slate-900">{account.name}</td>
-                        <td className="py-3 px-4 text-sm text-slate-600">{account.email}</td>
-                        <td className="py-3 px-4">
-                          <span className={`inline-flex px-3 py-1 rounded-lg text-xs font-semibold ${account.role === 'admin' ? 'bg-blue-100 text-blue-700' : account.role === 'facilitator' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-700'}`}>
-                            {account.role === 'facilitator' ? 'facilitator' : account.role}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex gap-2">
-                            <button onClick={() => startEditAccount(account)} className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm">
-                              <Pencil className="w-4 h-4" /> Edit
-                            </button>
-                            <button onClick={() => removeAccount(account.id)} className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-sm">
-                              <Trash2 className="w-4 h-4" /> Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>
         )}
       </div>

@@ -6,7 +6,6 @@ export type {
   NstpComponent,
   NstpGradeRecord,
   NstpModule,
-  NstpModuleSection,
   NstpQuestion,
   NstpRole,
   NstpStudent,

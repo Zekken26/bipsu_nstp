@@ -10,7 +10,7 @@ type AssessmentResult = {
 };
 
 export default function ProgressTracker({ user, onBack }: { user: any; onBack?: () => void }) {
-  const [progress, setProgress] = useState<Record<string, Record<string, boolean>>>({});
+  const [progress, setProgress] = useState<Record<string, boolean>>({});
   const [assessments, setAssessments] = useState<Record<string, AssessmentResult>>({});
 
   useEffect(() => {
@@ -25,10 +25,7 @@ export default function ProgressTracker({ user, onBack }: { user: any; onBack?: 
   const publishedAssessments = loadAssessments().filter((assessment) => assessment.status === 'published');
   const totalModules = modules.length;
   const totalContactHours = modules.reduce((total, module) => total + module.hours, 0);
-  const completedModules = modules.filter((module) => {
-    const moduleProgress = progress[module.id] || {};
-    return module.sections.length > 0 && module.sections.every((section) => Boolean(moduleProgress[section.id]));
-  }).length;
+  const completedModules = modules.filter((module) => progress[module.id]).length;
   const completedAssessments = Object.keys(assessments).length;
   const passedAssessments = Object.values(assessments).filter((result) => result.passed).length;
   const averageScore = Object.keys(assessments).length > 0
@@ -38,10 +35,7 @@ export default function ProgressTracker({ user, onBack }: { user: any; onBack?: 
   const estimatedHours = Math.round(moduleCompletionRatio * totalContactHours);
   const improvementIndex = Math.min(100, Math.round((averageScore * 0.6) + (moduleCompletionRatio * 40)));
 
-  const nextModule = modules.find((module) => {
-    const moduleProgress = progress[module.id] || {};
-    return module.sections.some((section) => !moduleProgress[section.id]);
-  });
+  const nextModule = modules.find((module) => !progress[module.id]);
   const nextAssessment = publishedAssessments.find((assessment) => !assessments[assessment.id]);
 
   const milestones = [

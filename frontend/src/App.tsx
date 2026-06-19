@@ -15,7 +15,7 @@ import ReportsCenter from './pages/ReportsPage';
 import GradesPage from './pages/GradesPage';
 import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
-import { ensureNstpSeedData, safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents } from './data/nstpData';
+import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents } from './data/nstpData';
 
 type ShellSection = 'overview' | 'modules' | 'assessments' | 'progress' | 'grades' | 'admin' | 'facilitator' | 'announcements' | 'reports';
 type AccountUtility = 'profile' | 'settings' | 'security' | 'accessibility' | 'activity' | 'help';
@@ -237,7 +237,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    ensureNstpSeedData();
     document.documentElement.classList.toggle('dark', themeMode === 'dark');
     const bootTimer = window.setTimeout(() => {
       setIsBootSplashVisible(false);
@@ -463,7 +462,6 @@ export default function App() {
   if (!generalEducationComplete && user.role === 'student') {
     return <GeneralEducation
       user={user}
-      onLogout={handleLogout}
       onComplete={() => {
         const updatedUser = { ...user, generalEducationComplete: true };
         setUser(updatedUser);
@@ -1404,12 +1402,7 @@ export default function App() {
                       Export JSON
                     </button>
                   </div>
-                  {[
-                    ...accountActivity,
-                    { id: 'workspace', title: 'Current workspace opened', detail: workspaceLabel, createdAt: new Date().toISOString() },
-                    { id: 'role', title: 'Active role loaded', detail: `${user.role} access profile`, createdAt: new Date().toISOString() },
-                    { id: 'area', title: 'Latest portal area', detail: navItems.find((item) => item.id === activeSection)?.label || activeSection, createdAt: new Date().toISOString() },
-                  ].slice(0, 10).map((item) => (
+                  {accountActivity.slice(0, 10).map((item) => (
                     <div key={item.id} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950">
                       <span className="mt-1 h-2.5 w-2.5 rounded-full bg-blue-600 dark:bg-blue-300" />
                       <div>

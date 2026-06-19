@@ -10,12 +10,9 @@ export default function GradesPage({ user }: { user: any }) {
   const studentId = user.studentId || student?.studentId || 'Pending';
   const gradeRecord = gradeRecords.find((record) => record.studentId === studentId);
   const assessmentResults = safeJsonParse<Record<string, any>>(localStorage.getItem(`assessments-${user.id}`), {});
-  const moduleProgress = safeJsonParse<Record<string, Record<string, boolean>>>(localStorage.getItem(`progress-${user.id}`), {});
+  const moduleProgress = safeJsonParse<Record<string, boolean>>(localStorage.getItem(`progress-${user.id}`), {});
 
-  const completedModules = modules.filter((module) => {
-    const sections = moduleProgress[module.id] || {};
-    return module.sections.length > 0 && module.sections.every((section) => sections[section.id]);
-  }).length;
+  const completedModules = modules.filter((module) => moduleProgress[module.id]).length;
   const completedHours = modules.length > 0
     ? Math.round((completedModules / modules.length) * modules.reduce((total, module) => total + module.hours, 0))
     : 0;
