@@ -19,6 +19,13 @@ const fallback = {
   grades: [],
   notices: [],
   supportTickets: [],
+  'pending-registrations': [],
+  'training-groups': [],
+  'attendance-records': [],
+  'attendance-sessions': [],
+  'qualifying-results': [],
+  'component-state': [],
+  'audit-log': [],
 };
 
 const toUserRole = (role) => {
@@ -71,6 +78,20 @@ export async function listCollection(name) {
       include: { module: true, questions: true },
     }));
   }
+
+  if (name === 'notices' || name === 'supportTickets') {
+    return fallback[name] || [];
+  }
+
+  const simpleList = (model) => withFallback(name, () => model.findMany({ orderBy: { createdAt: 'desc' } }));
+
+  if (name === 'pending-registrations') return simpleList(prisma.pendingRegistration);
+  if (name === 'training-groups') return simpleList(prisma.trainingGroup);
+  if (name === 'attendance-records') return simpleList(prisma.attendanceRecord);
+  if (name === 'attendance-sessions') return simpleList(prisma.attendanceSession);
+  if (name === 'qualifying-results') return simpleList(prisma.qualifyingExamResult);
+  if (name === 'component-state') return withFallback(name, () => prisma.componentApplicationState.findMany());
+  if (name === 'audit-log') return simpleList(prisma.auditLogEntry);
 
   return fallback[name] || [];
 }
@@ -151,6 +172,27 @@ export async function upsertCollectionRecord(name, lookup, payload) {
           course: nextPayload.course,
         },
       });
+    }
+
+    const upsertSimple = (model) => model.upsert({
+      where: { id: nextPayload.id || 'none' },
+      update: { ...nextPayload, updatedAt: undefined },
+      create: { ...nextPayload, updatedAt: undefined },
+    });
+
+    if (name === 'pending-registrations') return await upsertSimple(prisma.pendingRegistration);
+    if (name === 'training-groups') return await upsertSimple(prisma.trainingGroup);
+    if (name === 'attendance-records') return await upsertSimple(prisma.attendanceRecord);
+    if (name === 'attendance-sessions') return await upsertSimple(prisma.attendanceSession);
+    if (name === 'qualifying-results') return await upsertSimple(prisma.qualifyingExamResult);
+    if (name === 'component-state') return await upsertSimple(prisma.componentApplicationState);
+    if (name === 'audit-log') return await upsertSimple(prisma.auditLogEntry);
+    if (name === 'notices' || name === 'supportTickets') {
+      const items = fallback[name] || [];
+      const index = items.findIndex((item) => Object.entries(lookup).every(([key, value]) => item[key] === value));
+      if (index >= 0) items[index] = { ...items[index], ...nextPayload };
+      else items.unshift(nextPayload);
+      return index >= 0 ? items[index] : nextPayload;
     }
   } catch (error) {
     console.warn(`Prisma ${name} upsert failed. Using local fallback data: ${error.message}`);

@@ -303,3 +303,105 @@ model Grade {
   @@index([examId])
   @@map("grade")
 }
+
+model PendingRegistration {
+  id                String    @id
+  studentId         String?
+  surname           String?
+  firstName         String?
+  middleName        String?
+  name              String
+  email             String
+  password          String?
+  school            String?
+  department        String?
+  degreeProgram     String?
+  yearLevel         String?
+  major             String?
+  gender            String?
+  birthdate         String?
+  houseStreetPurok  String?
+  barangay          String?
+  province          String?
+  currentAddress    String?
+  cityAddress       String?
+  provincialAddress String?
+  contactNumber     String?
+  municipality      String?
+  createdAt         DateTime  @default(now())
+
+  @@map("pending_registration")
+}
+
+model TrainingGroup {
+  id                 String   @id
+  schoolYear         String
+  semester           String
+  component          String
+  facilitatorName    String
+  facilitatorId      String?
+  programHandles     Json?
+  municipality       String?
+  studentCount       Int      @default(0)
+  maxRecommendedLoad Int      @default(50)
+  sourceDocument     String?
+
+  @@map("training_group")
+}
+
+model AttendanceRecord {
+  id            String   @id
+  studentId     String
+  sessionId     String
+  status        String
+  facilitatorId String
+  updatedAt     DateTime @default(now())
+
+  @@map("attendance_record")
+}
+
+model AttendanceSession {
+  id            String   @id
+  date          String
+  facilitatorId String
+  title         String
+  createdAt     DateTime @default(now())
+
+  @@map("attendance_session")
+}
+
+model QualifyingExamResult {
+  id                 String  @id
+  userId             String
+  userName           String
+  userEmail          String
+  preferredComponent String
+  score              Int
+  timestamp          String
+  assignedComponent  String?
+  rank               Int?
+  status             String?
+  adminOverride      Boolean?
+
+  @@map("qualifying_exam_result")
+}
+
+model ComponentApplicationState {
+  id                String   @id
+  slotLimits        Json
+  qualifyingScore   Int      @default(70)
+  applicationClosed Boolean  @default(false)
+  updatedAt         DateTime @default(now())
+
+  @@map("component_application_state")
+}
+
+model AuditLogEntry {
+  id      String   @id
+  actor   String
+  action  String
+  detail  String?
+  at      DateTime @default(now())
+
+  @@map("audit_log_entry")
+}

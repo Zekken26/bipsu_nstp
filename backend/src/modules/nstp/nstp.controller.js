@@ -1,7 +1,7 @@
 import { sendError } from '../../utils/apiResponse.js';
 import { getAdminSummary, getDatabaseStatus, listCollection, upsertCollectionRecord } from './nstp.service.js';
 
-const allowedCollections = ['accounts', 'modules', 'assessments', 'students', 'grades', 'notices', 'supportTickets'];
+const allowedCollections = ['accounts', 'modules', 'assessments', 'students', 'grades', 'notices', 'supportTickets', 'pending-registrations', 'training-groups', 'attendance-records', 'attendance-sessions', 'qualifying-results', 'component-state', 'audit-log'];
 
 export async function getDbTest(req, res) {
   const status = await getDatabaseStatus();
