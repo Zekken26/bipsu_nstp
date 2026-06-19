@@ -453,6 +453,33 @@ export default function App() {
 
   const cancelLogout = () => setShowLogoutModal(false);
 
+  const renderLogoutModal = () => (
+    <Dialog open={showLogoutModal} onOpenChange={(open) => { if (!open) setShowLogoutModal(false); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Logout</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to logout?
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end gap-3 mt-4">
+          <button
+            onClick={cancelLogout}
+            className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={confirmLogout}
+            className="px-5 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-medium hover:bg-rose-700 transition-colors"
+          >
+            Logout
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   if (!user) {
     return (
       <>
@@ -470,62 +497,74 @@ export default function App() {
   const componentAssigned = user.component || null;
 
   if (!generalEducationComplete && user.role === 'student') {
-    return <GeneralEducation
-      user={user}
-      onLogout={handleLogout}
-      onComplete={() => {
-        const updatedUser = { ...user, generalEducationComplete: true };
-        setUser(updatedUser);
-        localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
-      }}
-    />;
+    return <>
+      <GeneralEducation
+        user={user}
+        onLogout={handleLogout}
+        onComplete={() => {
+          const updatedUser = { ...user, generalEducationComplete: true };
+          setUser(updatedUser);
+          localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
+        }}
+      />
+      {showLogoutModal && renderLogoutModal()}
+    </>;
   }
 
   if (generalEducationComplete && !preferredComponent && user.role === 'student') {
-    return <EnrollmentPage
-      user={user}
-      onLogout={handleLogout}
-      onEnroll={(component) => {
-        const updatedUser = { ...user, preferredComponent: component };
-        setUser(updatedUser);
-        localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
-      }}
-    />;
+    return <>
+      <EnrollmentPage
+        user={user}
+        onLogout={handleLogout}
+        onEnroll={(component) => {
+          const updatedUser = { ...user, preferredComponent: component };
+          setUser(updatedUser);
+          localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
+        }}
+      />
+      {showLogoutModal && renderLogoutModal()}
+    </>;
   }
 
   if (preferredComponent && !examTaken && user.role === 'student') {
-    return <QualifyingExam
-      user={user}
-      onLogout={handleLogout}
-      preferredComponent={preferredComponent}
-      onComplete={(score, assignment) => {
-        const updatedUser = {
-          ...user,
-          examTaken: true,
-          examScore: score,
-          ...(assignment?.assignedComponent
-            ? {
-                component: assignment.assignedComponent,
-                componentAccessStatus: assignment.status,
-              }
-            : {}),
-        };
-        setUser(updatedUser);
-        localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
-        if (assignment?.assignedComponent) {
-          setActiveSection('modules');
-          setHeaderHint(`Access granted to the ${assignment.assignedComponent} LMS.`);
-        }
-      }}
-    />;
+    return <>
+      <QualifyingExam
+        user={user}
+        onLogout={handleLogout}
+        preferredComponent={preferredComponent}
+        onComplete={(score, assignment) => {
+          const updatedUser = {
+            ...user,
+            examTaken: true,
+            examScore: score,
+            ...(assignment?.assignedComponent
+              ? {
+                  component: assignment.assignedComponent,
+                  componentAccessStatus: assignment.status,
+                }
+              : {}),
+          };
+          setUser(updatedUser);
+          localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
+          if (assignment?.assignedComponent) {
+            setActiveSection('modules');
+            setHeaderHint(`Access granted to the ${assignment.assignedComponent} LMS.`);
+          }
+        }}
+      />
+      {showLogoutModal && renderLogoutModal()}
+    </>;
   }
 
   if (examTaken && !componentAssigned && user.role === 'student') {
-    return <PendingAssignment user={user} onLogout={handleLogout} onAssign={(component) => {
-      const updatedUser = { ...user, component };
-      setUser(updatedUser);
-      localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
-    }} />;
+    return <>
+      <PendingAssignment user={user} onLogout={handleLogout} onAssign={(component) => {
+        const updatedUser = { ...user, component };
+        setUser(updatedUser);
+        localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
+      }} />
+      {showLogoutModal && renderLogoutModal()}
+    </>;
   }
 
   const today = new Date().toLocaleDateString(undefined, {
@@ -931,6 +970,7 @@ export default function App() {
     return (
       <>
         <AdminDashboard initialView={adminView as any} onNavigateApp={(target) => setActiveSection(target as ShellSection)} onLogout={handleLogout} />
+        {showLogoutModal && renderLogoutModal()}
         {isBootSplashVisible && <AuthSplash mode="boot" userName={user?.name} />}
         {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
       </>
@@ -941,6 +981,7 @@ export default function App() {
     return (
       <>
         <FacilitatorDashboard user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} />
+        {showLogoutModal && renderLogoutModal()}
         {isBootSplashVisible && <AuthSplash mode="boot" userName={user?.name} />}
         {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
       </>
@@ -1473,32 +1514,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {showLogoutModal && (
-        <Dialog open={showLogoutModal} onOpenChange={(open) => { if (!open) setShowLogoutModal(false); }}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Logout</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to logout?
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex justify-end gap-3 mt-4">
-              <button
-                onClick={cancelLogout}
-                className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmLogout}
-                className="px-5 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-medium hover:bg-rose-700 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+      {showLogoutModal && renderLogoutModal()}
       {isBootSplashVisible && <AuthSplash mode="boot" userName={user?.name} />}
       {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
     </>
