@@ -16,6 +16,7 @@ import GradesPage from './pages/GradesPage';
 import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
 import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents } from './data/nstpData';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
 
 type ShellSection = 'overview' | 'modules' | 'assessments' | 'progress' | 'grades' | 'admin' | 'facilitator' | 'announcements' | 'reports';
 type AccountUtility = 'profile' | 'settings' | 'security' | 'accessibility' | 'activity' | 'help';
@@ -189,6 +190,7 @@ export default function App() {
   const [authSplash, setAuthSplash] = useState<AuthSplashState>({ visible: false, mode: 'login' });
   const [isAuthTransitioning, setIsAuthTransitioning] = useState(false);
   const [isBootSplashVisible, setIsBootSplashVisible] = useState(true);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const authTimerRef = useRef<number | null>(null);
   const pendingLoginRef = useRef<any>(null);
   const authModeRef = useRef<'login' | 'logout'>('login');
@@ -427,6 +429,12 @@ export default function App() {
 
   const handleLogout = () => {
     if (isAuthTransitioning) return;
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutModal(false);
+    if (isAuthTransitioning) return;
 
     setProfileMenuOpen(false);
     setAccountUtility(null);
@@ -442,6 +450,8 @@ export default function App() {
       completeAuthTransition();
     }, 1800);
   };
+
+  const cancelLogout = () => setShowLogoutModal(false);
 
   if (!user) {
     return (
@@ -1462,6 +1472,32 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+      {showLogoutModal && (
+        <Dialog open={showLogoutModal} onOpenChange={(open) => { if (!open) setShowLogoutModal(false); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Logout</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to logout?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={cancelLogout}
+                className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmLogout}
+                className="px-5 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-medium hover:bg-rose-700 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
       {isBootSplashVisible && <AuthSplash mode="boot" userName={user?.name} />}
       {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
