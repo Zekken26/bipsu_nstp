@@ -462,6 +462,7 @@ export default function App() {
   if (!generalEducationComplete && user.role === 'student') {
     return <GeneralEducation
       user={user}
+      onLogout={handleLogout}
       onComplete={() => {
         const updatedUser = { ...user, generalEducationComplete: true };
         setUser(updatedUser);

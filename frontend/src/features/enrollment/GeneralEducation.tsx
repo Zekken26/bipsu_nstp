@@ -26,7 +26,7 @@ type AssessmentQuestion = {
   correct: number;
 };
 
-export default function GeneralEducation({ user, onComplete }: { user: any; onComplete: () => void; }) {
+export default function GeneralEducation({ user, onComplete, onLogout }: { user: any; onComplete: () => void; onLogout?: () => void; }) {
   const [modules, setModules] = useState<NstpModule[]>([]);
   const [assessments, setAssessments] = useState<NstpAssessment[]>([]);
   const [progress, setProgress] = useState<Record<string, SeminarProgress>>({});
@@ -313,6 +313,7 @@ export default function GeneralEducation({ user, onComplete }: { user: any; onCo
   return (
     <RoleShell
       user={user}
+      onLogout={onLogout || (() => {})}
       eyebrow="Student Workspace"
       title="General Education"
       description="Complete the Common Module seminars and pass each assessment to unlock NSTP component selection."
