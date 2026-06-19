@@ -236,6 +236,58 @@ export const COURSES = [
   'BS Information Systems',
 ];
 
+export const BIPSU_PROGRAMS = [
+  {
+    school: 'School of Arts and Sciences',
+    programs: ['Bachelor of Arts in Communication', 'Bachelor of Science in Biology', 'Bachelor of Science in Economics'],
+  },
+  {
+    school: 'School of Criminal Justice Education',
+    programs: ['Bachelor of Science in Criminology'],
+  },
+  {
+    school: 'School of Management and Entrepreneurship',
+    programs: ['Bachelor of Science in Business Administration', 'Bachelor of Science in Hospitality Management', 'Bachelor of Science in Tourism Management'],
+  },
+  {
+    school: 'School of Nursing and Health Sciences',
+    programs: ['Bachelor of Science in Nursing', 'Bachelor of Science in Public Health'],
+  },
+  {
+    school: 'School of Engineering',
+    programs: ['Bachelor of Science in Civil Engineering', 'Bachelor of Science in Computer Engineering', 'Bachelor of Science in Electrical Engineering', 'Bachelor of Science in Mechanical Engineering'],
+  },
+  {
+    school: 'School of Technology and Computer Studies',
+    programs: ['Bachelor of Science in Computer Science', 'Bachelor of Science in Information Systems', 'BS in Industrial Technology'],
+  },
+  {
+    school: 'School of Teacher Education - Naval Campus',
+    programs: ['Bachelor of Early Childhood Education', 'Bachelor of Elementary Education', 'Bachelor of Physical Education', 'Bachelor of Secondary Education', 'Bachelor of Special Needs Education', 'Bachelor of Technology & Livelihood Education'],
+  },
+];
+
+export const YEAR_LEVEL_OPTIONS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+export const INDUSTRIAL_TECHNOLOGY_PROGRAM = 'BS in Industrial Technology';
+export const INDUSTRIAL_TECHNOLOGY_MAJORS = [
+  'Automotive Technology',
+  'Architectural Drafting Technology',
+  'Electrical Technology',
+  'Electronics Technology',
+  'Culinary Technology',
+  'Apparel and Fashion Design Technology',
+  'HVAC-R Technology',
+];
+
+export const SECONDARY_EDUCATION_PROGRAM = 'Bachelor of Secondary Education';
+export const SECONDARY_EDUCATION_MAJORS = [
+  'English',
+  'Mathematics',
+  'Science',
+  'Social Studies',
+  'Filipino',
+];
+
 export type QualifyingExamResult = {
   userId: string;
   userName: string;

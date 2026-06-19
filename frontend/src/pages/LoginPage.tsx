@@ -34,7 +34,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, loadAccounts, loadPendingStudentRegistrations, savePendingStudentRegistrations } from '../data/nstpData';
+import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, BiliranMunicipality, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadPendingStudentRegistrations, savePendingStudentRegistrations, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS } from '../data/nstpData';
 import splashImage from '../assets/images/splash.png';
 import { apiPost } from '../services/apiClient';
 
@@ -204,60 +204,6 @@ const trustItems = [
   { icon: ShieldCheck, title: 'Privacy First', copy: 'Student records stay confidential and properly governed.' },
   { icon: Cloud, title: 'Always Available', copy: 'Access the portal anytime with reliable performance.' },
   { icon: Users, title: 'Built for BiPSU', copy: 'Designed for service, learning, and university excellence.' },
-];
-
-// Program list is intentionally centralized so it can be updated from the official
-// BiPSU AY 2025-2026 Program Offerings when exact program text is finalized.
-const BIPSU_PROGRAMS = [
-  {
-    school: 'School of Arts and Sciences',
-    programs: ['Bachelor of Arts in Communication', 'Bachelor of Science in Biology', 'Bachelor of Science in Economics'],
-  },
-  {
-    school: 'School of Criminal Justice Education',
-    programs: ['Bachelor of Science in Criminology'],
-  },
-  {
-    school: 'School of Management and Entrepreneurship',
-    programs: ['Bachelor of Science in Business Administration', 'Bachelor of Science in Hospitality Management', 'Bachelor of Science in Tourism Management'],
-  },
-  {
-    school: 'School of Nursing and Health Sciences',
-    programs: ['Bachelor of Science in Nursing', 'Bachelor of Science in Public Health'],
-  },
-  {
-    school: 'School of Engineering',
-    programs: ['Bachelor of Science in Civil Engineering', 'Bachelor of Science in Computer Engineering', 'Bachelor of Science in Electrical Engineering', 'Bachelor of Science in Mechanical Engineering'],
-  },
-  {
-    school: 'School of Technology and Computer Studies',
-    programs: ['Bachelor of Science in Computer Science', 'Bachelor of Science in Information Systems', 'BS in Industrial Technology'],
-  },
-  {
-    school: 'School of Teacher Education - Naval Campus',
-    programs: ['Bachelor of Early Childhood Education', 'Bachelor of Elementary Education', 'Bachelor of Physical Education', 'Bachelor of Secondary Education', 'Bachelor of Special Needs Education', 'Bachelor of Technology & Livelihood Education'],
-  },
-];
-
-const YEAR_LEVEL_OPTIONS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-const INDUSTRIAL_TECHNOLOGY_PROGRAM = 'BS in Industrial Technology';
-const INDUSTRIAL_TECHNOLOGY_MAJORS = [
-  'Automotive Technology',
-  'Architectural Drafting Technology',
-  'Electrical Technology',
-  'Electronics Technology',
-  'Culinary Technology',
-  'Apparel and Fashion Design Technology',
-  'HVAC-R Technology',
-];
-
-const SECONDARY_EDUCATION_PROGRAM = 'Bachelor of Secondary Education';
-const SECONDARY_EDUCATION_MAJORS = [
-  'English',
-  'Mathematics',
-  'Science',
-  'Social Studies',
-  'Filipino',
 ];
 
 const buildOfficialName = (firstName: string, middleName: string, surname: string) => (

@@ -1,20 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Building2, Download, Filter, KeyRound, LockKeyhole, Mail, MoreVertical, Pencil, Plus, Save, Search, Trash2, Users, X } from 'lucide-react';
-import { BILIRAN_MUNICIPALITIES, BiliranMunicipality, COURSES, DEPARTMENTS, NSTP_COMPONENTS, loadAccounts, loadStudents, NstpAccount, saveAccounts } from '../../../data/nstpData';
-
-const SCHOOL_PROGRAMS: Record<string, string[]> = {
-  'School of Arts and Sciences': ['BA Economics'],
-  'School of Criminal Justice Education': ['BS Criminology'],
-  'School of Management and Entrepreneurship': ['BS Business Administration', 'BS Business Administration major in Financial Management', 'BS Hospitality Management'],
-  'School of Nursing and Health Sciences': ['BS Nursing'],
-  'School of Engineering': ['BS Civil Engineering', 'BS Electrical Engineering', 'BS Mechanical Engineering', 'BS Computer Engineering'],
-  'School of Technology and Computer Studies': ['BS Information Technology', 'BS Computer Science', 'BS Information Systems'],
-  'School of Teacher Education - Naval Campus': ['BS Elementary Education', 'BS Secondary Education'],
-  'School of Teacher Education - Biliran Campus': ['BS Elementary Education', 'BS Secondary Education'],
-  'School of Agri-Fisheries': ['BS Agriculture'],
-  'School of Agribusiness and Forest Resource Management': ['BS Agriculture'],
-  'School of Graduate Studies': COURSES,
-};
+import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, BiliranMunicipality, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadStudents, NstpAccount, NSTP_COMPONENTS, saveAccounts, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM } from '../../../data/nstpData';
 
 type Props = {
   admin: NstpAccount;
@@ -29,8 +15,10 @@ const emptyFacilitator = (): NstpAccount => ({
   title: '',
   bio: 'Facilitates assigned municipality groups, monitors attendance, validates outputs, and records grades.',
   municipalities: ['Naval'],
+  school: '',
   department: '',
   degreeProgram: '',
+  major: '',
 });
 
 const initials = (name: string) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
@@ -327,18 +315,27 @@ export default function FacilitatorManagement({ admin }: Props) {
               </label>
               <label className="block space-y-1.5">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">School / College / Department <span className="text-rose-600 dark:text-rose-300">*</span></span>
-                <select value={form.department || ''} onChange={(event) => { setForm({ ...form, department: event.target.value, degreeProgram: '' }); }} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-950">
+                <select value={form.department || ''} onChange={(event) => { setForm({ ...form, school: event.target.value, department: event.target.value, degreeProgram: '', major: '' }); }} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-950">
                   <option value="">Select your school</option>
-                  {DEPARTMENTS.map((dept) => <option key={dept} value={dept}>{dept}</option>)}
+                  {BIPSU_PROGRAMS.map((entry) => <option key={entry.school} value={entry.school}>{entry.school}</option>)}
                 </select>
               </label>
               <label className="block space-y-1.5">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Degree Program <span className="text-rose-600 dark:text-rose-300">*</span></span>
-                <select value={form.degreeProgram || ''} onChange={(event) => setForm({ ...form, degreeProgram: event.target.value })} disabled={!form.department} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-950">
+                <select value={form.degreeProgram || ''} onChange={(event) => { const value = event.target.value; setForm({ ...form, degreeProgram: value, ...(value !== INDUSTRIAL_TECHNOLOGY_PROGRAM && value !== SECONDARY_EDUCATION_PROGRAM ? { major: '' } : {}) }); }} disabled={!form.department} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-950">
                   <option value="">{form.department ? 'Select your degree program' : 'Select a school first'}</option>
-                  {form.department && (SCHOOL_PROGRAMS[form.department] || []).map((prog) => <option key={prog} value={prog}>{prog}</option>)}
+                  {form.department && (BIPSU_PROGRAMS.find((s) => s.school === form.department)?.programs || []).map((prog) => <option key={prog} value={prog}>{prog}</option>)}
                 </select>
               </label>
+              {(form.degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM || form.degreeProgram === SECONDARY_EDUCATION_PROGRAM) && (
+              <label className="block space-y-1.5">
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Major <span className="text-rose-600 dark:text-rose-300">*</span></span>
+                <select value={form.major || ''} onChange={(event) => setForm({ ...form, major: event.target.value })} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                  <option value="">Select major</option>
+                  {(form.degreeProgram === INDUSTRIAL_TECHNOLOGY_PROGRAM ? INDUSTRIAL_TECHNOLOGY_MAJORS : SECONDARY_EDUCATION_MAJORS).map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </label>
+              )}
               <label className="block space-y-1.5 md:col-span-2">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Bio</span>
                 <textarea value={form.bio || ''} onChange={(event) => setForm({ ...form, bio: event.target.value })} rows={2} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
