@@ -34,7 +34,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, BiliranMunicipality, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadPendingStudentRegistrations, savePendingStudentRegistrations, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS } from '../data/nstpData';
+import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, BiliranMunicipality, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadPendingStudentRegistrations, saveAccounts, savePendingStudentRegistrations, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS, NstpAccount } from '../data/nstpData';
 import splashImage from '../assets/images/splash.png';
 import { apiPost } from '../services/apiClient';
 
@@ -431,7 +431,40 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         }
         return account.email.toLowerCase() === loginInput.toLowerCase() && account.password === password;
       });
-      onLogin({ ...matchAccount, ...userData, id: userData.id || matchAccount?.id, token: apiResult.data.token });
+
+      // If backend has the account but localStorage doesn't, sync it
+      if (!matchAccount && userData.email) {
+        const syncedAccount: NstpAccount = {
+          id: userData.id || `sync-${Math.random().toString(36).slice(2, 10)}`,
+          name: userData.name || userData.email,
+          email: userData.email,
+          password,
+          role: (userData.role || loginRole) as NstpAccount['role'],
+          studentId: userData.studentId,
+          surname: userData.surname,
+          firstName: userData.firstName,
+          middleName: userData.middleName,
+          school: userData.school,
+          department: userData.department,
+          degreeProgram: userData.degreeProgram,
+          yearLevel: userData.yearLevel,
+          major: userData.major,
+          gender: userData.gender,
+          birthdate: userData.birthdate,
+          houseStreetPurok: userData.houseStreetPurok,
+          barangay: userData.barangay,
+          province: userData.province || 'Biliran',
+          currentAddress: userData.currentAddress,
+          cityAddress: userData.cityAddress,
+          provincialAddress: userData.provincialAddress,
+          contactNumber: userData.contactNumber,
+          municipality: userData.municipality || 'Naval',
+        };
+        saveAccounts([syncedAccount, ...accounts]);
+        onLogin({ ...syncedAccount, ...userData, id: userData.id || syncedAccount.id, token: apiResult.data.token });
+      } else {
+        onLogin({ ...matchAccount, ...userData, id: userData.id || matchAccount?.id, token: apiResult.data.token });
+      }
       return;
     }
 

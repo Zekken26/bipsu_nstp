@@ -200,6 +200,161 @@ const ATTENDANCE_RECORDS_KEY = 'nstp-attendance-records';
 const ATTENDANCE_SESSIONS_KEY = 'nstp-attendance-sessions';
 export const QUALIFYING_RESULTS_KEY = 'qualifyingExamResults';
 export const COMPONENT_APPLICATION_STATE_KEY = 'nstp-component-application-state';
+const AUDIT_LOG_KEY = 'nstp-admin-audit-log';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+
+async function apiGet<T>(path: string, fallback: T): Promise<T> {
+  try {
+    const response = await fetch(`${API_BASE}${path}`);
+    if (!response.ok) throw new Error(`API ${response.status}`);
+    return await response.json() as T;
+  } catch {
+    return fallback;
+  }
+}
+
+async function apiPost<T>(path: string, payload: unknown, fallback: T): Promise<T> {
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(`API ${response.status}`);
+    return await response.json() as T;
+  } catch {
+    return fallback;
+  }
+}
+
+const API_COLLECTION_MAP: Record<string, string> = {
+  [ACCOUNTS_KEY]: 'accounts',
+  [STUDENTS_KEY]: 'students',
+  [MODULES_KEY]: 'modules',
+  [ASSESSMENTS_KEY]: 'assessments',
+  [GRADES_KEY]: 'grades',
+  [PENDING_REGISTRATIONS_KEY]: 'pending-registrations',
+  [TRAINING_GROUPS_KEY]: 'training-groups',
+  [ATTENDANCE_RECORDS_KEY]: 'attendance-records',
+  [ATTENDANCE_SESSIONS_KEY]: 'attendance-sessions',
+  [QUALIFYING_RESULTS_KEY]: 'qualifying-results',
+  [COMPONENT_APPLICATION_STATE_KEY]: 'component-state',
+  [AUDIT_LOG_KEY]: 'audit-log',
+};
+
+async function syncToApi<T>(localKey: string, data: T[]): Promise<void> {
+  const collection = API_COLLECTION_MAP[localKey];
+  if (!collection || !Array.isArray(data)) return;
+  for (const record of data) {
+    await apiPost(`/nstp/${collection}`, record, null);
+  }
+}
+
+async function syncSingleToApi<T>(localKey: string, data: T): Promise<void> {
+  const collection = API_COLLECTION_MAP[localKey];
+  if (!collection) return;
+  await apiPost(`/nstp/${collection}`, data, null);
+}
+
+export async function syncCollectionFromApi(localKey: string): Promise<void> {
+  const collection = API_COLLECTION_MAP[localKey];
+  if (!collection) return;
+  if (collection === 'accounts') {
+    const apiAccounts = await apiGet<any[]>('/nstp/accounts', []);
+    if (apiAccounts.length > 0) {
+      const mapped: NstpAccount[] = apiAccounts.map((a: any) => {
+        const d = (a.data || {}) as Record<string, unknown>;
+        return {
+          id: a.id, name: a.name || '', email: a.email || '', password: '',
+          role: (a.role || 'student').toLowerCase() as NstpRole,
+          studentId: (d.studentId as string) || '',
+          surname: d.surname as string, firstName: d.firstName as string,
+          middleName: d.middleName as string, school: d.school as string,
+          department: d.department as string, degreeProgram: d.degreeProgram as string,
+          yearLevel: d.yearLevel as string, major: d.major as string,
+          gender: d.gender as string, birthdate: d.birthdate as string,
+          houseStreetPurok: d.houseStreetPurok as string, barangay: d.barangay as string,
+          province: (d.province as string) || 'Biliran',
+          currentAddress: d.currentAddress as string, cityAddress: d.cityAddress as string,
+          provincialAddress: d.provincialAddress as string,
+          contactNumber: d.contactNumber as string,
+          municipality: (d.municipality as BiliranMunicipality) || 'Naval',
+        };
+      });
+      if (mapped.length > 0) {
+        const existing = safeJsonParse<NstpAccount[]>(localStorage.getItem(localKey), []);
+        const merged = [...existing];
+        for (const m of mapped) {
+          const idx = merged.findIndex((x) => x.email?.toLowerCase() === m.email?.toLowerCase());
+          if (idx >= 0) merged[idx] = { ...merged[idx], ...m, password: merged[idx].password };
+          else merged.unshift(m);
+        }
+        localStorage.setItem(localKey, JSON.stringify(merged));
+      }
+    }
+    return;
+  }
+  if (collection === 'students') {
+    const apiStudents = await apiGet<any[]>('/nstp/students', []);
+    if (apiStudents.length > 0) {
+      const mapped: NstpStudent[] = apiStudents.map((bs: any) => {
+        const userData = bs.user || {};
+        const data = (userData.data || {}) as Record<string, unknown>;
+        return {
+          id: userData.id || bs.id, studentId: bs.studentNumber,
+          surname: (data.surname as string) || '', firstName: (data.firstName as string) || '',
+          middleName: (data.middleName as string) || '', name: userData.name || '',
+          email: userData.email || '', school: (data.school as string) || '',
+          department: (data.department as string) || '',
+          degreeProgram: bs.course || (data.degreeProgram as string) || '',
+          yearLevel: bs.yearLevel || (data.yearLevel as string) || '',
+          major: (data.major as string) || '', gender: (data.gender as string) || '',
+          birthdate: (data.birthdate as string) || '',
+          houseStreetPurok: (data.houseStreetPurok as string) || '',
+          barangay: (data.barangay as string) || '',
+          province: (data.province as string) || 'Biliran',
+          currentAddress: (data.currentAddress as string) || '',
+          cityAddress: (data.cityAddress as string) || '',
+          provincialAddress: (data.provincialAddress as string) || '',
+          contactNumber: (data.contactNumber as string) || '',
+          component: (bs.component?.name || 'CWTS') as NstpComponent,
+          municipality: (data.municipality as BiliranMunicipality) || 'Naval',
+          programSection: (data.degreeProgram as string) || '',
+          progress: 0, assessments: 0, status: 'pending' as const,
+          notes: 'Imported from server.', updatedAt: new Date().toISOString(),
+        };
+      });
+      if (mapped.length > 0) {
+        const existing = safeJsonParse<NstpStudent[]>(localStorage.getItem(localKey), []);
+        const merged = [...existing];
+        for (const m of mapped) {
+          const idx = merged.findIndex((x) => x.studentId === m.studentId || x.email?.toLowerCase() === m.email?.toLowerCase());
+          if (idx >= 0) merged[idx] = m;
+          else merged.unshift(m);
+        }
+        localStorage.setItem(localKey, JSON.stringify(merged));
+      }
+    }
+    return;
+  }
+  const apiData = await apiGet<any[]>(`/nstp/${collection}`, null);
+  if (Array.isArray(apiData) && apiData.length > 0) {
+    const existing = safeJsonParse<any[]>(localStorage.getItem(localKey), []);
+    const merged = [...existing];
+    for (const item of apiData) {
+      const idx = merged.findIndex((x: any) => x.id === item.id);
+      if (idx >= 0) merged[idx] = item;
+      else merged.unshift(item);
+    }
+    localStorage.setItem(localKey, JSON.stringify(merged));
+  }
+}
+
+export async function syncAllFromApi(): Promise<void> {
+  const keys = Object.keys(API_COLLECTION_MAP);
+  await Promise.allSettled(keys.map((key) => syncCollectionFromApi(key)));
+}
 export const NSTP_COMPONENTS: NstpComponent[] = ['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)', 'CWTS (Coast Guard)'];
 export const BILIRAN_MUNICIPALITIES: BiliranMunicipality[] = ['Almeria', 'Biliran', 'Cabucgayan', 'Caibiran', 'Culaba', 'Kawayan', 'Maripipi', 'Naval'];
 
@@ -390,19 +545,6 @@ const SEED_MODULES: NstpModule[] = [
 export function ensureNstpSeedData() {
   if (typeof window === 'undefined') return;
 
-  if (!localStorage.getItem('nstp-data-cleaned')) {
-    localStorage.setItem(STUDENTS_KEY, JSON.stringify([]));
-    localStorage.setItem(GRADES_KEY, JSON.stringify([]));
-    localStorage.setItem(TRAINING_GROUPS_KEY, JSON.stringify([]));
-    localStorage.setItem(ATTENDANCE_RECORDS_KEY, JSON.stringify([]));
-    localStorage.setItem(ATTENDANCE_SESSIONS_KEY, JSON.stringify([]));
-    localStorage.setItem('nstp-system-notices', JSON.stringify([]));
-    const stored = safeJsonParse<NstpAccount[]>(localStorage.getItem(ACCOUNTS_KEY), []);
-    const cleaned = stored.filter(a => a.role !== 'facilitator');
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(cleaned.length > 0 ? cleaned : DEFAULT_ACCOUNTS));
-    localStorage.setItem('nstp-data-cleaned', 'true');
-  }
-
   if (!localStorage.getItem(ACCOUNTS_KEY)) {
     localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(DEFAULT_ACCOUNTS));
   } else {
@@ -421,7 +563,7 @@ export function ensureNstpSeedData() {
     localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify([]));
   }
   if (!localStorage.getItem(MODULES_KEY)) {
-    localStorage.setItem(MODULES_KEY, JSON.stringify(SEED_MODULES));
+    localStorage.setItem(MODULES_KEY, JSON.stringify([]));
   }
   if (!localStorage.getItem(STUDENTS_KEY)) {
     localStorage.setItem(STUDENTS_KEY, JSON.stringify([]));
@@ -447,6 +589,7 @@ export function saveAccounts(accounts: NstpAccount[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
   window.dispatchEvent(new CustomEvent('nstp-accounts-updated'));
+  syncToApi(ACCOUNTS_KEY, accounts);
 }
 
 export function loadAssessments(): NstpAssessment[] {
@@ -458,6 +601,7 @@ export function loadAssessments(): NstpAssessment[] {
 export function saveAssessments(assessments: NstpAssessment[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify(assessments));
+  syncToApi(ASSESSMENTS_KEY, assessments);
 }
 
 export function loadModules(): NstpModule[] {
@@ -469,6 +613,7 @@ export function loadModules(): NstpModule[] {
 export function saveModules(modules: NstpModule[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(MODULES_KEY, JSON.stringify(modules));
+  syncToApi(MODULES_KEY, modules);
 }
 
 export function loadStudents(): NstpStudent[] {
@@ -481,6 +626,7 @@ export function saveStudents(students: NstpStudent[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STUDENTS_KEY, JSON.stringify(students));
   window.dispatchEvent(new CustomEvent('nstp-students-updated'));
+  syncToApi(STUDENTS_KEY, students);
 }
 
 export function loadComponentApplicationState(): ComponentApplicationState {
@@ -503,6 +649,7 @@ export function saveComponentApplicationState(state: ComponentApplicationState) 
   if (typeof window === 'undefined') return;
   localStorage.setItem(COMPONENT_APPLICATION_STATE_KEY, JSON.stringify(state));
   window.dispatchEvent(new CustomEvent('nstp-component-state-updated'));
+  syncToApi(COMPONENT_APPLICATION_STATE_KEY, [state]);
 }
 
 export function loadQualifyingExamResults(): QualifyingExamResult[] {
@@ -514,6 +661,7 @@ export function saveQualifyingExamResults(results: QualifyingExamResult[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(QUALIFYING_RESULTS_KEY, JSON.stringify(results));
   window.dispatchEvent(new CustomEvent('nstp-qualifying-results-updated'));
+  syncToApi(QUALIFYING_RESULTS_KEY, results);
 }
 
 const hasStudentPortalAccess = (result: QualifyingExamResult) => {
@@ -612,6 +760,7 @@ export function loadPendingStudentRegistrations(): PendingStudentRegistration[] 
 export function savePendingStudentRegistrations(registrations: PendingStudentRegistration[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(PENDING_REGISTRATIONS_KEY, JSON.stringify(registrations));
+  syncToApi(PENDING_REGISTRATIONS_KEY, registrations);
 }
 
 export function loadGradeRecords(): NstpGradeRecord[] {
@@ -623,6 +772,7 @@ export function loadGradeRecords(): NstpGradeRecord[] {
 export function saveGradeRecords(records: NstpGradeRecord[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(GRADES_KEY, JSON.stringify(records));
+  syncToApi(GRADES_KEY, records);
 }
 
 export function loadAttendanceRecords(): NstpAttendanceRecord[] {
@@ -633,6 +783,7 @@ export function loadAttendanceRecords(): NstpAttendanceRecord[] {
 export function saveAttendanceRecords(records: NstpAttendanceRecord[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(ATTENDANCE_RECORDS_KEY, JSON.stringify(records));
+  syncToApi(ATTENDANCE_RECORDS_KEY, records);
 }
 
 export function loadAttendanceSessions(): NstpAttendanceSession[] {
@@ -643,6 +794,7 @@ export function loadAttendanceSessions(): NstpAttendanceSession[] {
 export function saveAttendanceSessions(sessions: NstpAttendanceSession[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(ATTENDANCE_SESSIONS_KEY, JSON.stringify(sessions));
+  syncToApi(ATTENDANCE_SESSIONS_KEY, sessions);
 }
 
 export function loadTrainingGroups(): NstpTrainingGroup[] {
@@ -655,6 +807,7 @@ export function saveTrainingGroups(groups: NstpTrainingGroup[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(TRAINING_GROUPS_KEY, JSON.stringify(groups));
   window.dispatchEvent(new CustomEvent('nstp-training-groups-updated'));
+  syncToApi(TRAINING_GROUPS_KEY, groups);
 }
 
 export function createEmptyStudent(): NstpStudent {

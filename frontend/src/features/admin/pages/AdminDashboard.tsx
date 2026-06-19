@@ -6,7 +6,7 @@ import AssessmentManager from '../../assessments/components/AssessmentManager';
 import ModulesPage from '../../../pages/ModulesPage';
 import FacilitatorManagement from '../components/FacilitatorManagement';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
-import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups } from '../../../data/nstpData';
+import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi } from '../../../data/nstpData';
 import { apiPost } from '../../../services/apiClient';
 
 type AdminAuditEntry = {
@@ -190,6 +190,15 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     setAuditLog(safeJsonParse<AdminAuditEntry[]>(localStorage.getItem(AUDIT_LOG_KEY), []));
     setFilterPresets(safeJsonParse<StudentFilterPreset[]>(localStorage.getItem(FILTER_PRESETS_KEY), []));
     setFormTemplate({ ...DEFAULT_FORM_TEMPLATE, ...safeJsonParse<Partial<OfficialProfileTemplate>>(localStorage.getItem(FORM_TEMPLATE_KEY), {}) });
+
+    // Sync with backend API on mount — backend data takes priority
+    syncAllFromApi().then(() => {
+      setStudents(loadStudents());
+      setPendingRegistrations(loadPendingStudentRegistrations());
+      setTrainingGroups(loadTrainingGroups());
+      setGradeRecords(loadGradeRecords());
+      setAccountVersion((v) => v + 1);
+    });
   }, []);
 
   useEffect(() => {
@@ -412,7 +421,19 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     }
 
     // Save to PostgreSQL via backend API
-    await apiPost('/auth/register', registration, null);
+    let backendOk = false;
+    try {
+      const backendResult = await apiPost<any>('/auth/register', registration, null);
+      if (backendResult && backendResult.success) {
+        backendOk = true;
+      }
+    } catch (_e) {
+      // Backend unreachable — will proceed with localStorage only
+    }
+
+    const warnMsg = backendOk
+      ? null
+      : 'Backend server unreachable. Student was saved locally, but data may not persist across browsers or after storage clear.';
 
     const nextAccount = {
       id: `student-${Math.random().toString(36).slice(2, 10)}`,
@@ -506,6 +527,9 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     setTrainingGroups(nextTrainingGroups);
     persistPendingRegistrations(pendingRegistrations.filter((item) => item.id !== registration.id));
     logAudit('Approved registration', `${registration.name} (${approvedStudentId}, ${registration.email})`);
+    if (warnMsg) {
+      setTimeout(() => window.alert(warnMsg), 100);
+    }
   };
 
   const rejectRegistration = (registrationId: string) => {

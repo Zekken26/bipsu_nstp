@@ -315,7 +315,7 @@ export default function GeneralEducation({ user, onComplete }: { user: any; onCo
       user={user}
       eyebrow="Student Workspace"
       title="General Education"
-      description="Complete all required seminars and assessments before selecting your NSTP component."
+      description="Complete the Common Module seminars and pass each assessment to unlock NSTP component selection."
       sidebarTitle="Progress Snapshot"
       sidebarItems={[
         { label: 'Contact Hours', value: `${totalHours}/25 completed`, tone: 'warning' },
@@ -397,23 +397,22 @@ export default function GeneralEducation({ user, onComplete }: { user: any; onCo
         </section>
         <div className="bento-panel p-5 xl:col-span-6">
             <p className="text-xs uppercase tracking-[0.16em] font-semibold text-amber-700 mb-2">Required Stage</p>
-            <h3 className="text-lg font-bold text-slate-900 mb-1 dark:text-slate-100">General Education • 25 Contact Hours</h3>
-            <p className="text-sm text-slate-600 dark:text-slate-300">Complete all seminars and pass assessments before choosing your NSTP component.</p>
+            <h3 className="text-lg font-bold text-slate-900 mb-1 dark:text-slate-100">General Education • {totalHours} / 25 Contact Hours</h3>
+            <p className="text-sm text-slate-600 dark:text-slate-300">Complete {commonModules.length - completedCount} remaining seminar{commonModules.length - completedCount === 1 ? '' : 's'} to unlock component selection.</p>
           </div>
           <div className="bento-panel p-5 xl:col-span-6">
             <p className="text-xs uppercase tracking-[0.16em] font-semibold text-rose-700 mb-2">Current Momentum</p>
             <h3 className="text-lg font-bold text-slate-900 mb-1 dark:text-slate-100">{completedCount} / {commonModules.length} seminars completed</h3>
-            <p className="text-sm text-slate-600 dark:text-slate-300">{Math.max(0, 25 - totalHours)} hours remaining to unlock component enrollment.</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{remainingHours} hour{remainingHours === 1 ? '' : 's'} remaining to unlock component enrollment.</p>
           </div>
 
         {/* Header */}
         <div className="bento-panel p-6 text-center xl:col-span-12">
           <h1 className="text-3xl font-bold text-slate-900 mb-3 dark:text-slate-100">
-            General Education - 25 Contact Hours
+            General Education — {totalHours} / 25 Contact Hours
           </h1>
           <p className="text-slate-600 max-w-2xl mx-auto dark:text-slate-300">
-            Complete all required seminars and assessments before selecting your NSTP component.
-            Each seminar is conducted live by expert speakers.
+            Complete {commonModules.length} Common Module seminar{commonModules.length === 1 ? '' : 's'} ({totalHours} / 25 hours) and pass the linked assessments to proceed to NSTP component selection.
           </p>
         </div>
 
