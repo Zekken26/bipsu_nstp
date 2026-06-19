@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Calendar, Clock, Users, Video, CheckCircle, Play, Lock, Award, Sparkles, Flame, ShieldCheck, ArrowRight, LayoutDashboard } from 'lucide-react';
+import { Calendar, Clock, Users, Video, CheckCircle, Play, Lock, Award, Sparkles, Flame, ShieldCheck, ArrowRight, LayoutDashboard, BookOpen, ExternalLink } from 'lucide-react';
 import RoleShell from '../../components/layout/RoleShell';
 import { loadModules, loadAssessments, type NstpModule, type NstpAssessment } from '../../data/nstpData';
 
@@ -35,6 +35,22 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
   const [assessmentActive, setAssessmentActive] = useState(false);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [assessmentQuestions, setAssessmentQuestions] = useState<AssessmentQuestion[]>([]);
+  const [mediaConsumed, setMediaConsumed] = useState<Record<string, boolean>>({});
+
+  const MEDIA_CONSUMED_KEY = `nstp-media-consumed-${user.id}`;
+
+  function getEmbedUrl(url: string): string {
+    if (!url) return url;
+    const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+    if (youtubeMatch) {
+      return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
+    }
+    const youtubeEmbedMatch = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/);
+    if (youtubeEmbedMatch) {
+      return url;
+    }
+    return url;
+  }
 
   const commonModules = useMemo(() =>
     modules.filter((m) => (m.component || 'Common') === 'Common'),
@@ -48,6 +64,13 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}${user.id}`);
     if (saved) {
       setProgress(JSON.parse(saved));
+    }
+
+    const savedMedia = localStorage.getItem(MEDIA_CONSUMED_KEY);
+    if (savedMedia) {
+      try {
+        setMediaConsumed(JSON.parse(savedMedia));
+      } catch { /* ignore */ }
     }
   }, [user.id]);
 
@@ -77,8 +100,19 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
     setIsLive(true);
   };
 
+  const toggleMediaConsumed = () => {
+    if (!selectedModule) return;
+    const next = {
+      ...mediaConsumed,
+      [selectedModule.id]: !mediaConsumed[selectedModule.id],
+    };
+    setMediaConsumed(next);
+    localStorage.setItem(MEDIA_CONSUMED_KEY, JSON.stringify(next));
+  };
+
   const startAssessment = () => {
     if (!selectedModule) return;
+    if (!mediaConsumed[selectedModule.id]) return;
 
     const linked = getLinkedAssessment(selectedModule.id);
     if (linked) {
@@ -119,27 +153,60 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
     setAssessmentActive(false);
   };
 
-  // Live Seminar View
+  // Media Consumption View
   if (isLive && selectedModule) {
+    const hasVideo = !!selectedModule.videoUrl;
+    const hasDocument = !!selectedModule.documentLink;
+    const hasMeeting = !!selectedModule.meetingLink;
+    const hasContent = hasVideo || hasDocument || hasMeeting;
+    const isConsumed = mediaConsumed[selectedModule.id] || false;
+
     return (
       <div className="size-full flex flex-col bg-slate-900">
-        <div className="flex-1 flex items-center justify-center bg-slate-800 relative">
-          <div className="text-center">
-            <div className="w-32 h-32 bg-slate-700 rounded-full flex items-center justify-center mb-4 mx-auto">
-              <Users className="w-16 h-16 text-slate-400" />
+        <div className="flex-1 flex items-center justify-center bg-slate-800 relative overflow-hidden">
+          {hasVideo ? (
+            <iframe
+              src={getEmbedUrl(selectedModule.videoUrl!)}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title={selectedModule.title}
+            />
+          ) : hasDocument ? (
+            <div className="text-center p-8">
+              <ExternalLink className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+              <p className="text-white text-lg mb-4">Document available for this module</p>
+              <a
+                href={selectedModule.documentLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors font-medium"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open Document
+              </a>
             </div>
-            <p className="text-white text-xl mb-2">{selectedModule.speaker}</p>
-            <p className="text-slate-400">{selectedModule.speakerPosition}</p>
-            <div className="mt-6 flex items-center justify-center gap-2 text-red-500">
-              <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-              <span className="font-semibold">LIVE</span>
+          ) : hasMeeting ? (
+            <div className="text-center p-8">
+              <Users className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+              <p className="text-white text-lg mb-4">Meeting link available for this module</p>
+              <a
+                href={selectedModule.meetingLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-700 transition-colors font-medium"
+              >
+                <Video className="w-4 h-4" />
+                Join Meeting
+              </a>
             </div>
-          </div>
-
-          <div className="absolute top-4 left-4 bg-red-600 px-4 py-2 rounded-lg flex items-center gap-2">
-            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-            <span className="text-white font-semibold text-sm">LIVE SESSION</span>
-          </div>
+          ) : (
+            <div className="text-center p-8">
+              <BookOpen className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+              <p className="text-white text-lg">No content has been attached to this module yet.</p>
+              <p className="text-slate-400 mt-2">The admin has not added a video, document, or meeting link.</p>
+            </div>
+          )}
         </div>
 
         <div className="bg-slate-900 border-t border-slate-700 p-6">
@@ -151,8 +218,24 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
+                  onClick={toggleMediaConsumed}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
+                    isConsumed
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-slate-700 text-white hover:bg-slate-600'
+                  }`}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  {isConsumed ? 'Mark as Unwatched' : 'Mark as Watched'}
+                </button>
+                <button
                   onClick={startAssessment}
-                  className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-6 py-3 rounded-xl hover:opacity-95 transition-opacity font-medium"
+                  disabled={!isConsumed}
+                  className={`px-6 py-3 rounded-xl font-medium transition-opacity ${
+                    isConsumed
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:opacity-95'
+                      : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                  }`}
                 >
                   Proceed to Assessment
                 </button>
