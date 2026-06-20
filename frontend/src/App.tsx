@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Users, BarChart3, LogOut, CalendarDays, LayoutGrid, ClipboardList, MoonStar, SunMedium, Mic2, Bell, Maximize2, Search, ChevronDown, TrendingUp, Award, Menu, X, UserRound, Settings, ShieldCheck, SlidersHorizontal, History, CircleHelp, LockKeyhole, CheckCircle2, Download, Send, Save, Mail, RotateCcw } from 'lucide-react';
 import LoginPage from './pages/LoginPage';
 import GeneralEducation from './features/enrollment/GeneralEducation';
@@ -16,6 +17,8 @@ import GradesPage from './pages/GradesPage';
 import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
 import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi } from './data/nstpData';
+import * as api from './services/api';
+import { toast, Toaster } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
 import SectionErrorBoundary from './components/common/SectionErrorBoundary';
 
@@ -192,6 +195,7 @@ export default function App() {
   const [isAuthTransitioning, setIsAuthTransitioning] = useState(false);
   const [isBootSplashVisible, setIsBootSplashVisible] = useState(true);
   const [dataReady, setDataReady] = useState(false);
+  const queryClient = useQueryClient();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const authTimerRef = useRef<number | null>(null);
   const pendingLoginRef = useRef<any>(null);
@@ -241,8 +245,18 @@ export default function App() {
   };
 
   useEffect(() => {
-    initializeFromApi().then(() => setDataReady(true));
-  }, []);
+    const qc = queryClient;
+    async function init() {
+      await initializeFromApi();
+      qc.prefetchQuery({ queryKey: ['accounts'], queryFn: api.fetchAccounts, staleTime: 30_000 });
+      qc.prefetchQuery({ queryKey: ['students'], queryFn: api.fetchStudents, staleTime: 30_000 });
+      qc.prefetchQuery({ queryKey: ['modules'], queryFn: api.fetchModules, staleTime: 30_000 });
+      qc.prefetchQuery({ queryKey: ['assessments'], queryFn: api.fetchAssessments, staleTime: 30_000 });
+      qc.prefetchQuery({ queryKey: ['grades'], queryFn: api.fetchGrades, staleTime: 30_000 });
+      setDataReady(true);
+    }
+    init();
+  }, [queryClient]);
 
   useEffect(() => {
     const handleAuthExpired = () => {
@@ -250,8 +264,19 @@ export default function App() {
       localStorage.removeItem('nstpUser');
       setActiveSection('overview');
     };
+    const handleApiError = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const method = detail?.method || '?';
+      const path = detail?.path || '?';
+      const status = detail?.status || '?';
+      toast.error(`API Error [${status}] ${method} ${path}`, { duration: 5000 });
+    };
     window.addEventListener('auth:expired', handleAuthExpired);
-    return () => window.removeEventListener('auth:expired', handleAuthExpired);
+    window.addEventListener('api:error', handleApiError);
+    return () => {
+      window.removeEventListener('auth:expired', handleAuthExpired);
+      window.removeEventListener('api:error', handleApiError);
+    };
   }, []);
 
   useEffect(() => {
@@ -526,6 +551,7 @@ export default function App() {
         <LoginPage onLogin={handleLogin} />
         {isBootSplashVisible && <AuthSplash mode="boot" />}
         {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
+        <Toaster />
       </>
     );
   }
@@ -1030,6 +1056,7 @@ export default function App() {
 
   return (
     <>
+      <Toaster />
       <div className="min-h-screen overflow-x-hidden bg-[#f4f8fd] text-slate-900 dark:bg-slate-950 dark:text-slate-100 lg:h-screen">
         <div className="min-h-screen lg:h-screen">
           <CollapsibleRoleSidebar

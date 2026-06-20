@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from '../services/apiClient';
+import { apiGet, apiPost, apiDel } from '../services/apiClient';
 
 export type NstpRole = 'admin' | 'student' | 'facilitator';
 export type NstpComponent = 'CWTS' | 'LTS' | 'MTS (Army)' | 'MTS (Navy)' | 'CWTS (Coast Guard)';
@@ -219,16 +219,28 @@ const API_COLLECTION_MAP: Record<string, string> = {
   [AUDIT_LOG_KEY]: 'audit-log',
 };
 
-export async function syncToApi<T>(localKey: string, data: T[]): Promise<void> {
+export function syncToApi<T>(localKey: string, data: T[]): void {
   const collection = API_COLLECTION_MAP[localKey];
   if (!collection || !Array.isArray(data) || data.length === 0) return;
-  await apiPost(`/nstp/batch/${collection}`, data, null);
+  apiPost<{ upserted: number } | null>(`/nstp/batch/${collection}`, data, null).then((result) => {
+    if (result === null) {
+      window.dispatchEvent(new CustomEvent('api:error', { detail: { method: 'POST', path: `/nstp/batch/${collection}`, status: 0 } }));
+    }
+  }).catch(() => {
+    window.dispatchEvent(new CustomEvent('api:error', { detail: { method: 'POST', path: `/nstp/batch/${collection}`, status: 0 } }));
+  });
 }
 
-async function syncSingleToApi<T>(localKey: string, data: T): Promise<void> {
+function syncSingleToApi<T>(localKey: string, data: T): void {
   const collection = API_COLLECTION_MAP[localKey];
   if (!collection) return;
-  await apiPost(`/nstp/${collection}`, data, null);
+  apiPost<T | null>(`/nstp/${collection}`, data, null).then((result) => {
+    if (result === null) {
+      window.dispatchEvent(new CustomEvent('api:error', { detail: { method: 'POST', path: `/nstp/${collection}`, status: 0 } }));
+    }
+  }).catch(() => {
+    window.dispatchEvent(new CustomEvent('api:error', { detail: { method: 'POST', path: `/nstp/${collection}`, status: 0 } }));
+  });
 }
 
 export async function syncCollectionFromApi(localKey: string): Promise<void> {

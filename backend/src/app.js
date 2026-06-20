@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import { createCorsMiddleware } from './config/cors.js';
 import { isPostgresReady } from './db/prisma.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -8,6 +9,8 @@ import apiRouter from './routes/index.js';
 export function createApp() {
   const app = express();
 
+  app.set('trust proxy', 1);
+  app.use(helmet());
   app.use(createCorsMiddleware());
   app.use(express.json({ limit: '1mb' }));
 

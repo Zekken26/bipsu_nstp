@@ -51,6 +51,27 @@ export async function apiGet<T>(path: string, fallback: T): Promise<T> {
   }
 }
 
+export async function apiDel<T>(path: string, fallback: T): Promise<T> {
+  try {
+    const response = await fetchWithTimeout(`${API_BASE}${path}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeaders() },
+    });
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+      return fallback;
+    }
+    if (!response.ok) {
+      dispatchApiError('DELETE', path, response.status);
+      return fallback;
+    }
+    return await response.json() as T;
+  } catch (error) {
+    logApiError('DELETE', path, error);
+    return fallback;
+  }
+}
+
 export async function apiPost<T>(path: string, payload: unknown, fallback: T): Promise<T> {
   try {
     const response = await fetchWithTimeout(`${API_BASE}${path}`, {

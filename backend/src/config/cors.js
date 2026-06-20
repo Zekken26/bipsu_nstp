@@ -16,7 +16,7 @@ export function createCorsMiddleware() {
         return callback(null, true);
       }
 
-      return callback(new Error(`CORS blocked origin: ${origin}`));
+      return callback(new Error('CORS blocked origin'));
     },
     credentials: true,
   });

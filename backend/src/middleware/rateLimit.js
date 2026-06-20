@@ -56,3 +56,9 @@ export const strictWriteLimiter = createRateLimiter({
   limit: 80,
   windowMs: 60_000,
 });
+
+export const authLimiter = createRateLimiter({
+  keyPrefix: 'auth',
+  limit: 10,
+  windowMs: 900_000,
+});

@@ -11,7 +11,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 
 const apiRouter = Router();
 
-apiRouter.get('/db-test', asyncHandler(getDbTest));
+apiRouter.get('/db-test', authenticate, asyncHandler(getDbTest));
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/nstp', authenticate, softReadLimiter, nstpRouter);
 apiRouter.use('/follows', authenticate, followsRouter);

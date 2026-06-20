@@ -10,7 +10,7 @@ export function authenticate(req, res, next) {
 
   const token = authHeader.slice(7);
   try {
-    const decoded = jwt.verify(token, env.jwtSecret);
+    const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
     req.user = { id: decoded.id, email: decoded.email, role: decoded.role };
     next();
   } catch (err) {

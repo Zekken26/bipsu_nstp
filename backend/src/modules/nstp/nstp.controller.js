@@ -1,5 +1,5 @@
 import { sendError, sendSuccess } from '../../utils/apiResponse.js';
-import { batchUpsertRecords, getAdminSummary, getDatabaseStatus, listCollection, upsertCollectionRecord } from './nstp.service.js';
+import { batchUpsertRecords, deleteCollectionRecord, getAdminSummary, getDatabaseStatus, listCollection, upsertCollectionRecord } from './nstp.service.js';
 
 const allowedCollections = ['accounts', 'modules', 'assessments', 'students', 'grades', 'notices', 'supportTickets', 'pending-registrations', 'training-groups', 'attendance-records', 'attendance-sessions', 'qualifying-results', 'component-state', 'audit-log'];
 
@@ -50,4 +50,22 @@ export async function batchUpsertNstpCollectionRecords(req, res) {
 
   const results = await batchUpsertRecords(req.params.collection, records);
   return sendSuccess(res, { upserted: results.length });
+}
+
+export async function deleteNstpCollectionRecord(req, res) {
+  if (!allowedCollections.includes(req.params.collection)) {
+    return sendError(res, 'Unknown collection', 404);
+  }
+
+  const { id } = req.params;
+  if (!id) {
+    return sendError(res, 'Record ID is required.', 400);
+  }
+
+  const result = await deleteCollectionRecord(req.params.collection, id);
+  if (!result) {
+    return sendError(res, 'Record not found or could not be deleted.', 404);
+  }
+
+  return sendSuccess(res, { deleted: result.id || id });
 }

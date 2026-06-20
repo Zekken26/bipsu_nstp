@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import prisma from '../../db/prisma.js';
 
 const now = () => new Date().toISOString();
@@ -40,6 +41,7 @@ const toComponentType = (component) => {
   if (normalized.includes('ARMY')) return 'MTS_ARMY';
   if (normalized.includes('NAVY')) return 'MTS_NAVY';
   if (normalized === 'LTS') return 'LTS';
+  if (normalized.includes('CWTS') && normalized.includes('COAST')) return 'CWTS_COAST_GUARD';
   return 'CWTS';
 };
 
@@ -47,7 +49,7 @@ const withFallback = async (name, operation) => {
   try {
     return await operation();
   } catch (error) {
-    console.warn(`Prisma ${name} operation failed. Using local fallback data: ${error.message}`);
+    console.warn(`Prisma ${name} operation failed. Using local fallback data: ${error?.message || error}`);
     return fallback[name] || [];
   }
 };
@@ -58,7 +60,14 @@ export async function listCollection(name) {
   }
 
   if (name === 'modules') {
-    return withFallback(name, async () => prisma.module.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'desc' }] }));
+    return withFallback(name, async () => {
+      const modules = await prisma.module.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'desc' }] });
+      return modules.map((mod) => ({
+        ...mod,
+        ...(mod.data || {}),
+        data: undefined,
+      }));
+    });
   }
 
   if (name === 'students') {
@@ -80,7 +89,7 @@ export async function listCollection(name) {
       });
       return quizzes.map((quiz) => ({
         ...quiz,
-        ...((quiz.data as Record<string, unknown>) || {}),
+        ...(quiz.data || {}),
         data: undefined,
       }));
     });
@@ -109,9 +118,13 @@ export async function upsertCollectionRecord(name, lookup, payload) {
   try {
     if (name === 'accounts') {
       const profileData = nextPayload.data || {};
-      const explicitFields = ['surname', 'firstName', 'middleName', 'school', 'department', 'degreeProgram', 'yearLevel', 'major', 'gender', 'birthdate', 'houseStreetPurok', 'barangay', 'municipality', 'province', 'provincialAddress', 'contactNumber', 'currentAddress', 'cityAddress'];
+      const explicitFields = ['surname', 'firstName', 'middleName', 'school', 'department', 'degreeProgram', 'yearLevel', 'major', 'gender', 'birthdate', 'houseStreetPurok', 'barangay', 'municipality', 'province', 'provincialAddress', 'contactNumber', 'currentAddress', 'cityAddress', 'title', 'bio', 'generalEducationComplete', 'preferredComponent', 'examTaken', 'examScore', 'component', 'componentAccessStatus'];
       for (const field of explicitFields) {
         if (nextPayload[field] !== undefined) profileData[field] = nextPayload[field];
+      }
+      let passwordHash = nextPayload.passwordHash;
+      if (!passwordHash && nextPayload.password) {
+        passwordHash = await bcrypt.hash(nextPayload.password, 10);
       }
       return await prisma.user.upsert({
         where: { email: nextPayload.email },
@@ -124,7 +137,7 @@ export async function upsertCollectionRecord(name, lookup, payload) {
           id: nextPayload.id,
           name: nextPayload.name || nextPayload.email,
           email: nextPayload.email,
-          passwordHash: nextPayload.passwordHash || nextPayload.password || 'change-me',
+          passwordHash: passwordHash || 'change-me',
           role: toUserRole(nextPayload.role),
           data: profileData,
         },
@@ -132,6 +145,12 @@ export async function upsertCollectionRecord(name, lookup, payload) {
     }
 
     if (name === 'modules') {
+      const moduleKnownFields = ['id', 'title', 'description', 'hours', 'published', 'isPublished', 'updatedAt', 'createdAt'];
+      const moduleExtras = {};
+      for (const key of Object.keys(nextPayload)) {
+        if (!moduleKnownFields.includes(key)) moduleExtras[key] = nextPayload[key];
+      }
+      const updatedModuleData = { ...(nextPayload.data || {}), ...moduleExtras };
       return await prisma.module.upsert({
         where: { id: nextPayload.id },
         update: {
@@ -139,6 +158,7 @@ export async function upsertCollectionRecord(name, lookup, payload) {
           description: nextPayload.description,
           hours: Number(nextPayload.hours) || null,
           isPublished: Boolean(nextPayload.published ?? nextPayload.isPublished),
+          data: updatedModuleData,
         },
         create: {
           id: nextPayload.id,
@@ -146,17 +166,18 @@ export async function upsertCollectionRecord(name, lookup, payload) {
           description: nextPayload.description,
           hours: Number(nextPayload.hours) || null,
           isPublished: Boolean(nextPayload.published ?? nextPayload.isPublished),
+          data: updatedModuleData,
         },
       });
     }
 
     if (name === 'assessments') {
       const knownFields = ['id', 'title', 'description', 'moduleId', 'questions', 'updatedAt', 'createdAt'];
-      const extras: Record<string, unknown> = {};
+      const extras = {};
       for (const key of Object.keys(nextPayload)) {
         if (!knownFields.includes(key)) extras[key] = nextPayload[key];
       }
-      const updatedQuizData = { ...((nextPayload.data as Record<string, unknown>) || {}), ...extras };
+      const updatedQuizData = { ...(nextPayload.data || {}), ...extras };
       return await prisma.quiz.upsert({
         where: { id: nextPayload.id || 'none' },
         update: {
@@ -175,13 +196,17 @@ export async function upsertCollectionRecord(name, lookup, payload) {
     }
 
     if (name === 'students') {
+      let studentPasswordHash = nextPayload.passwordHash;
+      if (!studentPasswordHash && nextPayload.password) {
+        studentPasswordHash = await bcrypt.hash(nextPayload.password, 10);
+      }
       const user = await prisma.user.upsert({
         where: { email: nextPayload.email },
         update: { name: nextPayload.name, role: 'STUDENT' },
         create: {
           name: nextPayload.name || nextPayload.email,
           email: nextPayload.email,
-          passwordHash: nextPayload.passwordHash || nextPayload.password || 'change-me',
+          passwordHash: studentPasswordHash || 'change-me',
           role: 'STUDENT',
         },
       });
@@ -195,12 +220,21 @@ export async function upsertCollectionRecord(name, lookup, payload) {
         },
       });
 
+      const studentKnownFields = ['id', 'studentId', 'studentNumber', 'userId', 'componentId', 'component', 'course', 'yearLevel', 'sectionId', 'email', 'password', 'passwordHash', 'name', 'updatedAt', 'createdAt'];
+      const studentExtras = {};
+      for (const key of Object.keys(nextPayload)) {
+        if (!studentKnownFields.includes(key)) studentExtras[key] = nextPayload[key];
+      }
+      const updatedStudentData = { ...(nextPayload.data || {}), ...studentExtras };
+
       return await prisma.studentProfile.upsert({
         where: { studentNumber: nextPayload.studentId || nextPayload.studentNumber },
         update: {
           userId: user.id,
           componentId: component.id,
           course: nextPayload.course,
+          yearLevel: nextPayload.yearLevel,
+          data: updatedStudentData,
         },
         create: {
           id: nextPayload.id,
@@ -208,17 +242,37 @@ export async function upsertCollectionRecord(name, lookup, payload) {
           studentNumber: nextPayload.studentId || nextPayload.studentNumber,
           componentId: component.id,
           course: nextPayload.course,
+          yearLevel: nextPayload.yearLevel,
+          data: updatedStudentData,
         },
       });
     }
 
-    const upsertSimple = (model) => model.upsert({
-      where: { id: nextPayload.id || 'none' },
+    const upsertSimple = (model, where) => model.upsert({
+      where: where || { id: nextPayload.id || 'none' },
       update: { ...nextPayload, updatedAt: undefined },
       create: { ...nextPayload, updatedAt: undefined },
     });
 
-    if (name === 'pending-registrations') return await upsertSimple(prisma.pendingRegistration);
+    if (name === 'pending-registrations') {
+      const regPayload = { ...nextPayload };
+      if (regPayload.password && !regPayload.password.startsWith('$2b$')) {
+        regPayload.password = await bcrypt.hash(regPayload.password, 10);
+      }
+      const { updatedAt, ...regClean } = regPayload;
+      return await prisma.pendingRegistration.upsert({
+        where: { id: regClean.id || 'none' },
+        update: regClean,
+        create: regClean,
+      });
+    }
+    if (name === 'grades') {
+      const existing = await prisma.grade.findFirst({ where: { studentId: nextPayload.studentId } });
+      if (existing) {
+        return prisma.grade.update({ where: { id: existing.id }, data: { ...nextPayload, updatedAt: undefined } });
+      }
+      return prisma.grade.create({ data: { id: nextPayload.id || `grade-${nextPayload.studentId}`, ...nextPayload, updatedAt: undefined } });
+    }
     if (name === 'training-groups') return await upsertSimple(prisma.trainingGroup);
     if (name === 'attendance-records') return await upsertSimple(prisma.attendanceRecord);
     if (name === 'attendance-sessions') return await upsertSimple(prisma.attendanceSession);
@@ -233,7 +287,7 @@ export async function upsertCollectionRecord(name, lookup, payload) {
       return index >= 0 ? items[index] : nextPayload;
     }
   } catch (error) {
-    console.warn(`Prisma ${name} upsert failed. Using local fallback data: ${error.message}`);
+    console.warn(`Prisma ${name} upsert failed. Using local fallback data: ${error?.message || error}`);
   }
 
   const items = fallback[name] || [];
@@ -241,6 +295,39 @@ export async function upsertCollectionRecord(name, lookup, payload) {
   if (index >= 0) items[index] = { ...items[index], ...nextPayload };
   else items.unshift(nextPayload);
   return index >= 0 ? items[index] : nextPayload;
+}
+
+export async function deleteCollectionRecord(name, id) {
+  try {
+    const modelMap = {
+      accounts: prisma.user,
+      modules: prisma.module,
+      assessments: prisma.quiz,
+      students: prisma.studentProfile,
+      grades: prisma.grade,
+      'pending-registrations': prisma.pendingRegistration,
+      'training-groups': prisma.trainingGroup,
+      'attendance-records': prisma.attendanceRecord,
+      'attendance-sessions': prisma.attendanceSession,
+      'qualifying-results': prisma.qualifyingExamResult,
+      'component-state': prisma.componentApplicationState,
+      'audit-log': prisma.auditLogEntry,
+    };
+    const model = modelMap[name];
+    if (model) {
+      return await model.delete({ where: { id } });
+    }
+    if (name === 'notices' || name === 'supportTickets') {
+      const items = fallback[name] || [];
+      const index = items.findIndex((item) => item.id === id);
+      if (index >= 0) items.splice(index, 1);
+      return { id, deleted: index >= 0 };
+    }
+    return null;
+  } catch (error) {
+    console.warn(`Prisma ${name} delete failed: ${error?.message || error}`);
+    return null;
+  }
 }
 
 export async function batchUpsertRecords(name, records) {
@@ -271,7 +358,7 @@ export async function getAdminSummary() {
     students: students.length,
     learningHours: modules.reduce((sum, module) => sum + (Number(module.hours) || 0), 0),
     assessments: assessments.length,
-    releasedGrades: grades.filter((grade) => grade.released).length,
+    releasedGrades: grades.filter((grade) => grade.isReleased || grade.released).length,
     totalGradeRecords: grades.length,
     reportsGenerated: 12,
     updatedAt: now(),

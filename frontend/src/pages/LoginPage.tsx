@@ -402,7 +402,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         createdAt: new Date().toISOString(),
       };
 
-      // Save to localStorage pending registrations (admin approval required before PostgreSQL save)
+      // Save to localStorage and sync to backend for admin review
       savePendingStudentRegistrations([pendingRequest, ...pendingRegistrations]);
 
       setNotice('Registration submitted. Please wait for admin approval before signing in.');

@@ -19,6 +19,7 @@ enum NSTPComponentType {
   LTS
   MTS_ARMY
   MTS_NAVY
+  CWTS_COAST_GUARD
 }
 
 enum EnrollmentStatus {
@@ -59,6 +60,7 @@ model StudentProfile {
   course         String?
   sectionId      String?
   componentId    String?
+  data           Json?        @default("{}")
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   section        Section?     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   component      NSTPComponent? @relation(fields: [componentId], references: [id], onDelete: SetNull)
@@ -128,6 +130,7 @@ model Module {
   order        Int                @default(0)
   hours        Int?
   isPublished  Boolean            @default(false)
+  data         Json?              @default("{}")
   componentId  String?
   instructorId String?
   component    NSTPComponent?     @relation(fields: [componentId], references: [id], onDelete: SetNull)
@@ -286,7 +289,10 @@ model Grade {
   quizId       String?
   assignmentId String?
   examId       String?
-  score        Float
+  score        Float?
+  prelim       Float?
+  midterm      Float?
+  final        Float?
   remarks      String?
   isReleased   Boolean         @default(false)
   student      StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Cascade)
