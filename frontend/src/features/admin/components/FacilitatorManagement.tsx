@@ -364,7 +364,7 @@ export default function FacilitatorManagement({ admin }: Props) {
                         <input type="checkbox" checked={selected} onChange={(event) => {
                           const current = form.municipalities || [];
                           setForm({ ...form, municipalities: event.target.checked ? [...current, item] : current.filter((municipality) => municipality !== item) });
-                        }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30" />
+                        }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-0 focus:outline-none" />
                         {item}
                       </label>
                     );
