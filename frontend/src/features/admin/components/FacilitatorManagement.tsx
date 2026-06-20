@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BadgeCheck, Building2, Download, Filter, KeyRound, LockKeyhole, Mail, MoreVertical, Pencil, Plus, Save, Search, Trash2, Users, X } from 'lucide-react';
+import { BadgeCheck, Building2, Download, Eye, EyeOff, Filter, KeyRound, LockKeyhole, Mail, MoreVertical, Pencil, Plus, Save, Search, Trash2, Users, X } from 'lucide-react';
 import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, BiliranMunicipality, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadStudents, NstpAccount, NSTP_COMPONENTS, saveAccounts, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM } from '../../../data/nstpData';
 
 type Props = {
@@ -30,6 +30,7 @@ export default function FacilitatorManagement({ admin }: Props) {
   const [query, setQuery] = useState('');
   const [municipalityFilter, setMunicipalityFilter] = useState('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const nextFacilitators = loadAccounts().filter((account) => account.role === 'facilitator');
@@ -300,20 +301,23 @@ export default function FacilitatorManagement({ admin }: Props) {
             <div className="grid gap-5 md:grid-cols-2">
               <label className="block space-y-1.5">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Name <span className="text-rose-600 dark:text-rose-300">*</span></span>
-                <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Enter your name" className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
               </label>
               <label className="block space-y-1.5">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Email <span className="text-rose-600 dark:text-rose-300">*</span></span>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 pl-9 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                  <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="Enter your email" className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 pl-9 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                 </div>
               </label>
               <label className="block space-y-1.5">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Password <span className="text-rose-600 dark:text-rose-300">*</span></span>
                 <div className="relative">
                   <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input type="text" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 pl-9 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                  <input type={showPassword ? 'text' : 'password'} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="Enter your password" className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 pl-9 pr-12 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                  <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" tabIndex={-1}>
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
                 </div>
               </label>
               <label className="block space-y-1.5">
@@ -348,7 +352,7 @@ export default function FacilitatorManagement({ admin }: Props) {
               )}
               <label className="block space-y-1.5 md:col-span-2">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Bio</span>
-                <textarea value={form.bio || ''} onChange={(event) => setForm({ ...form, bio: event.target.value })} rows={2} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                <textarea value={form.bio || ''} onChange={(event) => setForm({ ...form, bio: event.target.value })} rows={2} placeholder="Enter a short bio (optional)" className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
               </label>
               <div className="space-y-1.5 md:col-span-2">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Assigned Municipalities <span className="text-rose-600 dark:text-rose-300">*</span></span>
