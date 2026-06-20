@@ -15,7 +15,7 @@ import ReportsCenter from './pages/ReportsPage';
 import GradesPage from './pages/GradesPage';
 import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
-import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents } from './data/nstpData';
+import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi } from './data/nstpData';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
 
 type ShellSection = 'overview' | 'modules' | 'assessments' | 'progress' | 'grades' | 'admin' | 'facilitator' | 'announcements' | 'reports';
@@ -190,6 +190,7 @@ export default function App() {
   const [authSplash, setAuthSplash] = useState<AuthSplashState>({ visible: false, mode: 'login' });
   const [isAuthTransitioning, setIsAuthTransitioning] = useState(false);
   const [isBootSplashVisible, setIsBootSplashVisible] = useState(true);
+  const [dataReady, setDataReady] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const authTimerRef = useRef<number | null>(null);
   const pendingLoginRef = useRef<any>(null);
@@ -239,12 +240,20 @@ export default function App() {
   };
 
   useEffect(() => {
+    initializeFromApi().then(() => setDataReady(true));
+  }, []);
+
+  useEffect(() => {
     document.documentElement.classList.toggle('dark', themeMode === 'dark');
+  }, []);
+
+  useEffect(() => {
+    if (!dataReady) return;
     const bootTimer = window.setTimeout(() => {
       setIsBootSplashVisible(false);
     }, 1300);
     return () => window.clearTimeout(bootTimer);
-  }, []);
+  }, [dataReady]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', themeMode === 'dark');

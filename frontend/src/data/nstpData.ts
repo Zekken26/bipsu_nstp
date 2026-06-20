@@ -536,6 +536,13 @@ export function ensureNstpSeedData() {
   }
 }
 
+export async function initializeFromApi() {
+  if (typeof window === 'undefined') return;
+  ensureNstpSeedData();
+  await syncAllFromApi();
+  ensureNstpSeedData();
+}
+
 export function loadAccounts(): NstpAccount[] {
   if (typeof window === 'undefined') return [];
   ensureNstpSeedData();
