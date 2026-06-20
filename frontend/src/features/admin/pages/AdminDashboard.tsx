@@ -209,6 +209,20 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     localStorage.setItem(FORM_TEMPLATE_KEY, JSON.stringify(formTemplate));
   }, [formTemplate]);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (exportSettingsOpen) setExportSettingsOpen(false);
+      else if (pdfPreviewOpen) setPdfPreviewOpen(false);
+      else if (pendingHeaderCrop) setPendingHeaderCrop(null);
+      else if (studentDetailId) setStudentDetailId(null);
+      else if (studentForm) cancelStudentEdit();
+      else if (openMunicipalityManage) setOpenMunicipalityManage(null);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [exportSettingsOpen, pdfPreviewOpen, pendingHeaderCrop, studentDetailId, studentForm, openMunicipalityManage]);
+
   const assessments = loadAssessments();
   const publishedAssessmentCount = assessments.filter((assessment) => assessment.status === 'published').length;
   const modules = loadModules();
@@ -2347,7 +2361,10 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                                         <>
                                           <button aria-label="Close municipality assignment menu" onClick={() => setOpenMunicipalityManage(null)} className="fixed inset-0 z-10 cursor-default bg-transparent" />
                                           <div className="absolute right-0 z-20 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-950">
-                                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assign facilitators</p>
+                                            <div className="mb-2 flex items-center justify-between gap-2">
+                                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assign facilitators</p>
+                                              <button onClick={() => setOpenMunicipalityManage(null)} className="grid h-6 w-6 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"><X className="h-3.5 w-3.5" /></button>
+                                            </div>
                                             <div className="grid max-h-64 gap-2 overflow-auto pr-1">
                                               {facilitatorAccounts.map((facilitator) => {
                                                 const checked = Boolean(facilitator.municipalities?.includes(row.municipality));

@@ -8,13 +8,13 @@ type Props = {
 
 const emptyFacilitator = (): NstpAccount => ({
   id: `facilitator-${Math.random().toString(36).slice(2, 9)}`,
-  name: 'New Facilitator',
-  email: `facilitator-${Math.random().toString(36).slice(2, 5)}@nstp.edu`,
-  password: 'facilitator123',
+  name: '',
+  email: '',
+  password: '',
   role: 'facilitator',
   title: '',
-  bio: 'Facilitates assigned municipality groups, monitors attendance, validates outputs, and records grades.',
-  municipalities: ['Naval'],
+  bio: '',
+  municipalities: [],
   school: '',
   department: '',
   degreeProgram: '',
@@ -43,7 +43,17 @@ export default function FacilitatorManagement({ admin }: Props) {
     } else {
       document.body.style.overflow = '';
     }
-    return () => { document.body.style.overflow = ''; };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && editingId) {
+        setEditingId(null);
+        setForm(null);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [editingId]);
 
   const students = useMemo(() => loadStudents(), [facilitators]);
