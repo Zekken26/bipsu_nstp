@@ -484,6 +484,11 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
       return;
     }
 
+    if (apiResult && typeof apiResult === 'object' && 'success' in apiResult && !apiResult.success && 'error' in apiResult) {
+      setError((apiResult as any).error);
+      return;
+    }
+
     if (loginRole === 'student') {
       const pending = pendingRegistrations.find((registration) =>
         registration.studentId?.toLowerCase() === loginInput.toLowerCase()

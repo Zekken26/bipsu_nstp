@@ -31,6 +31,15 @@ async function fetchWithTimeout(input: RequestInfo, init: RequestInit = {}): Pro
   }
 }
 
+async function parseErrorResponse<T>(response: Response, fallback: T): Promise<T> {
+  try {
+    const body = await response.json();
+    return body as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function apiGet<T>(path: string, fallback: T): Promise<T> {
   try {
     const response = await fetchWithTimeout(`${API_BASE}${path}`, {
@@ -42,7 +51,7 @@ export async function apiGet<T>(path: string, fallback: T): Promise<T> {
     }
     if (!response.ok) {
       dispatchApiError('GET', path, response.status);
-      return fallback;
+      return parseErrorResponse(response, fallback);
     }
     return await response.json() as T;
   } catch (error) {
@@ -63,7 +72,7 @@ export async function apiDel<T>(path: string, fallback: T): Promise<T> {
     }
     if (!response.ok) {
       dispatchApiError('DELETE', path, response.status);
-      return fallback;
+      return parseErrorResponse(response, fallback);
     }
     return await response.json() as T;
   } catch (error) {
@@ -85,7 +94,7 @@ export async function apiPost<T>(path: string, payload: unknown, fallback: T): P
     }
     if (!response.ok) {
       dispatchApiError('POST', path, response.status);
-      return fallback;
+      return parseErrorResponse(response, fallback);
     }
     return await response.json() as T;
   } catch (error) {
