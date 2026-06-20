@@ -27,9 +27,9 @@ export default function ProgressTracker({ user, onBack }: { user: any; onBack?: 
   const totalContactHours = modules.reduce((total, module) => total + module.hours, 0);
   const completedModules = modules.filter((module) => progress[module.id]).length;
   const completedAssessments = Object.keys(assessments).length;
-  const passedAssessments = Object.values(assessments).filter((result) => result.passed).length;
+  const passedAssessments = (Object.values(assessments) as AssessmentResult[]).filter((result) => result.passed).length;
   const averageScore = Object.keys(assessments).length > 0
-    ? Math.round(Object.values(assessments).reduce((acc, r) => acc + r.score, 0) / Object.keys(assessments).length)
+    ? Math.round((Object.values(assessments) as AssessmentResult[]).reduce((acc, r) => acc + r.score, 0) / Object.keys(assessments).length)
     : 0;
   const moduleCompletionRatio = totalModules > 0 ? completedModules / totalModules : 0;
   const estimatedHours = Math.round(moduleCompletionRatio * totalContactHours);
@@ -180,7 +180,7 @@ export default function ProgressTracker({ user, onBack }: { user: any; onBack?: 
             Recent Activity
           </h3>
           <div className="bento-scroll space-y-3">
-            {Object.entries(assessments)
+            {(Object.entries(assessments) as [string, AssessmentResult][])
               .slice(-5)
               .reverse()
               .map(([id, result]) => (

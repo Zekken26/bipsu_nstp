@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { FileText, CheckCircle, Clock, Award, TrendingUp, History, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { loadAssessments, NstpAssessment } from '../data/nstpData';
 
@@ -11,6 +11,18 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [attemptHistory, setAttemptHistory] = useState<Record<string, any[]>>({});
 
+  const answersRef = useRef(answers);
+  const shuffledQuestionsRef = useRef(shuffledQuestions);
+  const activeAssessmentRef = useRef(activeAssessment);
+  const resultsRef = useRef(results);
+  const attemptHistoryRef = useRef(attemptHistory);
+
+  useEffect(() => { answersRef.current = answers; }, [answers]);
+  useEffect(() => { shuffledQuestionsRef.current = shuffledQuestions; }, [shuffledQuestions]);
+  useEffect(() => { activeAssessmentRef.current = activeAssessment; }, [activeAssessment]);
+  useEffect(() => { resultsRef.current = results; }, [results]);
+  useEffect(() => { attemptHistoryRef.current = attemptHistory; }, [attemptHistory]);
+
   useEffect(() => {
     setLibrary(loadAssessments().filter((assessment) => assessment.status === 'published'));
   }, [user.id]);
@@ -21,6 +33,53 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
     if (saved) setResults(JSON.parse(saved));
     if (savedHistory) setAttemptHistory(JSON.parse(savedHistory));
   }, [user.id]);
+
+  const handleSubmit = () => {
+    const currentAssessment = activeAssessmentRef.current;
+    const currentQuestions = shuffledQuestionsRef.current;
+    const currentAnswers = answersRef.current;
+    const currentResults = resultsRef.current;
+    const currentHistory = attemptHistoryRef.current;
+
+    if (!currentAssessment) return;
+
+    const correct = currentQuestions.reduce((acc, question, index) => {
+      return currentAnswers[index] === question.correctIndex ? acc + 1 : acc;
+    }, 0);
+    const total = currentQuestions.length;
+    const score = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+    const nextResults = {
+      ...currentResults,
+      [currentAssessment.id]: {
+        score,
+        correct,
+        total,
+        passed: score >= currentAssessment.passingScore,
+        date: new Date().toISOString(),
+      },
+    };
+
+    const attempt = {
+      score,
+      correct,
+      total,
+      passed: score >= currentAssessment.passingScore,
+      date: new Date().toISOString(),
+    };
+
+    const nextHistory = {
+      ...currentHistory,
+      [currentAssessment.id]: [attempt, ...(currentHistory[currentAssessment.id] || [])].slice(0, 5),
+    };
+
+    setResults(nextResults);
+    setAttemptHistory(nextHistory);
+    localStorage.setItem(`assessments-${user.id}`, JSON.stringify(nextResults));
+    localStorage.setItem(`assessments-history-${user.id}`, JSON.stringify(nextHistory));
+    setActiveAssessment(null);
+    setTimeLeft(null);
+  };
 
   useEffect(() => {
     if (timeLeft === null || timeLeft <= 0 || !activeAssessment) return;
@@ -55,47 +114,6 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
     setActiveAssessment(assessment);
     setAnswers({});
     setTimeLeft(assessment.timeLimit * 60);
-  };
-
-  const handleSubmit = () => {
-    if (!activeAssessment) return;
-
-    const correct = shuffledQuestions.reduce((acc, question, index) => {
-      return answers[index] === question.correctIndex ? acc + 1 : acc;
-    }, 0);
-    const total = shuffledQuestions.length;
-    const score = total > 0 ? Math.round((correct / total) * 100) : 0;
-
-    const nextResults = {
-      ...results,
-      [activeAssessment.id]: {
-        score,
-        correct,
-        total,
-        passed: score >= activeAssessment.passingScore,
-        date: new Date().toISOString(),
-      },
-    };
-
-    const attempt = {
-      score,
-      correct,
-      total,
-      passed: score >= activeAssessment.passingScore,
-      date: new Date().toISOString(),
-    };
-
-    const nextHistory = {
-      ...attemptHistory,
-      [activeAssessment.id]: [attempt, ...(attemptHistory[activeAssessment.id] || [])].slice(0, 5),
-    };
-
-    setResults(nextResults);
-    setAttemptHistory(nextHistory);
-    localStorage.setItem(`assessments-${user.id}`, JSON.stringify(nextResults));
-    localStorage.setItem(`assessments-history-${user.id}`, JSON.stringify(nextHistory));
-    setActiveAssessment(null);
-    setTimeLeft(null);
   };
 
   const formatTime = (seconds: number | null) => {
@@ -174,7 +192,7 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
   }
 
   const completedCount = Object.keys(results).length;
-  const averageScore = completedCount > 0 ? Math.round(Object.values(results).reduce((acc: number, result: any) => acc + result.score, 0) / completedCount) : 0;
+  const averageScore = completedCount > 0 ? Math.round((Object.values(results) as any[]).reduce((acc: number, result: any) => acc + result.score, 0) / completedCount) : 0;
   const passingRate = completedCount > 0 ? Math.round((Object.values(results).filter((result: any) => {
     if (result.manualStatus === 'passed') return true;
     if (result.manualStatus === 'failed') return false;
@@ -307,12 +325,12 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
                 {Object.entries(results).length === 0 ? (
                   <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">No attempts yet.</p>
                 ) : (
-                  Object.entries(results)
+                  (Object.entries(results) as [string, any][])
                     .slice(0, 12)
                     .map(([assessmentId, result]) => (
                       <div key={assessmentId} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
                         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{assessmentId}</p>
-                        <p className="text-xs text-slate-600 dark:text-slate-300">Score: {result.score}% • {new Date(result.date).toLocaleDateString()}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300">Score: {(result as any).score}% • {new Date((result as any).date).toLocaleDateString()}</p>
                       </div>
                     ))
                 )}

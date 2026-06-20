@@ -73,10 +73,17 @@ export async function listCollection(name) {
   }
 
   if (name === 'assessments') {
-    return withFallback(name, async () => prisma.quiz.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: { module: true, questions: true },
-    }));
+    return withFallback(name, async () => {
+      const quizzes = await prisma.quiz.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: { module: true, questions: true },
+      });
+      return quizzes.map((quiz) => ({
+        ...quiz,
+        ...((quiz.data as Record<string, unknown>) || {}),
+        data: undefined,
+      }));
+    });
   }
 
   if (name === 'notices' || name === 'supportTickets') {
@@ -101,11 +108,17 @@ export async function upsertCollectionRecord(name, lookup, payload) {
 
   try {
     if (name === 'accounts') {
+      const profileData = nextPayload.data || {};
+      const explicitFields = ['surname', 'firstName', 'middleName', 'school', 'department', 'degreeProgram', 'yearLevel', 'major', 'gender', 'birthdate', 'houseStreetPurok', 'barangay', 'municipality', 'province', 'provincialAddress', 'contactNumber', 'currentAddress', 'cityAddress'];
+      for (const field of explicitFields) {
+        if (nextPayload[field] !== undefined) profileData[field] = nextPayload[field];
+      }
       return await prisma.user.upsert({
         where: { email: nextPayload.email },
         update: {
           name: nextPayload.name,
           role: toUserRole(nextPayload.role),
+          data: profileData,
         },
         create: {
           id: nextPayload.id,
@@ -113,6 +126,7 @@ export async function upsertCollectionRecord(name, lookup, payload) {
           email: nextPayload.email,
           passwordHash: nextPayload.passwordHash || nextPayload.password || 'change-me',
           role: toUserRole(nextPayload.role),
+          data: profileData,
         },
       });
     }
@@ -132,6 +146,30 @@ export async function upsertCollectionRecord(name, lookup, payload) {
           description: nextPayload.description,
           hours: Number(nextPayload.hours) || null,
           isPublished: Boolean(nextPayload.published ?? nextPayload.isPublished),
+        },
+      });
+    }
+
+    if (name === 'assessments') {
+      const knownFields = ['id', 'title', 'description', 'moduleId', 'questions', 'updatedAt', 'createdAt'];
+      const extras: Record<string, unknown> = {};
+      for (const key of Object.keys(nextPayload)) {
+        if (!knownFields.includes(key)) extras[key] = nextPayload[key];
+      }
+      const updatedQuizData = { ...((nextPayload.data as Record<string, unknown>) || {}), ...extras };
+      return await prisma.quiz.upsert({
+        where: { id: nextPayload.id || 'none' },
+        update: {
+          title: nextPayload.title,
+          ...(nextPayload.description !== undefined ? { instructions: nextPayload.description } : {}),
+          data: updatedQuizData,
+        },
+        create: {
+          id: nextPayload.id,
+          title: nextPayload.title || 'Untitled assessment',
+          moduleId: nextPayload.moduleId || 'unknown',
+          ...(nextPayload.description !== undefined ? { instructions: nextPayload.description } : {}),
+          data: updatedQuizData,
         },
       });
     }
@@ -203,6 +241,22 @@ export async function upsertCollectionRecord(name, lookup, payload) {
   if (index >= 0) items[index] = { ...items[index], ...nextPayload };
   else items.unshift(nextPayload);
   return index >= 0 ? items[index] : nextPayload;
+}
+
+export async function batchUpsertRecords(name, records) {
+  const results = [];
+  for (const payload of records) {
+    const lookup = payload.id
+      ? { id: payload.id }
+      : payload.studentId
+        ? { studentId: payload.studentId }
+        : payload.email
+          ? { email: payload.email }
+          : { id: `${name}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}` };
+    const result = await upsertCollectionRecord(name, lookup, { ...lookup, ...payload });
+    results.push(result);
+  }
+  return results;
 }
 
 export async function getAdminSummary() {

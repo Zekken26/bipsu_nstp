@@ -1,3 +1,5 @@
+import { apiGet, apiPost } from '../services/apiClient';
+
 export type NstpRole = 'admin' | 'student' | 'facilitator';
 export type NstpComponent = 'CWTS' | 'LTS' | 'MTS (Army)' | 'MTS (Navy)' | 'CWTS (Coast Guard)';
 export type BiliranMunicipality = 'Almeria' | 'Biliran' | 'Cabucgayan' | 'Caibiran' | 'Culaba' | 'Kawayan' | 'Maripipi' | 'Naval';
@@ -200,33 +202,7 @@ const ATTENDANCE_RECORDS_KEY = 'nstp-attendance-records';
 const ATTENDANCE_SESSIONS_KEY = 'nstp-attendance-sessions';
 export const QUALIFYING_RESULTS_KEY = 'qualifyingExamResults';
 export const COMPONENT_APPLICATION_STATE_KEY = 'nstp-component-application-state';
-const AUDIT_LOG_KEY = 'nstp-admin-audit-log';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
-
-async function apiGet<T>(path: string, fallback: T): Promise<T> {
-  try {
-    const response = await fetch(`${API_BASE}${path}`);
-    if (!response.ok) throw new Error(`API ${response.status}`);
-    return await response.json() as T;
-  } catch {
-    return fallback;
-  }
-}
-
-async function apiPost<T>(path: string, payload: unknown, fallback: T): Promise<T> {
-  try {
-    const response = await fetch(`${API_BASE}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) throw new Error(`API ${response.status}`);
-    return await response.json() as T;
-  } catch {
-    return fallback;
-  }
-}
+export const AUDIT_LOG_KEY = 'nstp-admin-audit-log';
 
 const API_COLLECTION_MAP: Record<string, string> = {
   [ACCOUNTS_KEY]: 'accounts',
@@ -243,12 +219,10 @@ const API_COLLECTION_MAP: Record<string, string> = {
   [AUDIT_LOG_KEY]: 'audit-log',
 };
 
-async function syncToApi<T>(localKey: string, data: T[]): Promise<void> {
+export async function syncToApi<T>(localKey: string, data: T[]): Promise<void> {
   const collection = API_COLLECTION_MAP[localKey];
-  if (!collection || !Array.isArray(data)) return;
-  for (const record of data) {
-    await apiPost(`/nstp/${collection}`, record, null);
-  }
+  if (!collection || !Array.isArray(data) || data.length === 0) return;
+  await apiPost(`/nstp/batch/${collection}`, data, null);
 }
 
 async function syncSingleToApi<T>(localKey: string, data: T): Promise<void> {
@@ -338,7 +312,7 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
     }
     return;
   }
-  const apiData = await apiGet<any[]>(`/nstp/${collection}`, null);
+  const apiData = await apiGet<any[]>(`/nstp/${collection}`, []);
   if (Array.isArray(apiData) && apiData.length > 0) {
     const existing = safeJsonParse<any[]>(localStorage.getItem(localKey), []);
     const merged = [...existing];
@@ -777,12 +751,12 @@ export function saveTrainingGroups(groups: NstpTrainingGroup[]) {
 export function createEmptyStudent(): NstpStudent {
   return {
     id: `student-${Math.random().toString(36).slice(2, 10)}`,
-    studentId: `2026-${Math.floor(1000 + Math.random() * 8999)}`,
+    studentId: '',
     surname: '',
     firstName: '',
     middleName: '',
-    name: 'New Student',
-    email: `student-${Math.random().toString(36).slice(2, 5)}@university.edu`,
+    name: '',
+    email: '',
     degreeProgram: '',
     yearLevel: '',
     major: '',

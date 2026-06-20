@@ -293,7 +293,7 @@ export default function ComponentAssignment() {
   const getComponentStats = (component: string) => {
     const preferred = examResults.filter((r: any) => r.preferredComponent === component);
     const assigned = Object.values(assignments).filter((a: any) => a.assignedComponent === component);
-    const limit = slotLimits[component];
+    const limit = slotLimits[component as NstpComponent];
 
     return {
       preferred: preferred.length,
@@ -301,7 +301,7 @@ export default function ComponentAssignment() {
       limit,
       available: limit - assigned.length,
       avgScore: assigned.length > 0
-        ? Math.round(assigned.reduce((sum, a) => sum + a.score, 0) / assigned.length)
+        ? Math.round((assigned as any[]).reduce((sum: number, a: any) => sum + a.score, 0) / assigned.length)
         : 0
     };
   };
@@ -573,7 +573,7 @@ export default function ComponentAssignment() {
               <tbody>
                 {sortedFiltered.map((result: any, idx: number) => {
                   const assignment = (assignments as Record<string, any>)[result.userId];
-                  const isPriority = idx < slotLimits[result.preferredComponent];
+                  const isPriority = idx < slotLimits[result.preferredComponent as NstpComponent];
 
                   return (
                     <tr key={result.userId} className="border-b border-slate-100 hover:bg-blue-50/70 transition-colors dark:border-slate-800 dark:hover:bg-slate-800/40">

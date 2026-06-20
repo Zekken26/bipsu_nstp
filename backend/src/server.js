@@ -21,3 +21,13 @@ async function shutdown(signal) {
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+process.on('uncaughtException', (err) => {
+  logger.error({ message: err.message, stack: err.stack }, 'UNCAUGHT_EXCEPTION');
+  shutdown('UNCAUGHT_EXCEPTION');
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'UNHANDLED_REJECTION');
+  shutdown('UNHANDLED_REJECTION');
+});

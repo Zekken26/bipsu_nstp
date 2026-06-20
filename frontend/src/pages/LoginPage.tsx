@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
   Award,
@@ -314,6 +314,17 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         return;
       }
 
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        setError('Enter a valid email address.');
+        return;
+      }
+
+      if (password.length < 8) {
+        setError('Password must be at least 8 characters long.');
+        return;
+      }
+
       if (!yearLevel) {
         setError('Year Level is required.');
         return;
@@ -421,7 +432,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     const loginInput = email.trim();
 
     // Try backend login first
-    const apiResult = await apiPost('/auth/login', { identifier: loginInput, password }, null);
+    const apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any>; token: string } } | null>('/auth/login', { identifier: loginInput, password }, null);
     if (apiResult?.success && apiResult?.data) {
       const userData = apiResult.data.user;
       const matchAccount = accounts.find((account) => {
@@ -468,17 +479,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
       return;
     }
 
-    // Fall back to localStorage login
-    const match = accounts.find((account) => {
-      if (account.role !== loginRole) return false;
-      if (loginRole === 'student') {
-        return account.studentId?.toLowerCase() === loginInput.toLowerCase() && account.password === password;
-      }
-      return account.email.toLowerCase() === loginInput.toLowerCase() && account.password === password;
-    });
-
-    if (match) {
-      onLogin(match);
+    if (apiResult === null) {
+      setError('Cannot reach the server. Please check your connection and try again.');
       return;
     }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Users, BookOpen, TrendingUp, Award, Search, ClipboardList, TriangleAlert, Siren, Target, Plus, Save, Pencil, Trash2, Mail, BarChart3, GraduationCap, BadgeCheck, X, UserRoundPlus, Eye, FileDown, FileUp, History, ArrowLeft, Bell, Building2, CalendarDays, Check, ChevronDown, Home, Settings, SunMedium, UserCheck, Printer, GripVertical, Menu } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, CartesianGrid, XAxis, YAxis, Bar, LineChart, Line, Legend } from 'recharts';
 import ComponentAssignment from '../components/ComponentAssignment';
@@ -6,7 +6,7 @@ import AssessmentManager from '../../assessments/components/AssessmentManager';
 import ModulesPage from '../../../pages/ModulesPage';
 import FacilitatorManagement from '../components/FacilitatorManagement';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
-import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi } from '../../../data/nstpData';
+import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncToApi, AUDIT_LOG_KEY } from '../../../data/nstpData';
 import { apiPost } from '../../../services/apiClient';
 
 type AdminAuditEntry = {
@@ -25,7 +25,6 @@ type StudentFilterPreset = {
   sortBy: string;
 };
 
-const AUDIT_LOG_KEY = 'nstp-admin-audit-log';
 const FILTER_PRESETS_KEY = 'nstp-student-filter-presets';
 const FORM_TEMPLATE_KEY = 'nstp-official-profile-template';
 const SCHOOL_YEARS = ['SY 2024-2025', 'SY 2025-2026', 'SY 2026-2027'];
@@ -223,6 +222,15 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [exportSettingsOpen, pdfPreviewOpen, pendingHeaderCrop, studentDetailId, studentForm, openMunicipalityManage]);
 
+  useEffect(() => {
+    if (studentForm) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [studentForm]);
+
   const assessments = loadAssessments();
   const publishedAssessmentCount = assessments.filter((assessment) => assessment.status === 'published').length;
   const modules = loadModules();
@@ -266,6 +274,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const persistAuditLog = (nextLog: AdminAuditEntry[]) => {
     localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(nextLog));
     setAuditLog(nextLog);
+    syncToApi(AUDIT_LOG_KEY, nextLog);
   };
 
   const logAudit = (action: string, detail: string) => {
@@ -758,14 +767,15 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     const layoutClass = template.layout === 'compact' ? 'compact' : template.layout === 'formal' ? 'formal' : 'classic';
     const win = window.open('', '_blank', 'width=900,height=1100');
     if (!win) return;
+    const safeAccent = /^#[0-9a-fA-F]{3,8}$/.test(template.accentColor) ? template.accentColor : '#2563eb';
     win.document.write(`
       <html>
         <head>
-          <title>NSTP Student Profile - ${fullName}</title>
+          <title>NSTP Student Profile - ${escapeHtml(fullName)}</title>
           <style>
             body { font-family: Arial, sans-serif; color: #111827; margin: 32px; }
             .sheet { border: 1px solid #cbd5e1; padding: 28px; max-width: 820px; margin: auto; }
-            .header { text-align: center; border-bottom: 3px solid ${template.accentColor}; padding-bottom: 16px; margin-bottom: 24px; }
+            .header { text-align: center; border-bottom: 3px solid ${safeAccent}; padding-bottom: 16px; margin-bottom: 24px; }
             .header-image { display: block; width: 100%; max-height: 94px; object-fit: contain; margin-bottom: 12px; }
             .header h1 { font-size: 18px; margin: 4px 0; letter-spacing: 0.08em; }
             .header p { margin: 2px 0; font-size: 12px; }
@@ -784,7 +794,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
           </style>
         </head>
         <body class="${layoutClass}">
-          <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:10px 16px;border-radius:10px;border:1px solid ${template.accentColor};background:${template.accentColor};color:white;font-weight:700;">Print official profile</button>
+          <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:10px 16px;border-radius:10px;border:1px solid ${safeAccent};background:${safeAccent};color:white;font-weight:700;">Print official profile</button>
           <div class="sheet">
             <div class="header">
               ${template.headerImageDataUrl ? `<img class="header-image" src="${template.headerImageDataUrl}" alt="Document header" />` : `
@@ -936,7 +946,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const avgProgress = totalStudents === 0 ? 0 : Math.round(schoolYearStudents.reduce((acc, s) => acc + s.progress, 0) / totalStudents);
   const completionRate = totalStudents === 0 ? 0 : Math.round((schoolYearStudents.filter(s => s.progress === 100).length / totalStudents) * 100);
 
-  const componentCounts = useMemo(() => ({
+  const componentCounts: Record<string, number> = useMemo(() => ({
     'CWTS': schoolYearStudents.filter((s) => s.component === 'CWTS').length,
     'CWTS (Coast Guard)': schoolYearStudents.filter((s) => s.component === 'CWTS (Coast Guard)').length,
     'LTS': schoolYearStudents.filter((s) => s.component === 'LTS').length,
@@ -2230,15 +2240,15 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                             <button type="button" onClick={cancelStudentEdit} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
                           </div>
                           <div className="grid gap-4 md:grid-cols-2">
-                            <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Name</span><input value={studentForm.name} onChange={(e) => updateForm('name', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-                            <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Email</span><input value={studentForm.email} onChange={(e) => updateForm('email', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-                            <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Student ID</span><input value={studentForm.studentId || ''} onChange={(e) => updateForm('studentId', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
+                            <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Name</span><input value={studentForm.name} onChange={(e) => updateForm('name', e.target.value)} placeholder="Enter your name" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
+                            <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Email</span><input value={studentForm.email} onChange={(e) => updateForm('email', e.target.value)} placeholder="Enter your email" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
+                            <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Student ID</span><input value={studentForm.studentId || ''} onChange={(e) => updateForm('studentId', e.target.value)} placeholder="Enter student ID" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
                             <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Municipality</span><select value={studentForm.municipality || ''} onChange={(e) => updateForm('municipality', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><option value="">Unassigned</option>{BILIRAN_MUNICIPALITIES.map((municipality) => <option key={municipality} value={municipality}>{municipality}</option>)}</select></label>
                             <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Component</span><select value={studentForm.component} onChange={(e) => updateForm('component', e.target.value as NstpStudent['component'])} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">{NSTP_COMPONENTS.map((component) => <option key={component} value={component}>{component}</option>)}</select></label>
                             <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Status</span><select value={studentForm.status} onChange={(e) => updateForm('status', e.target.value as NstpStudent['status'])} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><option value="active">Active</option><option value="pending">Pending</option><option value="graduated">Graduated</option></select></label>
                             <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Progress</span><input type="number" min="0" max="100" value={studentForm.progress} onChange={(e) => updateForm('progress', Number(e.target.value))} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
                             <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200"><span>Assessments</span><input type="number" min="0" value={studentForm.assessments} onChange={(e) => updateForm('assessments', Number(e.target.value))} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-                            <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200 md:col-span-2"><span>Notes</span><textarea value={studentForm.notes || ''} onChange={(e) => updateForm('notes', e.target.value)} rows={3} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
+                            <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200 md:col-span-2"><span>Notes</span><textarea value={studentForm.notes || ''} onChange={(e) => updateForm('notes', e.target.value)} rows={3} placeholder="Enter notes (optional)" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
                           </div>
                           <div className="mt-5 flex flex-wrap justify-end gap-3">
                             {editingStudentId !== 'new' && <button type="button" onClick={() => requestDeleteStudent(studentForm)} className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-5 py-3 font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200"><Trash2 className="h-4 w-4" />Delete</button>}
@@ -3587,38 +3597,38 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>Name</span>
-                    <input value={studentForm.name} onChange={(e) => updateForm('name', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                    <input value={studentForm.name} onChange={(e) => updateForm('name', e.target.value)} placeholder="Enter your name" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>Student ID</span>
-                    <input value={studentForm.studentId || ''} onChange={(e) => updateForm('studentId', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                    <input value={studentForm.studentId || ''} onChange={(e) => updateForm('studentId', e.target.value)} placeholder="Enter student ID" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>Surname</span>
-                    <input value={studentForm.surname || ''} onChange={(e) => updateForm('surname', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                    <input value={studentForm.surname || ''} onChange={(e) => updateForm('surname', e.target.value)} placeholder="Enter surname" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>First Name</span>
-                    <input value={studentForm.firstName || ''} onChange={(e) => updateForm('firstName', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                    <input value={studentForm.firstName || ''} onChange={(e) => updateForm('firstName', e.target.value)} placeholder="Enter first name" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>Middle Name</span>
-                    <input value={studentForm.middleName || ''} onChange={(e) => updateForm('middleName', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                    <input value={studentForm.middleName || ''} onChange={(e) => updateForm('middleName', e.target.value)} placeholder="Enter middle name" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>Email</span>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input value={studentForm.email} onChange={(e) => updateForm('email', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                      <input value={studentForm.email} onChange={(e) => updateForm('email', e.target.value)} placeholder="Enter your email" className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                     </div>
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>Degree Program</span>
-                    <input value={studentForm.degreeProgram || ''} onChange={(e) => updateForm('degreeProgram', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                    <input value={studentForm.degreeProgram || ''} onChange={(e) => updateForm('degreeProgram', e.target.value)} placeholder="Enter degree program" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>Contact Number</span>
-                    <input value={studentForm.contactNumber || ''} onChange={(e) => updateForm('contactNumber', e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                    <input value={studentForm.contactNumber || ''} onChange={(e) => updateForm('contactNumber', e.target.value)} placeholder="Enter contact number" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>Component</span>
@@ -3648,7 +3658,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200 md:col-span-2">
                     <span>Admin Notes</span>
-                    <textarea value={studentForm.notes} onChange={(e) => updateForm('notes', e.target.value)} rows={3} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                    <textarea value={studentForm.notes} onChange={(e) => updateForm('notes', e.target.value)} rows={3} placeholder="Enter notes (optional)" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   </label>
                 </div>
 

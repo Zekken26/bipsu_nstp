@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BookOpen, Users, BarChart3, LogOut, CalendarDays, LayoutGrid, ClipboardList, MoonStar, SunMedium, Mic2, Bell, Maximize2, Search, ChevronDown, TrendingUp, Award, Menu, X, UserRound, Settings, ShieldCheck, SlidersHorizontal, History, CircleHelp, LockKeyhole, CheckCircle2, Download, Send, Save, Mail, RotateCcw } from 'lucide-react';
 import LoginPage from './pages/LoginPage';
 import GeneralEducation from './features/enrollment/GeneralEducation';
@@ -17,6 +17,7 @@ import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
 import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi } from './data/nstpData';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
+import SectionErrorBoundary from './components/common/SectionErrorBoundary';
 
 type ShellSection = 'overview' | 'modules' | 'assessments' | 'progress' | 'grades' | 'admin' | 'facilitator' | 'announcements' | 'reports';
 type AccountUtility = 'profile' | 'settings' | 'security' | 'accessibility' | 'activity' | 'help';
@@ -244,6 +245,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const handleAuthExpired = () => {
+      setUser(null);
+      localStorage.removeItem('nstpUser');
+      setActiveSection('overview');
+    };
+    window.addEventListener('auth:expired', handleAuthExpired);
+    return () => window.removeEventListener('auth:expired', handleAuthExpired);
+  }, []);
+
+  useEffect(() => {
     document.documentElement.classList.toggle('dark', themeMode === 'dark');
   }, []);
 
@@ -301,7 +312,21 @@ export default function App() {
     };
 
     const handleStorage = (event: StorageEvent) => {
-      if (!event.key || ['qualifyingExamResults', 'nstp-student-roster', 'nstp-accounts', 'nstpUser'].includes(event.key)) {
+      if (!event.key) return;
+      const watchedKeys: Record<string, string> = {
+        'nstp-accounts': 'nstp-accounts-updated',
+        'nstp-student-roster': 'nstp-students-updated',
+        'nstp-module-library': 'nstp-modules-updated',
+        'nstp-assessment-library': 'nstp-assessments-updated',
+        'nstp-grade-records': 'nstp-grades-updated',
+        'nstp-training-groups': 'nstp-training-groups-updated',
+        'nstp-component-application-state': 'nstp-component-state-updated',
+        'qualifyingExamResults': 'nstp-qualifying-results-updated',
+      };
+      if (event.key in watchedKeys) {
+        window.dispatchEvent(new Event(watchedKeys[event.key]));
+      }
+      if (['qualifyingExamResults', 'nstp-student-roster', 'nstp-accounts', 'nstpUser'].includes(event.key)) {
         refreshStudentAccess();
       }
     };
@@ -423,10 +448,16 @@ export default function App() {
     localStorage.setItem(`nstp-notice-read-${user.id}`, JSON.stringify(nextReadIds));
   };
 
+  const stripPassword = (data: any) => {
+    if (!data) return data;
+    const { password, ...rest } = data;
+    return rest;
+  };
+
   const handleLogin = (userData: any) => {
     if (isAuthTransitioning) return;
 
-    pendingLoginRef.current = userData;
+    pendingLoginRef.current = stripPassword(userData);
     authModeRef.current = 'login';
     setIsAuthTransitioning(true);
     setAuthSplash({ visible: true, mode: 'login', userName: userData?.name });
@@ -864,29 +895,29 @@ export default function App() {
 
   const renderSection = () => {
     if (user.role === 'admin') {
-      if (activeSection === 'reports') return <ReportsCenter user={user} />;
-      if (activeSection === 'announcements') return <AnnouncementsCenter user={user} />;
-      if (activeSection === 'modules') return <ModulesPage user={user} role="admin" onBack={goBackToOverview} />;
-      if (activeSection === 'assessments') return <AssessmentsPage user={user} onBack={goBackToOverview} />;
-      return <AdminDashboard embedded initialView={activeSection === 'admin' ? adminInitialView : 'overview'} onNavigateApp={(target) => setActiveSection(target as ShellSection)} onLogout={handleLogout} />;
+      if (activeSection === 'reports') return <SectionErrorBoundary name="Reports"><ReportsCenter user={user} /></SectionErrorBoundary>;
+      if (activeSection === 'announcements') return <SectionErrorBoundary name="Announcements"><AnnouncementsCenter user={user} /></SectionErrorBoundary>;
+      if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="admin" onBack={goBackToOverview} /></SectionErrorBoundary>;
+      if (activeSection === 'assessments') return <SectionErrorBoundary name="Assessments"><AssessmentsPage user={user} onBack={goBackToOverview} /></SectionErrorBoundary>;
+      return <SectionErrorBoundary name="Admin Dashboard"><AdminDashboard embedded initialView={activeSection === 'admin' ? adminInitialView : 'overview'} onNavigateApp={(target) => setActiveSection(target as ShellSection)} onLogout={handleLogout} /></SectionErrorBoundary>;
     }
 
     if (user.role === 'facilitator') {
-      if (activeSection === 'reports') return <ReportsCenter user={user} />;
-      if (activeSection === 'announcements') return <AnnouncementsCenter user={user} />;
-      if (activeSection === 'modules') return <ModulesPage user={user} role="student" onBack={() => setActiveSection('facilitator')} />;
-      if (activeSection === 'assessments') return <AssessmentsPage user={user} onBack={() => setActiveSection('facilitator')} />;
-      return <FacilitatorDashboard embedded user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} />;
+      if (activeSection === 'reports') return <SectionErrorBoundary name="Reports"><ReportsCenter user={user} /></SectionErrorBoundary>;
+      if (activeSection === 'announcements') return <SectionErrorBoundary name="Announcements"><AnnouncementsCenter user={user} /></SectionErrorBoundary>;
+      if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="student" onBack={() => setActiveSection('facilitator')} /></SectionErrorBoundary>;
+      if (activeSection === 'assessments') return <SectionErrorBoundary name="Assessments"><AssessmentsPage user={user} onBack={() => setActiveSection('facilitator')} /></SectionErrorBoundary>;
+      return <SectionErrorBoundary name="Facilitator Dashboard"><FacilitatorDashboard embedded user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} /></SectionErrorBoundary>;
     }
 
-    if (activeSection === 'reports') return <ReportsCenter user={user} />;
-    if (activeSection === 'announcements') return <AnnouncementsCenter user={user} />;
-    if (activeSection === 'modules') return <ModulesPage user={user} role="student" onBack={goBackToOverview} />;
-    if (activeSection === 'assessments') return <AssessmentsPage user={user} onBack={goBackToOverview} />;
-    if (activeSection === 'progress') return <ProgressTracker user={user} onBack={goBackToOverview} />;
-    if (activeSection === 'grades') return <GradesPage user={user} />;
+    if (activeSection === 'reports') return <SectionErrorBoundary name="Reports"><ReportsCenter user={user} /></SectionErrorBoundary>;
+    if (activeSection === 'announcements') return <SectionErrorBoundary name="Announcements"><AnnouncementsCenter user={user} /></SectionErrorBoundary>;
+    if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="student" onBack={goBackToOverview} /></SectionErrorBoundary>;
+    if (activeSection === 'assessments') return <SectionErrorBoundary name="Assessments"><AssessmentsPage user={user} onBack={goBackToOverview} /></SectionErrorBoundary>;
+    if (activeSection === 'progress') return <SectionErrorBoundary name="Progress"><ProgressTracker user={user} onBack={goBackToOverview} /></SectionErrorBoundary>;
+    if (activeSection === 'grades') return <SectionErrorBoundary name="Grades"><GradesPage user={user} /></SectionErrorBoundary>;
     if (activeSection === 'overview') {
-      return <RoleDashboardHome user={user} role="student" onNavigate={(target) => setActiveSection(target as ShellSection)} />;
+      return <SectionErrorBoundary name="Dashboard Home"><RoleDashboardHome user={user} role="student" onNavigate={(target) => setActiveSection(target as ShellSection)} /></SectionErrorBoundary>;
     }
     return (
       <div className="grid auto-rows-[minmax(120px,auto)] gap-4 md:grid-cols-6">
@@ -1122,6 +1153,7 @@ export default function App() {
                     onClick={toggleFullscreen}
                     className="hidden h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 sm:inline-flex"
                     title="Toggle fullscreen"
+                    aria-label="Toggle fullscreen"
                   >
                     <Maximize2 className="h-4 w-4" />
                   </button>
@@ -1131,6 +1163,7 @@ export default function App() {
                       onClick={() => setNotificationsOpen((open) => !open)}
                       className="relative inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                       title="Open notifications"
+                      aria-label="Open notifications"
                     >
                       <Bell className="h-4 w-4" />
                       {unreadNotificationCount > 0 && (
@@ -1185,6 +1218,7 @@ export default function App() {
                       onClick={() => setProfileMenuOpen((open) => !open)}
                       className="inline-flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                       title="Profile menu"
+                      aria-label="Profile menu"
                     >
                       <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-700 text-xs font-semibold text-white">{initials}</span>
                       <span className="hidden max-w-[120px] truncate text-xs md:inline">{user.name}</span>

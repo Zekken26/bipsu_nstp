@@ -1,5 +1,5 @@
-import { sendError } from '../../utils/apiResponse.js';
-import { getAdminSummary, getDatabaseStatus, listCollection, upsertCollectionRecord } from './nstp.service.js';
+import { sendError, sendSuccess } from '../../utils/apiResponse.js';
+import { batchUpsertRecords, getAdminSummary, getDatabaseStatus, listCollection, upsertCollectionRecord } from './nstp.service.js';
 
 const allowedCollections = ['accounts', 'modules', 'assessments', 'students', 'grades', 'notices', 'supportTickets', 'pending-registrations', 'training-groups', 'attendance-records', 'attendance-sessions', 'qualifying-results', 'component-state', 'audit-log'];
 
@@ -36,4 +36,18 @@ export async function upsertNstpCollectionRecord(req, res) {
 
   const record = await upsertCollectionRecord(req.params.collection, lookup, { ...lookup, ...payload });
   return res.status(201).json(record);
+}
+
+export async function batchUpsertNstpCollectionRecords(req, res) {
+  if (!allowedCollections.includes(req.params.collection)) {
+    return sendError(res, 'Unknown collection', 404);
+  }
+
+  const records = req.body;
+  if (!Array.isArray(records) || records.length === 0) {
+    return sendError(res, 'Expected a non-empty array of records.', 400);
+  }
+
+  const results = await batchUpsertRecords(req.params.collection, records);
+  return sendSuccess(res, { upserted: results.length });
 }

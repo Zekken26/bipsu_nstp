@@ -166,6 +166,7 @@ model Quiz {
   title       String
   instructions String?
   totalPoints Int          @default(0)
+  data        Json?        @default("{}")
   module      Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   questions   Question[]
   submissions Submission[]

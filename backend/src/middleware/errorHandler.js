@@ -1,6 +1,8 @@
 import { logger } from '../utils/logger.js';
 
 export function errorHandler(err, req, res, next) {
+  if (res.headersSent) return next(err);
+
   logger.error('Unhandled request error', {
     message: err.message,
     path: req.originalUrl,

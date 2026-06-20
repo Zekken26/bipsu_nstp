@@ -12,9 +12,11 @@ type State = {
 const NSTP_STORAGE_PREFIX = 'nstp';
 
 export default class AppErrorBoundary extends Component<Props, State> {
+  declare props: Props;
+  state: State = { hasError: false, message: 'Something went wrong while loading the NSTP app.' };
+
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, message: 'Something went wrong while loading the NSTP app.' };
   }
 
   static getDerivedStateFromError(error: Error): State {
@@ -24,7 +26,7 @@ export default class AppErrorBoundary extends Component<Props, State> {
     };
   }
 
-  override componentDidCatch(error: Error) {
+  componentDidCatch(error: Error) {
     console.error('NSTP app crashed:', error);
   }
 

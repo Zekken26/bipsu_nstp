@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   Bell,
@@ -556,7 +556,7 @@ export default function FacilitatorDashboard({
                 label: item.label,
                 icon: item.icon,
                 active: item.active,
-                badge: item.badge,
+                badge: item.badge ?? undefined,
                 onClick: () => handleSidebarAction(item.target),
               })),
             }))}

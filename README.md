@@ -63,8 +63,8 @@ NSTP-Final-main/
 Backend environment file: `backend/.env`
 
 ```env
-PORT=8080
-DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/nstp_management_db"
+PORT=5000
+DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/nstp_db"
 JWT_SECRET=replace-with-a-secure-secret
 CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
 ```
@@ -72,7 +72,7 @@ CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
 Frontend environment file, optional: `frontend/.env`
 
 ```env
-VITE_API_BASE_URL=http://localhost:8080/api
+VITE_API_BASE_URL=http://localhost:5000/api
 ```
 
 Do not commit real `.env` files.
