@@ -471,8 +471,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
           contactNumber: userData.contactNumber,
           municipality: userData.municipality || 'Naval',
         };
-        saveAccounts([syncedAccount, ...accounts]);
         onLogin({ ...syncedAccount, ...userData, id: userData.id || syncedAccount.id, token: apiResult.data.token });
+        saveAccounts([syncedAccount, ...accounts]);
       } else {
         onLogin({ ...matchAccount, ...userData, id: userData.id || matchAccount?.id, token: apiResult.data.token });
       }

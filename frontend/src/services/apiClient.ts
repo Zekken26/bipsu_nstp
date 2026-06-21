@@ -6,10 +6,6 @@ function logApiError(method: string, path: string, error: unknown) {
   console.warn(`[apiClient] ${method} ${path} failed:`, error instanceof Error ? error.message : error);
 }
 
-function dispatchApiError(method: string, path: string, status: number) {
-  window.dispatchEvent(new CustomEvent('api:error', { detail: { method, path, status } }));
-}
-
 function getAuthHeaders(): Record<string, string> {
   const raw = localStorage.getItem('nstpUser');
   if (!raw) return {};
@@ -47,12 +43,7 @@ export async function apiPut<T>(path: string, payload: unknown, fallback: T): Pr
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(payload),
     });
-    if (response.status === 401) {
-      window.dispatchEvent(new CustomEvent('auth:expired'));
-      return fallback;
-    }
     if (!response.ok) {
-      dispatchApiError('PUT', path, response.status);
       return parseErrorResponse(response, fallback);
     }
     return await response.json() as T;
@@ -67,12 +58,7 @@ export async function apiGet<T>(path: string, fallback: T): Promise<T> {
     const response = await fetchWithTimeout(`${API_BASE}${path}`, {
       headers: { ...getAuthHeaders() },
     });
-    if (response.status === 401) {
-      window.dispatchEvent(new CustomEvent('auth:expired'));
-      return fallback;
-    }
     if (!response.ok) {
-      dispatchApiError('GET', path, response.status);
       return parseErrorResponse(response, fallback);
     }
     return await response.json() as T;
@@ -88,12 +74,7 @@ export async function apiDel<T>(path: string, fallback: T): Promise<T> {
       method: 'DELETE',
       headers: { ...getAuthHeaders() },
     });
-    if (response.status === 401) {
-      window.dispatchEvent(new CustomEvent('auth:expired'));
-      return fallback;
-    }
     if (!response.ok) {
-      dispatchApiError('DELETE', path, response.status);
       return parseErrorResponse(response, fallback);
     }
     return await response.json() as T;
@@ -110,12 +91,7 @@ export async function apiPost<T>(path: string, payload: unknown, fallback: T): P
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(payload),
     });
-    if (response.status === 401) {
-      window.dispatchEvent(new CustomEvent('auth:expired'));
-      return fallback;
-    }
     if (!response.ok) {
-      dispatchApiError('POST', path, response.status);
       return parseErrorResponse(response, fallback);
     }
     return await response.json() as T;

@@ -17,7 +17,6 @@ import GradesPage from './pages/GradesPage';
 import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
 import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi } from './data/nstpData';
-import * as api from './services/api';
 import { toast, Toaster } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
 import SectionErrorBoundary from './components/common/SectionErrorBoundary';
@@ -245,14 +244,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    const qc = queryClient;
     async function init() {
-      await initializeFromApi();
-      qc.prefetchQuery({ queryKey: ['accounts'], queryFn: api.fetchAccounts, staleTime: 30_000 });
-      qc.prefetchQuery({ queryKey: ['students'], queryFn: api.fetchStudents, staleTime: 30_000 });
-      qc.prefetchQuery({ queryKey: ['modules'], queryFn: api.fetchModules, staleTime: 30_000 });
-      qc.prefetchQuery({ queryKey: ['assessments'], queryFn: api.fetchAssessments, staleTime: 30_000 });
-      qc.prefetchQuery({ queryKey: ['grades'], queryFn: api.fetchGrades, staleTime: 30_000 });
+      const raw = localStorage.getItem('nstpUser');
+      if (raw) {
+        await initializeFromApi();
+      }
       setDataReady(true);
     }
     init();
@@ -264,18 +260,9 @@ export default function App() {
       localStorage.removeItem('nstpUser');
       setActiveSection('overview');
     };
-    const handleApiError = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      const method = detail?.method || '?';
-      const path = detail?.path || '?';
-      const status = detail?.status || '?';
-      toast.error(`API Error [${status}] ${method} ${path}`, { duration: 5000 });
-    };
     window.addEventListener('auth:expired', handleAuthExpired);
-    window.addEventListener('api:error', handleApiError);
     return () => {
       window.removeEventListener('auth:expired', handleAuthExpired);
-      window.removeEventListener('api:error', handleApiError);
     };
   }, []);
 

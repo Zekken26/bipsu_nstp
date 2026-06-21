@@ -222,25 +222,13 @@ const API_COLLECTION_MAP: Record<string, string> = {
 export function syncToApi<T>(localKey: string, data: T[]): void {
   const collection = API_COLLECTION_MAP[localKey];
   if (!collection || !Array.isArray(data) || data.length === 0) return;
-  apiPost<{ upserted: number } | null>(`/nstp/batch/${collection}`, data, null).then((result) => {
-    if (result === null) {
-      window.dispatchEvent(new CustomEvent('api:error', { detail: { method: 'POST', path: `/nstp/batch/${collection}`, status: 0 } }));
-    }
-  }).catch(() => {
-    window.dispatchEvent(new CustomEvent('api:error', { detail: { method: 'POST', path: `/nstp/batch/${collection}`, status: 0 } }));
-  });
+  apiPost<{ upserted: number } | null>(`/nstp/batch/${collection}`, data, null);
 }
 
 function syncSingleToApi<T>(localKey: string, data: T): void {
   const collection = API_COLLECTION_MAP[localKey];
   if (!collection) return;
-  apiPost<T | null>(`/nstp/${collection}`, data, null).then((result) => {
-    if (result === null) {
-      window.dispatchEvent(new CustomEvent('api:error', { detail: { method: 'POST', path: `/nstp/${collection}`, status: 0 } }));
-    }
-  }).catch(() => {
-    window.dispatchEvent(new CustomEvent('api:error', { detail: { method: 'POST', path: `/nstp/${collection}`, status: 0 } }));
-  });
+  apiPost<T | null>(`/nstp/${collection}`, data, null);
 }
 
 export async function syncCollectionFromApi(localKey: string): Promise<void> {
@@ -537,9 +525,9 @@ export function loadAccounts(): NstpAccount[] {
 
 export function saveAccounts(accounts: NstpAccount[]) {
   if (typeof window === 'undefined') return;
+  syncToApi(ACCOUNTS_KEY, accounts);
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
   window.dispatchEvent(new CustomEvent('nstp-accounts-updated'));
-  syncToApi(ACCOUNTS_KEY, accounts);
 }
 
 export function loadAssessments(): NstpAssessment[] {
@@ -550,8 +538,8 @@ export function loadAssessments(): NstpAssessment[] {
 
 export function saveAssessments(assessments: NstpAssessment[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify(assessments));
   syncToApi(ASSESSMENTS_KEY, assessments);
+  localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify(assessments));
 }
 
 export function loadModules(): NstpModule[] {
@@ -562,8 +550,8 @@ export function loadModules(): NstpModule[] {
 
 export function saveModules(modules: NstpModule[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(MODULES_KEY, JSON.stringify(modules));
   syncToApi(MODULES_KEY, modules);
+  localStorage.setItem(MODULES_KEY, JSON.stringify(modules));
 }
 
 export function loadStudents(): NstpStudent[] {
@@ -574,9 +562,9 @@ export function loadStudents(): NstpStudent[] {
 
 export function saveStudents(students: NstpStudent[]) {
   if (typeof window === 'undefined') return;
+  syncToApi(STUDENTS_KEY, students);
   localStorage.setItem(STUDENTS_KEY, JSON.stringify(students));
   window.dispatchEvent(new CustomEvent('nstp-students-updated'));
-  syncToApi(STUDENTS_KEY, students);
 }
 
 export function loadComponentApplicationState(): ComponentApplicationState {
@@ -597,9 +585,9 @@ export function loadComponentApplicationState(): ComponentApplicationState {
 
 export function saveComponentApplicationState(state: ComponentApplicationState) {
   if (typeof window === 'undefined') return;
+  syncToApi(COMPONENT_APPLICATION_STATE_KEY, [state]);
   localStorage.setItem(COMPONENT_APPLICATION_STATE_KEY, JSON.stringify(state));
   window.dispatchEvent(new CustomEvent('nstp-component-state-updated'));
-  syncToApi(COMPONENT_APPLICATION_STATE_KEY, [state]);
 }
 
 export function loadQualifyingExamResults(): QualifyingExamResult[] {
@@ -609,9 +597,9 @@ export function loadQualifyingExamResults(): QualifyingExamResult[] {
 
 export function saveQualifyingExamResults(results: QualifyingExamResult[]) {
   if (typeof window === 'undefined') return;
+  syncToApi(QUALIFYING_RESULTS_KEY, results);
   localStorage.setItem(QUALIFYING_RESULTS_KEY, JSON.stringify(results));
   window.dispatchEvent(new CustomEvent('nstp-qualifying-results-updated'));
-  syncToApi(QUALIFYING_RESULTS_KEY, results);
 }
 
 const hasStudentPortalAccess = (result: QualifyingExamResult) => {
@@ -709,8 +697,8 @@ export function loadPendingStudentRegistrations(): PendingStudentRegistration[] 
 
 export function savePendingStudentRegistrations(registrations: PendingStudentRegistration[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(PENDING_REGISTRATIONS_KEY, JSON.stringify(registrations));
   syncToApi(PENDING_REGISTRATIONS_KEY, registrations);
+  localStorage.setItem(PENDING_REGISTRATIONS_KEY, JSON.stringify(registrations));
 }
 
 export function loadGradeRecords(): NstpGradeRecord[] {
@@ -721,8 +709,8 @@ export function loadGradeRecords(): NstpGradeRecord[] {
 
 export function saveGradeRecords(records: NstpGradeRecord[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(GRADES_KEY, JSON.stringify(records));
   syncToApi(GRADES_KEY, records);
+  localStorage.setItem(GRADES_KEY, JSON.stringify(records));
 }
 
 export function loadAttendanceRecords(): NstpAttendanceRecord[] {
@@ -732,8 +720,8 @@ export function loadAttendanceRecords(): NstpAttendanceRecord[] {
 
 export function saveAttendanceRecords(records: NstpAttendanceRecord[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(ATTENDANCE_RECORDS_KEY, JSON.stringify(records));
   syncToApi(ATTENDANCE_RECORDS_KEY, records);
+  localStorage.setItem(ATTENDANCE_RECORDS_KEY, JSON.stringify(records));
 }
 
 export function loadAttendanceSessions(): NstpAttendanceSession[] {
@@ -743,8 +731,8 @@ export function loadAttendanceSessions(): NstpAttendanceSession[] {
 
 export function saveAttendanceSessions(sessions: NstpAttendanceSession[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(ATTENDANCE_SESSIONS_KEY, JSON.stringify(sessions));
   syncToApi(ATTENDANCE_SESSIONS_KEY, sessions);
+  localStorage.setItem(ATTENDANCE_SESSIONS_KEY, JSON.stringify(sessions));
 }
 
 export function loadTrainingGroups(): NstpTrainingGroup[] {
@@ -755,9 +743,9 @@ export function loadTrainingGroups(): NstpTrainingGroup[] {
 
 export function saveTrainingGroups(groups: NstpTrainingGroup[]) {
   if (typeof window === 'undefined') return;
+  syncToApi(TRAINING_GROUPS_KEY, groups);
   localStorage.setItem(TRAINING_GROUPS_KEY, JSON.stringify(groups));
   window.dispatchEvent(new CustomEvent('nstp-training-groups-updated'));
-  syncToApi(TRAINING_GROUPS_KEY, groups);
 }
 
 export function createEmptyStudent(): NstpStudent {
