@@ -7,7 +7,7 @@ import ModulesPage from '../../../pages/ModulesPage';
 import FacilitatorManagement from '../components/FacilitatorManagement';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncToApi, AUDIT_LOG_KEY } from '../../../data/nstpData';
-import { apiPost, apiPut } from '../../../services/apiClient';
+import { apiPost, apiPut, apiDel } from '../../../services/apiClient';
 import { useCurrentUser, useUpdateCurrentUser } from '../../../hooks/index';
 
 type AdminAuditEntry = {
@@ -595,7 +595,8 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     cancelStudentEdit();
   };
 
-  const deleteStudent = (studentId: string) => {
+  const deleteStudent = async (studentId: string) => {
+    await apiDel(`/nstp/students/${studentId}`, null);
     const nextStudents = students.filter((student) => student.id !== studentId);
     persistStudents(nextStudents);
     if (editingStudentId === studentId) {

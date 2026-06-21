@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Building2, Download, Eye, EyeOff, Filter, KeyRound, LockKeyhole, Mail, MoreVertical, Pencil, Plus, Save, Search, Trash2, Users, X } from 'lucide-react';
 import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, BiliranMunicipality, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadStudents, NstpAccount, NSTP_COMPONENTS, saveAccounts, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM } from '../../../data/nstpData';
+import { apiDel } from '../../../services/apiClient';
 
 type Props = {
   admin: NstpAccount;
@@ -94,7 +95,8 @@ export default function FacilitatorManagement({ admin }: Props) {
     setSelectedId(facilitator.id);
   };
 
-  const removeFacilitator = (facilitatorId: string) => {
+  const removeFacilitator = async (facilitatorId: string) => {
+    await apiDel(`/nstp/accounts/${facilitatorId}`, null);
     const nextFacilitators = facilitators.filter((facilitator) => facilitator.id !== facilitatorId);
     persist(nextFacilitators);
     setSelectedId(nextFacilitators[0]?.id ?? null);
