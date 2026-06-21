@@ -40,6 +40,28 @@ async function parseErrorResponse<T>(response: Response, fallback: T): Promise<T
   }
 }
 
+export async function apiPut<T>(path: string, payload: unknown, fallback: T): Promise<T> {
+  try {
+    const response = await fetchWithTimeout(`${API_BASE}${path}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(payload),
+    });
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+      return fallback;
+    }
+    if (!response.ok) {
+      dispatchApiError('PUT', path, response.status);
+      return parseErrorResponse(response, fallback);
+    }
+    return await response.json() as T;
+  } catch (error) {
+    logApiError('PUT', path, error);
+    return fallback;
+  }
+}
+
 export async function apiGet<T>(path: string, fallback: T): Promise<T> {
   try {
     const response = await fetchWithTimeout(`${API_BASE}${path}`, {

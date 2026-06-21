@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiDel } from './apiClient';
+import { apiGet, apiPost, apiPut, apiDel } from './apiClient';
 import type { NstpAccount, NstpStudent, NstpModule, NstpAssessment, NstpGradeRecord, NstpTrainingGroup, NstpAttendanceRecord, NstpAttendanceSession, QualifyingExamResult, ComponentApplicationState, PendingStudentRegistration } from '../data/nstpData';
 
 type AuditLogEntry = { id: string; actor: string; action: string; detail?: string; at: string };
@@ -119,6 +119,14 @@ export async function upsertPendingRegistration(payload: PendingStudentRegistrat
 
 export async function deletePendingRegistration(id: string) {
   return apiDel<{ deleted: string }>(`${BASE}/pending-registrations/${id}`, null as unknown as { deleted: string });
+}
+
+export async function fetchCurrentUser() {
+  return apiGet<{ success: boolean; data: Record<string, any> } | null>('/auth/me', null);
+}
+
+export async function updateCurrentUser(payload: Record<string, any>) {
+  return apiPut<{ success: boolean; data: Record<string, any> } | null>('/auth/me', payload, null);
 }
 
 export async function fetchAuditLog() {

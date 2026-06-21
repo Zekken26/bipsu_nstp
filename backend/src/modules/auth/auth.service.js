@@ -94,6 +94,47 @@ export async function registerUser(payload) {
   };
 }
 
+export async function getUserById(id) {
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) {
+    const err = new Error('User not found.');
+    err.statusCode = 404;
+    throw err;
+  }
+  const { passwordHash, ...profile } = user;
+  return profile;
+}
+
+export async function updateUserProfile(id, payload) {
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) {
+    const err = new Error('User not found.');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const updateData = {};
+
+  if (payload.name !== undefined) updateData.name = payload.name;
+  if (payload.email !== undefined) updateData.email = payload.email;
+  if (payload.password !== undefined) {
+    updateData.passwordHash = await bcrypt.hash(payload.password, 10);
+  }
+
+  if (payload.data !== undefined) {
+    const existingData = (user.data || {});
+    updateData.data = { ...existingData, ...payload.data };
+  }
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: updateData,
+  });
+
+  const { passwordHash, ...profile } = updated;
+  return profile;
+}
+
 export async function loginUser(identifier, password) {
   if (!identifier || !password) {
     const err = new Error('Identifier and password are required.');

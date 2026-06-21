@@ -123,6 +123,22 @@ export function useUpsertComponentState() {
   return useGenericMutation(['component-state'], (data: ComponentApplicationState) => api.upsertComponentState(data));
 }
 
+export function useCurrentUser() {
+  return useQuery<{ success: boolean; data: Record<string, any> } | null>({
+    queryKey: ['currentUser'],
+    queryFn: () => api.fetchCurrentUser(),
+    staleTime: STALE_TIME,
+  });
+}
+
+export function useUpdateCurrentUser() {
+  const qc = useQueryClient();
+  return useMutation<{ success: boolean; data: Record<string, any> } | null, Error, Record<string, any>>({
+    mutationFn: (data) => api.updateCurrentUser(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['currentUser'] }),
+  });
+}
+
 export function usePendingRegistrations() {
   return useGenericQuery(['pending-registrations'], api.fetchPendingRegistrations);
 }

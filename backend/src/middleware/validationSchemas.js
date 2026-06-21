@@ -34,6 +34,21 @@ export const loginSchema = z.object({
   query: z.object({}).optional(),
 });
 
+export const updateProfileSchema = z.object({
+  body: z.object({
+    name: z.string().min(1).optional(),
+    email: z.string().email().optional(),
+    password: z.string().min(6).optional(),
+    data: z.object({
+      title: z.string().optional(),
+      subtitle: z.string().optional(),
+      contactNumber: z.string().optional(),
+    }).optional(),
+  }),
+  params: z.object({}).optional(),
+  query: z.object({}).optional(),
+});
+
 export const nstpCollectionSchema = z.object({
   body: z.record(z.unknown()),
   params: z.object({

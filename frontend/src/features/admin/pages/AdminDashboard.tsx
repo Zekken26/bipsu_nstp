@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Users, BookOpen, TrendingUp, Award, Search, ClipboardList, TriangleAlert, Siren, Target, Plus, Save, Pencil, Trash2, Mail, BarChart3, GraduationCap, BadgeCheck, X, UserRoundPlus, Eye, FileDown, FileUp, History, ArrowLeft, Bell, Building2, CalendarDays, Check, ChevronDown, Home, Settings, SunMedium, UserCheck, Printer, GripVertical, Menu } from 'lucide-react';
+import { Users, BookOpen, TrendingUp, Award, Search, ClipboardList, TriangleAlert, Siren, Target, Plus, Save, Pencil, Trash2, Mail, BarChart3, GraduationCap, BadgeCheck, X, UserRoundPlus, Eye, FileDown, FileUp, History, ArrowLeft, Bell, Building2, CalendarDays, Check, ChevronDown, Home, Settings, SunMedium, UserCheck, Printer, GripVertical, Menu, UserCog, ShieldCheck, Loader2 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, CartesianGrid, XAxis, YAxis, Bar, LineChart, Line, Legend } from 'recharts';
 import ComponentAssignment from '../components/ComponentAssignment';
 import AssessmentManager from '../../assessments/components/AssessmentManager';
@@ -7,7 +7,8 @@ import ModulesPage from '../../../pages/ModulesPage';
 import FacilitatorManagement from '../components/FacilitatorManagement';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncToApi, AUDIT_LOG_KEY } from '../../../data/nstpData';
-import { apiPost } from '../../../services/apiClient';
+import { apiPost, apiPut } from '../../../services/apiClient';
+import { useCurrentUser, useUpdateCurrentUser } from '../../../hooks/index';
 
 type AdminAuditEntry = {
   id: string;
@@ -125,7 +126,7 @@ const emptyLookup = () => ({
   graduated: 0,
 });
 
-type AdminDashboardView = 'overview' | 'enrollment' | 'students' | 'tools' | 'modules' | 'assessments' | 'facilitators' | 'municipalities' | 'assignments' | 'exports' | 'settings';
+type AdminDashboardView = 'overview' | 'enrollment' | 'students' | 'tools' | 'modules' | 'assessments' | 'facilitators' | 'municipalities' | 'assignments' | 'exports' | 'settings' | 'account';
 
 type AdminDashboardProps = {
   initialView?: AdminDashboardView;
@@ -1114,7 +1115,11 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     { name: 'W4', progress: 68, assessments: 4 },
   ], [progressTrendData]);
 
-  const adminInitials = 'DM';
+  const currentUserQuery = useCurrentUser();
+  const adminProfile = currentUserQuery?.data?.data || null;
+  const adminInitials = adminProfile?.name?.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() || 'AD';
+  const adminDisplayName = adminProfile?.data?.title || adminProfile?.name || 'Dr. Reynold Garcia Bustillo';
+  const adminDisplayRole = adminProfile?.data?.subtitle || 'NSTP Director';
 
   const updateFacilitatorMunicipality = (facilitatorId: string, municipality: BiliranMunicipality, checked: boolean) => {
     const accounts = loadAccounts();
@@ -1877,7 +1882,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     </section>
   );
 
-  if (['overview', 'enrollment', 'students', 'facilitators', 'municipalities', 'modules', 'assessments', 'tools', 'assignments', 'exports', 'settings'].includes(view)) {
+  if (['overview', 'enrollment', 'students', 'facilitators', 'municipalities', 'modules', 'assessments', 'tools', 'assignments', 'exports', 'settings', 'account'].includes(view)) {
     return (
       <div className={`${embedded ? 'min-h-0 bg-transparent' : 'min-h-dvh overflow-x-hidden bg-[#f4f8fd]'} text-slate-950 dark:bg-slate-950 dark:text-slate-100`}>
         <div className={embedded ? 'min-h-0' : 'min-h-dvh'}>
@@ -1901,14 +1906,15 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     { label: 'Grades', icon: Award, onClick: () => setView('assignments'), active: view === 'assignments' },
                     { label: 'Reports', icon: BarChart3, onClick: () => setView('tools'), active: view === 'tools' },
                     { label: 'Export Templates', icon: FileDown, onClick: () => setView('exports'), active: view === 'exports' },
+                    { label: 'Account Settings', icon: UserCog, onClick: () => setView('account'), active: view === 'account' },
                     { label: 'Settings', icon: Settings, onClick: () => setView('settings'), active: view === 'settings' },
                   ],
                 },
               ]}
               avatarLabel={adminInitials}
               accountLabel="Administrator"
-              accountTitle="Dr. Reynold Garcia Bustillo"
-              accountSubtitle="NSTP Director"
+              accountTitle={adminDisplayName}
+              accountSubtitle={adminDisplayRole}
               onLogout={onLogout}
             />
           )}
@@ -1929,7 +1935,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-300">Administration</p>
                   <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
-                    {view === 'exports' ? 'Export Layout' : view === 'settings' ? 'System Settings' : 'Dashboard'}
+                    {view === 'exports' ? 'Export Layout' : view === 'settings' ? 'System Settings' : view === 'account' ? 'Account Settings' : 'Dashboard'}
                   </h1>
                 </div>
               </div>
@@ -1950,7 +1956,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 </button>
                 <button onClick={() => setProfileOpen((open) => !open)} className="flex min-h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-950">
                   <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-700 text-sm font-semibold text-white">{adminInitials}</span>
-                  <span className="hidden text-sm font-medium text-slate-800 dark:text-slate-100 sm:block">Dr. Reynold Garcia Bustillo</span>
+                  <span className="hidden text-sm font-medium text-slate-800 dark:text-slate-100 sm:block">{adminDisplayName}</span>
                   <ChevronDown className="h-4 w-4 text-slate-400" />
                 </button>
               </div>
@@ -2725,6 +2731,11 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   </section>
                 ) : view === 'exports' ? (
                   renderExportLayoutView()
+                ) : view === 'account' ? (
+                  <AccountSettingsSection
+                    profile={adminProfile}
+                    onProfileUpdated={() => currentUserQuery.refetch()}
+                  />
                 ) : view === 'settings' ? (
                   <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                     <div className="overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-blue-600 to-cyan-500 p-6 text-white shadow-lg shadow-blue-900/20">
@@ -3981,5 +3992,183 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
         </div>
       </div>
     </div>
+  );
+}
+
+function AccountSettingsSection({ profile, onProfileUpdated }: { profile: Record<string, any> | null; onProfileUpdated: () => void }) {
+  const [name, setName] = useState(profile?.name || '');
+  const [title, setTitle] = useState(profile?.data?.title || '');
+  const [subtitle, setSubtitle] = useState(profile?.data?.subtitle || '');
+  const [contactNumber, setContactNumber] = useState(profile?.data?.contactNumber || '');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (profile) {
+      setName(profile.name || '');
+      setTitle(profile.data?.title || '');
+      setSubtitle(profile.data?.subtitle || '');
+      setContactNumber(profile.data?.contactNumber || '');
+    }
+  }, [profile]);
+
+  const handleSaveProfile = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const result = await apiPut('/auth/me', {
+        name,
+        data: { title, subtitle, contactNumber },
+      }, null);
+      if (result) {
+        setMessage({ type: 'success', text: 'Profile updated successfully.' });
+        onProfileUpdated();
+      } else {
+        setMessage({ type: 'error', text: 'Failed to update profile.' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update profile.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword !== confirmPassword) {
+      setMessage({ type: 'error', text: 'Passwords do not match.' });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setMessage({ type: 'error', text: 'Password must be at least 6 characters.' });
+      return;
+    }
+    setChangingPassword(true);
+    setMessage(null);
+    try {
+      const result = await apiPut('/auth/me', { password: newPassword }, null);
+      if (result) {
+        setMessage({ type: 'success', text: 'Password changed successfully.' });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setMessage({ type: 'error', text: 'Failed to change password.' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to change password.' });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  return (
+    <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div className="overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-blue-600 to-cyan-500 p-6 text-white shadow-lg shadow-blue-900/20">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-100">Administration</p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight">Account Settings</h2>
+            <p className="mt-2 max-w-2xl text-sm text-blue-50">Manage your profile information and password.</p>
+          </div>
+          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-white/15 backdrop-blur">
+            <ShieldCheck className="h-8 w-8" />
+          </div>
+        </div>
+      </div>
+
+      {message && (
+        <div className={`rounded-xl border p-4 text-sm ${message.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300' : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300'}`}>
+          {message.text}
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/50 p-5 dark:border-slate-700 dark:bg-slate-900/50">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <UserCog className="h-5 w-5 text-blue-600" />
+            Profile Information
+          </h3>
+
+          <label className="space-y-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+            <span>Display Name</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+          </label>
+
+          <label className="space-y-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+            <span>Email</span>
+            <input value={profile?.email || ''} disabled className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400" />
+            <p className="text-xs text-slate-400">Email cannot be changed.</p>
+          </label>
+
+          <label className="space-y-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+            <span>Title (shown in sidebar)</span>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="NSTP Director" className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+          </label>
+
+          <label className="space-y-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+            <span>Subtitle (shown in sidebar)</span>
+            <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="Office of the National Service Training Program" className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+          </label>
+
+          <label className="space-y-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+            <span>Contact Number</span>
+            <input value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="09xxxxxxxxx" className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+          </label>
+
+          <div className="flex gap-3 pt-2">
+            <button onClick={handleSaveProfile} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800 disabled:opacity-60">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? 'Saving...' : 'Save Profile'}
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/50 p-5 dark:border-slate-700 dark:bg-slate-900/50">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <ShieldCheck className="h-5 w-5 text-blue-600" />
+            Change Password
+          </h3>
+
+          <label className="space-y-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+            <span>Current Password</span>
+            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+          </label>
+
+          <label className="space-y-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+            <span>New Password</span>
+            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+          </label>
+
+          <label className="space-y-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+            <span>Confirm New Password</span>
+            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+          </label>
+
+          <div className="flex gap-3 pt-2">
+            <button onClick={handleChangePassword} disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800 disabled:opacity-60">
+              {changingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {changingPassword ? 'Changing...' : 'Update Password'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
+        <h4 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Preview</h4>
+        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-950">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-700 text-sm font-semibold text-white">
+            {name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title || name || 'Your Title'}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle || 'Your Role'}</p>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
