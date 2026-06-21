@@ -3418,7 +3418,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
               <BookOpen className="w-5 h-5 text-yellow-600" />
               <span className="text-sm text-slate-600 dark:text-slate-300">Active Modules</span>
             </div>
-            <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">8</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{modules.length}</p>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
