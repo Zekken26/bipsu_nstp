@@ -56,7 +56,10 @@ const withFallback = async (name, operation) => {
 
 export async function listCollection(name) {
   if (name === 'accounts') {
-    return withFallback(name, async () => prisma.user.findMany({ orderBy: { createdAt: 'desc' } }));
+    return withFallback(name, async () => prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { instructorProfile: true },
+    }));
   }
 
   if (name === 'modules') {
@@ -126,11 +129,12 @@ export async function upsertCollectionRecord(name, lookup, payload) {
       if (!passwordHash && nextPayload.password) {
         passwordHash = await bcrypt.hash(nextPayload.password, 10);
       }
-      return await prisma.user.upsert({
+      const userRole = toUserRole(nextPayload.role);
+      const user = await prisma.user.upsert({
         where: { email: nextPayload.email },
         update: {
           name: nextPayload.name,
-          role: toUserRole(nextPayload.role),
+          role: userRole,
           data: profileData,
         },
         create: {
@@ -138,10 +142,29 @@ export async function upsertCollectionRecord(name, lookup, payload) {
           name: nextPayload.name || nextPayload.email,
           email: nextPayload.email,
           passwordHash: passwordHash || 'change-me',
-          role: toUserRole(nextPayload.role),
+          role: userRole,
           data: profileData,
         },
       });
+
+      if (userRole === 'INSTRUCTOR') {
+        await prisma.instructorProfile.upsert({
+          where: { userId: user.id },
+          update: {
+            employeeNumber: profileData.employeeNumber || `fac-${user.id.slice(0, 8)}`,
+            department: profileData.department || null,
+            title: profileData.title || null,
+          },
+          create: {
+            userId: user.id,
+            employeeNumber: profileData.employeeNumber || `fac-${user.id.slice(0, 8)}`,
+            department: profileData.department || null,
+            title: profileData.title || null,
+          },
+        });
+      }
+
+      return user;
     }
 
     if (name === 'modules') {

@@ -12,6 +12,7 @@ const emptyFacilitator = (): NstpAccount => ({
   email: '',
   password: '',
   role: 'facilitator',
+  employeeNumber: `FAC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
   title: '',
   bio: '',
   municipalities: [],
@@ -318,6 +319,13 @@ export default function FacilitatorManagement({ admin }: Props) {
                   <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" tabIndex={-1}>
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
+                </div>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Employee Number <span className="text-rose-600 dark:text-rose-300">*</span></span>
+                <div className="relative">
+                  <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input value={form.employeeNumber || ''} onChange={(event) => setForm({ ...form, employeeNumber: event.target.value })} placeholder="FAC-001" className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 pl-9 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                 </div>
               </label>
               <label className="block space-y-1.5">

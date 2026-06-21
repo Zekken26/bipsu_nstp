@@ -28,6 +28,7 @@ export type NstpAccount = {
   cityAddress?: string;
   provincialAddress?: string;
   contactNumber?: string;
+  employeeNumber?: string;
   title?: string;
   bio?: string;
   municipalities?: BiliranMunicipality[];
@@ -239,9 +240,11 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
     if (apiAccounts.length > 0) {
       const mapped: NstpAccount[] = apiAccounts.map((a: any) => {
         const d = (a.data || {}) as Record<string, unknown>;
+        const ip = (a.instructorProfile || {}) as Record<string, unknown>;
         return {
           id: a.id, name: a.name || '', email: a.email || '', password: '',
           role: (a.role || 'student').toLowerCase() as NstpRole,
+          employeeNumber: (ip.employeeNumber as string) || (d.employeeNumber as string) || '',
           studentId: (d.studentId as string) || '',
           surname: d.surname as string, firstName: d.firstName as string,
           middleName: d.middleName as string, school: d.school as string,
