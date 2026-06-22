@@ -27,6 +27,18 @@ async function fetchWithTimeout(input: RequestInfo, init: RequestInit = {}): Pro
   }
 }
 
+async function fetchWithRetry(input: RequestInfo, init: RequestInit = {}, retries = 3): Promise<Response> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fetchWithTimeout(input, init);
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+  throw new Error('fetchWithRetry exhausted');
+}
+
 async function parseErrorResponse<T>(response: Response, fallback: T): Promise<T> {
   try {
     const body = await response.json();
@@ -38,7 +50,7 @@ async function parseErrorResponse<T>(response: Response, fallback: T): Promise<T
 
 export async function apiPut<T>(path: string, payload: unknown, fallback: T): Promise<T> {
   try {
-    const response = await fetchWithTimeout(`${API_BASE}${path}`, {
+    const response = await fetchWithRetry(`${API_BASE}${path}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(payload),
@@ -55,7 +67,7 @@ export async function apiPut<T>(path: string, payload: unknown, fallback: T): Pr
 
 export async function apiGet<T>(path: string, fallback: T): Promise<T> {
   try {
-    const response = await fetchWithTimeout(`${API_BASE}${path}`, {
+    const response = await fetchWithRetry(`${API_BASE}${path}`, {
       headers: { ...getAuthHeaders() },
     });
     if (!response.ok) {
@@ -70,7 +82,7 @@ export async function apiGet<T>(path: string, fallback: T): Promise<T> {
 
 export async function apiDel<T>(path: string, fallback: T): Promise<T> {
   try {
-    const response = await fetchWithTimeout(`${API_BASE}${path}`, {
+    const response = await fetchWithRetry(`${API_BASE}${path}`, {
       method: 'DELETE',
       headers: { ...getAuthHeaders() },
     });
@@ -86,7 +98,7 @@ export async function apiDel<T>(path: string, fallback: T): Promise<T> {
 
 export async function apiPost<T>(path: string, payload: unknown, fallback: T): Promise<T> {
   try {
-    const response = await fetchWithTimeout(`${API_BASE}${path}`, {
+    const response = await fetchWithRetry(`${API_BASE}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(payload),
