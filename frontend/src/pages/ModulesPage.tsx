@@ -17,7 +17,7 @@ function getEmbedUrl(url: string): string {
   return url;
 }
 
-export default function ModulesPage({ user, role = 'student', onBack }: { user: any; role?: 'student' | 'admin'; onBack?: () => void }) {
+export default function ModulesPage({ user, role = 'student', onBack }: { user: any; role?: 'student' | 'admin' | 'coordinator'; onBack?: () => void }) {
   const [modules, setModules] = useState<NstpModule[]>([]);
   const [moduleVisibility, setModuleVisibility] = useState<Record<string, boolean>>({});
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
@@ -50,7 +50,7 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   }, [user.id]);
 
   const selectedModule = useMemo(() => modules.find((module) => module.id === selectedModuleId) || null, [modules, selectedModuleId]);
-  const isAdmin = role === 'admin';
+  const isAdmin = role === 'admin' || role === 'coordinator';
   const students = useMemo(() => loadStudents(), []);
 
   useEffect(() => {

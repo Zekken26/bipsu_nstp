@@ -34,7 +34,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, BiliranMunicipality, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadPendingStudentRegistrations, saveAccounts, savePendingStudentRegistrations, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS, NstpAccount } from '../data/nstpData';
+import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, BiliranMunicipality, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadPendingStudentRegistrations, saveAccounts, savePendingStudentRegistrations, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS, NstpAccount, initializeFromApi } from '../data/nstpData';
 import splashImage from '../assets/images/splash.png';
 import { apiPost } from '../services/apiClient';
 
@@ -221,7 +221,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
   const [publicView, setPublicView] = useState<PublicView>('home');
   const [mode, setMode] = useState<LoginMode>('login');
   const [showAuth, setShowAuth] = useState(false);
-  const [loginRole, setLoginRole] = useState<'student' | 'facilitator' | 'admin'>('student');
+  const [loginRole, setLoginRole] = useState<'student' | 'facilitator' | 'coordinator' | 'admin'>('student');
   const [surname, setSurname] = useState('');
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
@@ -432,13 +432,24 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     const loginInput = email.trim();
 
     // Try backend login first (retry once if backend was restarting)
-    let apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any>; token: string } } | null>('/auth/login', { identifier: loginInput, password }, null);
+    let apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any>; token: string } } | null>('/auth/login', { identifier: loginInput, password, role: loginRole }, null);
     if (apiResult === null) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any>; token: string } } | null>('/auth/login', { identifier: loginInput, password }, null);
+      apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any>; token: string } } | null>('/auth/login', { identifier: loginInput, password, role: loginRole }, null);
     }
     if (apiResult?.success && apiResult?.data) {
       const userData = apiResult.data.user;
+
+      // Sync all collections from API before proceeding
+      await initializeFromApi();
+
+      // Verify the backend returned user role matches the selected login role
+      const backendRole = (userData.role || '').toLowerCase();
+      if (backendRole && backendRole !== loginRole) {
+        setError(`This account is registered as "${backendRole}", not "${loginRole}". Please select the correct role.`);
+        return;
+      }
+
       const matchAccount = accounts.find((account) => {
         if (account.role !== loginRole) return false;
         if (loginRole === 'student') {
@@ -889,7 +900,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                   ) : (
                     <>
                       <div className="flex gap-2">
-                        {(['student', 'facilitator', 'admin'] as const).map((role) => (
+                        {(['student', 'facilitator', 'coordinator', 'admin'] as const).map((role) => (
                           <button
                             key={role}
                             type="button"

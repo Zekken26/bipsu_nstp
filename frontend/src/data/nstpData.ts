@@ -1,6 +1,6 @@
 import { apiGet, apiPost, apiDel } from '../services/apiClient';
 
-export type NstpRole = 'admin' | 'student' | 'facilitator';
+export type NstpRole = 'admin' | 'coordinator' | 'student' | 'facilitator';
 export type NstpComponent = 'CWTS' | 'LTS' | 'MTS (Army)' | 'MTS (Navy)' | 'CWTS (Coast Guard)';
 export type BiliranMunicipality = 'Almeria' | 'Biliran' | 'Cabucgayan' | 'Caibiran' | 'Culaba' | 'Kawayan' | 'Maripipi' | 'Naval';
 
@@ -37,8 +37,10 @@ export type NstpAccount = {
   preferredComponent?: NstpComponent;
   examTaken?: boolean;
   examScore?: number;
+  componentId?: string;
   component?: NstpComponent;
   componentAccessStatus?: string;
+  _version?: number;
 };
 
 export type PendingStudentRegistration = {
@@ -66,6 +68,7 @@ export type PendingStudentRegistration = {
   contactNumber?: string;
   municipality?: BiliranMunicipality;
   createdAt: string;
+  _version?: number;
 };
 
 export type NstpQuestion = {
@@ -86,10 +89,11 @@ export type NstpAssessment = {
   questionsToShow: number;
   ownerId: string;
   ownerName: string;
-  ownerRole: 'admin' | 'facilitator';
+  ownerRole: 'admin' | 'coordinator' | 'facilitator';
   status: 'draft' | 'published';
   questions: NstpQuestion[];
   updatedAt: string;
+  _version?: number;
 };
 
 export type NstpModule = {
@@ -112,6 +116,7 @@ export type NstpModule = {
   scheduledDate?: string;
   scheduledTime?: string;
   updatedAt: string;
+  _version?: number;
 };
 
 export type NstpStudent = {
@@ -147,6 +152,7 @@ export type NstpStudent = {
   status: 'active' | 'pending' | 'graduated';
   notes: string;
   updatedAt: string;
+  _version?: number;
 };
 
 export type NstpTrainingGroup = {
@@ -161,6 +167,7 @@ export type NstpTrainingGroup = {
   studentCount: number;
   maxRecommendedLoad: number;
   sourceDocument: string;
+  _version?: number;
 };
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
@@ -172,6 +179,7 @@ export type NstpAttendanceRecord = {
   status: AttendanceStatus;
   facilitatorId: string;
   updatedAt: string;
+  _version?: number;
 };
 
 export type NstpAttendanceSession = {
@@ -180,6 +188,7 @@ export type NstpAttendanceSession = {
   facilitatorId: string;
   title: string;
   createdAt: string;
+  _version?: number;
 };
 
 export type NstpGradeRecord = {
@@ -190,6 +199,13 @@ export type NstpGradeRecord = {
   remarks: 'In Progress' | 'Passed' | 'For Completion' | 'Failed';
   released: boolean;
   updatedAt: string;
+  _version?: number;
+};
+
+type PendingSyncItem = {
+  localKey: string;
+  data: unknown[];
+  timestamp: string;
 };
 
 const ACCOUNTS_KEY = 'nstp-accounts';
@@ -204,6 +220,7 @@ const ATTENDANCE_SESSIONS_KEY = 'nstp-attendance-sessions';
 export const QUALIFYING_RESULTS_KEY = 'qualifyingExamResults';
 export const COMPONENT_APPLICATION_STATE_KEY = 'nstp-component-application-state';
 export const AUDIT_LOG_KEY = 'nstp-admin-audit-log';
+const PENDING_SYNC_KEY = 'nstp-pending-sync';
 
 const API_COLLECTION_MAP: Record<string, string> = {
   [ACCOUNTS_KEY]: 'accounts',
@@ -220,16 +237,42 @@ const API_COLLECTION_MAP: Record<string, string> = {
   [AUDIT_LOG_KEY]: 'audit-log',
 };
 
-export function syncToApi<T>(localKey: string, data: T[]): void {
+export async function syncToApi<T>(localKey: string, data: T[]): Promise<boolean> {
   const collection = API_COLLECTION_MAP[localKey];
-  if (!collection || !Array.isArray(data) || data.length === 0) return;
-  apiPost<{ upserted: number } | null>(`/nstp/batch/${collection}`, data, null);
+  if (!collection || !Array.isArray(data) || data.length === 0) return true;
+  const result = await apiPost<{ upserted: number } | null>(`/nstp/batch/${collection}`, data, null);
+  return result !== null;
 }
 
-function syncSingleToApi<T>(localKey: string, data: T): void {
+async function syncSingleToApi<T>(localKey: string, data: T): Promise<boolean> {
   const collection = API_COLLECTION_MAP[localKey];
-  if (!collection) return;
-  apiPost<T | null>(`/nstp/${collection}`, data, null);
+  if (!collection) return true;
+  const result = await apiPost<T | null>(`/nstp/${collection}`, data, null);
+  return result !== null;
+}
+
+function addToPendingSync(localKey: string, data: unknown[]) {
+  const queue = safeJsonParse<PendingSyncItem[]>(localStorage.getItem(PENDING_SYNC_KEY), []);
+  const existing = queue.findIndex((item) => item.localKey === localKey);
+  const entry: PendingSyncItem = { localKey, data, timestamp: new Date().toISOString() };
+  if (existing >= 0) queue[existing] = entry;
+  else queue.push(entry);
+  localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(queue));
+}
+
+export async function retryPendingSyncs(): Promise<number> {
+  const queue = safeJsonParse<PendingSyncItem[]>(localStorage.getItem(PENDING_SYNC_KEY), []);
+  if (queue.length === 0) return 0;
+  let synced = 0;
+  const remaining: PendingSyncItem[] = [];
+  for (const item of queue) {
+    const ok = await syncToApi(item.localKey, item.data);
+    if (ok) synced++;
+    else remaining.push(item);
+  }
+  if (remaining.length > 0) localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(remaining));
+  else localStorage.removeItem(PENDING_SYNC_KEY);
+  return synced;
 }
 
 export async function syncCollectionFromApi(localKey: string): Promise<void> {
@@ -241,10 +284,12 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
       const mapped: NstpAccount[] = apiAccounts.map((a: any) => {
         const d = (a.data || {}) as Record<string, unknown>;
         const ip = (a.instructorProfile || {}) as Record<string, unknown>;
+        const cp = (a.coordinatorProfile || {}) as Record<string, unknown>;
         return {
           id: a.id, name: a.name || '', email: a.email || '', password: '',
           role: (a.role || 'student').toLowerCase() as NstpRole,
-          employeeNumber: (ip.employeeNumber as string) || (d.employeeNumber as string) || '',
+          employeeNumber: (ip.employeeNumber as string) || (cp.employeeNumber as string) || (d.employeeNumber as string) || '',
+          componentId: (cp.componentId as string) || (d.componentId as string) || '',
           studentId: (d.studentId as string) || '',
           surname: d.surname as string, firstName: d.firstName as string,
           middleName: d.middleName as string, school: d.school as string,
@@ -264,8 +309,11 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
         const merged = [...existing];
         for (const m of mapped) {
           const idx = merged.findIndex((x) => x.email?.toLowerCase() === m.email?.toLowerCase());
-          if (idx >= 0) merged[idx] = { ...merged[idx], ...m, password: merged[idx].password };
-          else merged.unshift(m);
+          if (idx >= 0) {
+            const existingVer = (merged[idx] as any)._version || 0;
+            const incomingVer = (m as any)._version || 0;
+            merged[idx] = incomingVer >= existingVer ? { ...merged[idx], ...m, password: merged[idx].password } : merged[idx];
+          } else merged.unshift(m);
         }
         localStorage.setItem(localKey, JSON.stringify(merged));
       }
@@ -307,8 +355,11 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
         const merged = [...existing];
         for (const m of mapped) {
           const idx = merged.findIndex((x) => x.studentId === m.studentId || x.email?.toLowerCase() === m.email?.toLowerCase());
-          if (idx >= 0) merged[idx] = m;
-          else merged.unshift(m);
+          if (idx >= 0) {
+            const existingVer = (merged[idx] as any)._version || 0;
+            const incomingVer = (m as any)._version || 0;
+            merged[idx] = incomingVer >= existingVer ? m : merged[idx];
+          } else merged.unshift(m);
         }
         localStorage.setItem(localKey, JSON.stringify(merged));
       }
@@ -321,8 +372,11 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
     const merged = [...existing];
     for (const item of apiData) {
       const idx = merged.findIndex((x: any) => x.id === item.id);
-      if (idx >= 0) merged[idx] = item;
-      else merged.unshift(item);
+      if (idx >= 0) {
+        const existingVer = (merged[idx] as any)._version || 0;
+        const incomingVer = (item as any)._version || 0;
+        merged[idx] = incomingVer >= existingVer ? item : merged[idx];
+      } else merged.unshift(item);
     }
     localStorage.setItem(localKey, JSON.stringify(merged));
   }
@@ -431,6 +485,7 @@ export type QualifyingExamResult = {
   rank?: number;
   status?: 'assigned-preferred' | 'assigned-alternative' | 'manual-approved' | 'filled-preferred' | 'filled-alternative' | 'waitlisted' | 'not-qualified';
   adminOverride?: boolean;
+  _version?: number;
 };
 
 export type ComponentApplicationState = {
@@ -438,6 +493,7 @@ export type ComponentApplicationState = {
   qualifyingScore: number;
   applicationClosed: boolean;
   updatedAt?: string;
+  _version?: number;
 };
 
 export const DEFAULT_COMPONENT_APPLICATION_STATE: ComponentApplicationState = {
@@ -466,32 +522,15 @@ export function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T
   }
 }
 
-const DEFAULT_ACCOUNTS: NstpAccount[] = [
-  {
-    id: 'admin-1',
-    name: 'Administrator',
-    email: 'bipsu_nstp_admin',
-    password: 'bipsu_nstp2026',
-    role: 'admin',
-  },
-];
+function incrementVersions<T extends { _version?: number }>(records: T[]): T[] {
+  return records.map((r) => ({ ...r, _version: (r._version || 0) + 1 }));
+}
 
 export function ensureNstpSeedData() {
   if (typeof window === 'undefined') return;
 
   if (!localStorage.getItem(ACCOUNTS_KEY)) {
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(DEFAULT_ACCOUNTS));
-  } else {
-    const stored = safeJsonParse<NstpAccount[]>(localStorage.getItem(ACCOUNTS_KEY), []);
-    const defaultAdmin = DEFAULT_ACCOUNTS[0];
-    const adminIndex = stored.findIndex((a) => a.role === 'admin');
-    if (adminIndex >= 0) {
-      stored[adminIndex] = { ...stored[adminIndex], email: defaultAdmin.email, password: defaultAdmin.password };
-      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(stored));
-    } else {
-      stored.unshift(defaultAdmin);
-      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(stored));
-    }
+    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify([]));
   }
   if (!localStorage.getItem(ASSESSMENTS_KEY)) {
     localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify([]));
@@ -526,11 +565,14 @@ export function loadAccounts(): NstpAccount[] {
   return safeJsonParse<NstpAccount[]>(localStorage.getItem(ACCOUNTS_KEY), []);
 }
 
-export function saveAccounts(accounts: NstpAccount[]) {
-  if (typeof window === 'undefined') return;
-  syncToApi(ACCOUNTS_KEY, accounts);
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+export async function saveAccounts(accounts: NstpAccount[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const versioned = incrementVersions(accounts);
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-accounts-updated'));
+  const ok = await syncToApi(ACCOUNTS_KEY, versioned);
+  if (!ok) addToPendingSync(ACCOUNTS_KEY, versioned);
+  return ok;
 }
 
 export function loadAssessments(): NstpAssessment[] {
@@ -539,10 +581,14 @@ export function loadAssessments(): NstpAssessment[] {
   return safeJsonParse<NstpAssessment[]>(localStorage.getItem(ASSESSMENTS_KEY), []);
 }
 
-export function saveAssessments(assessments: NstpAssessment[]) {
-  if (typeof window === 'undefined') return;
-  syncToApi(ASSESSMENTS_KEY, assessments);
-  localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify(assessments));
+export async function saveAssessments(assessments: NstpAssessment[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const versioned = incrementVersions(assessments);
+  localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify(versioned));
+  window.dispatchEvent(new CustomEvent('nstp-assessments-updated'));
+  const ok = await syncToApi(ASSESSMENTS_KEY, versioned);
+  if (!ok) addToPendingSync(ASSESSMENTS_KEY, versioned);
+  return ok;
 }
 
 export function loadModules(): NstpModule[] {
@@ -551,10 +597,14 @@ export function loadModules(): NstpModule[] {
   return safeJsonParse<NstpModule[]>(localStorage.getItem(MODULES_KEY), []);
 }
 
-export function saveModules(modules: NstpModule[]) {
-  if (typeof window === 'undefined') return;
-  syncToApi(MODULES_KEY, modules);
-  localStorage.setItem(MODULES_KEY, JSON.stringify(modules));
+export async function saveModules(modules: NstpModule[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const versioned = incrementVersions(modules);
+  localStorage.setItem(MODULES_KEY, JSON.stringify(versioned));
+  window.dispatchEvent(new CustomEvent('nstp-modules-updated'));
+  const ok = await syncToApi(MODULES_KEY, versioned);
+  if (!ok) addToPendingSync(MODULES_KEY, versioned);
+  return ok;
 }
 
 export function loadStudents(): NstpStudent[] {
@@ -563,11 +613,14 @@ export function loadStudents(): NstpStudent[] {
   return safeJsonParse<NstpStudent[]>(localStorage.getItem(STUDENTS_KEY), []);
 }
 
-export function saveStudents(students: NstpStudent[]) {
-  if (typeof window === 'undefined') return;
-  syncToApi(STUDENTS_KEY, students);
-  localStorage.setItem(STUDENTS_KEY, JSON.stringify(students));
+export async function saveStudents(students: NstpStudent[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const versioned = incrementVersions(students);
+  localStorage.setItem(STUDENTS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-students-updated'));
+  const ok = await syncToApi(STUDENTS_KEY, versioned);
+  if (!ok) addToPendingSync(STUDENTS_KEY, versioned);
+  return ok;
 }
 
 export function loadComponentApplicationState(): ComponentApplicationState {
@@ -586,11 +639,14 @@ export function loadComponentApplicationState(): ComponentApplicationState {
   };
 }
 
-export function saveComponentApplicationState(state: ComponentApplicationState) {
-  if (typeof window === 'undefined') return;
-  syncToApi(COMPONENT_APPLICATION_STATE_KEY, [state]);
-  localStorage.setItem(COMPONENT_APPLICATION_STATE_KEY, JSON.stringify(state));
+export async function saveComponentApplicationState(state: ComponentApplicationState): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const records = incrementVersions([state]);
+  localStorage.setItem(COMPONENT_APPLICATION_STATE_KEY, JSON.stringify(records[0]));
   window.dispatchEvent(new CustomEvent('nstp-component-state-updated'));
+  const ok = await syncToApi(COMPONENT_APPLICATION_STATE_KEY, records);
+  if (!ok) addToPendingSync(COMPONENT_APPLICATION_STATE_KEY, records);
+  return ok;
 }
 
 export function loadQualifyingExamResults(): QualifyingExamResult[] {
@@ -598,11 +654,14 @@ export function loadQualifyingExamResults(): QualifyingExamResult[] {
   return safeJsonParse<QualifyingExamResult[]>(localStorage.getItem(QUALIFYING_RESULTS_KEY), []);
 }
 
-export function saveQualifyingExamResults(results: QualifyingExamResult[]) {
-  if (typeof window === 'undefined') return;
-  syncToApi(QUALIFYING_RESULTS_KEY, results);
-  localStorage.setItem(QUALIFYING_RESULTS_KEY, JSON.stringify(results));
+export async function saveQualifyingExamResults(results: QualifyingExamResult[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const versioned = incrementVersions(results);
+  localStorage.setItem(QUALIFYING_RESULTS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-qualifying-results-updated'));
+  const ok = await syncToApi(QUALIFYING_RESULTS_KEY, versioned);
+  if (!ok) addToPendingSync(QUALIFYING_RESULTS_KEY, versioned);
+  return ok;
 }
 
 const hasStudentPortalAccess = (result: QualifyingExamResult) => {
@@ -698,10 +757,14 @@ export function loadPendingStudentRegistrations(): PendingStudentRegistration[] 
   return safeJsonParse<PendingStudentRegistration[]>(localStorage.getItem(PENDING_REGISTRATIONS_KEY), []);
 }
 
-export function savePendingStudentRegistrations(registrations: PendingStudentRegistration[]) {
-  if (typeof window === 'undefined') return;
-  syncToApi(PENDING_REGISTRATIONS_KEY, registrations);
-  localStorage.setItem(PENDING_REGISTRATIONS_KEY, JSON.stringify(registrations));
+export async function savePendingStudentRegistrations(registrations: PendingStudentRegistration[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const versioned = incrementVersions(registrations);
+  localStorage.setItem(PENDING_REGISTRATIONS_KEY, JSON.stringify(versioned));
+  window.dispatchEvent(new CustomEvent('nstp-pending-registrations-updated'));
+  const ok = await syncToApi(PENDING_REGISTRATIONS_KEY, versioned);
+  if (!ok) addToPendingSync(PENDING_REGISTRATIONS_KEY, versioned);
+  return ok;
 }
 
 export function loadGradeRecords(): NstpGradeRecord[] {
@@ -710,10 +773,14 @@ export function loadGradeRecords(): NstpGradeRecord[] {
   return safeJsonParse<NstpGradeRecord[]>(localStorage.getItem(GRADES_KEY), []);
 }
 
-export function saveGradeRecords(records: NstpGradeRecord[]) {
-  if (typeof window === 'undefined') return;
-  syncToApi(GRADES_KEY, records);
-  localStorage.setItem(GRADES_KEY, JSON.stringify(records));
+export async function saveGradeRecords(records: NstpGradeRecord[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const versioned = incrementVersions(records);
+  localStorage.setItem(GRADES_KEY, JSON.stringify(versioned));
+  window.dispatchEvent(new CustomEvent('nstp-grades-updated'));
+  const ok = await syncToApi(GRADES_KEY, versioned);
+  if (!ok) addToPendingSync(GRADES_KEY, versioned);
+  return ok;
 }
 
 export function loadAttendanceRecords(): NstpAttendanceRecord[] {
@@ -721,10 +788,14 @@ export function loadAttendanceRecords(): NstpAttendanceRecord[] {
   return safeJsonParse<NstpAttendanceRecord[]>(localStorage.getItem(ATTENDANCE_RECORDS_KEY), []);
 }
 
-export function saveAttendanceRecords(records: NstpAttendanceRecord[]) {
-  if (typeof window === 'undefined') return;
-  syncToApi(ATTENDANCE_RECORDS_KEY, records);
-  localStorage.setItem(ATTENDANCE_RECORDS_KEY, JSON.stringify(records));
+export async function saveAttendanceRecords(records: NstpAttendanceRecord[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const versioned = incrementVersions(records);
+  localStorage.setItem(ATTENDANCE_RECORDS_KEY, JSON.stringify(versioned));
+  window.dispatchEvent(new CustomEvent('nstp-attendance-records-updated'));
+  const ok = await syncToApi(ATTENDANCE_RECORDS_KEY, versioned);
+  if (!ok) addToPendingSync(ATTENDANCE_RECORDS_KEY, versioned);
+  return ok;
 }
 
 export function loadAttendanceSessions(): NstpAttendanceSession[] {
@@ -732,10 +803,14 @@ export function loadAttendanceSessions(): NstpAttendanceSession[] {
   return safeJsonParse<NstpAttendanceSession[]>(localStorage.getItem(ATTENDANCE_SESSIONS_KEY), []);
 }
 
-export function saveAttendanceSessions(sessions: NstpAttendanceSession[]) {
-  if (typeof window === 'undefined') return;
-  syncToApi(ATTENDANCE_SESSIONS_KEY, sessions);
-  localStorage.setItem(ATTENDANCE_SESSIONS_KEY, JSON.stringify(sessions));
+export async function saveAttendanceSessions(sessions: NstpAttendanceSession[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const versioned = incrementVersions(sessions);
+  localStorage.setItem(ATTENDANCE_SESSIONS_KEY, JSON.stringify(versioned));
+  window.dispatchEvent(new CustomEvent('nstp-attendance-sessions-updated'));
+  const ok = await syncToApi(ATTENDANCE_SESSIONS_KEY, versioned);
+  if (!ok) addToPendingSync(ATTENDANCE_SESSIONS_KEY, versioned);
+  return ok;
 }
 
 export function loadTrainingGroups(): NstpTrainingGroup[] {
@@ -744,11 +819,14 @@ export function loadTrainingGroups(): NstpTrainingGroup[] {
   return safeJsonParse<NstpTrainingGroup[]>(localStorage.getItem(TRAINING_GROUPS_KEY), []);
 }
 
-export function saveTrainingGroups(groups: NstpTrainingGroup[]) {
-  if (typeof window === 'undefined') return;
-  syncToApi(TRAINING_GROUPS_KEY, groups);
-  localStorage.setItem(TRAINING_GROUPS_KEY, JSON.stringify(groups));
+export async function saveTrainingGroups(groups: NstpTrainingGroup[]): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const versioned = incrementVersions(groups);
+  localStorage.setItem(TRAINING_GROUPS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-training-groups-updated'));
+  const ok = await syncToApi(TRAINING_GROUPS_KEY, versioned);
+  if (!ok) addToPendingSync(TRAINING_GROUPS_KEY, versioned);
+  return ok;
 }
 
 export function createEmptyStudent(): NstpStudent {
@@ -814,7 +892,7 @@ export function createEmptyAssessment(owner: NstpAccount, overrides: Partial<Nst
     questionsToShow: overrides.questionsToShow || questions.length,
     ownerId: owner.id,
     ownerName: owner.name,
-    ownerRole: owner.role === 'facilitator' ? 'facilitator' : 'admin',
+    ownerRole: owner.role === 'facilitator' ? 'facilitator' : owner.role === 'coordinator' ? 'coordinator' : 'admin',
     status: overrides.status || 'draft',
     updatedAt: now(),
     questions,

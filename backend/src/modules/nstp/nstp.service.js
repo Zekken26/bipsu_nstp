@@ -32,6 +32,7 @@ const fallback = {
 const toUserRole = (role) => {
   const normalized = String(role || '').toLowerCase();
   if (normalized === 'admin') return 'ADMIN';
+  if (normalized === 'coordinator') return 'COORDINATOR';
   if (normalized === 'instructor' || normalized === 'facilitator' || normalized === 'speaker') return 'INSTRUCTOR';
   return 'STUDENT';
 };
@@ -58,7 +59,7 @@ export async function listCollection(name) {
   if (name === 'accounts') {
     return withFallback(name, async () => prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { instructorProfile: true },
+      include: { instructorProfile: true, coordinatorProfile: true },
     }));
   }
 
@@ -160,6 +161,24 @@ export async function upsertCollectionRecord(name, lookup, payload) {
             employeeNumber: profileData.employeeNumber || `fac-${user.id.slice(0, 8)}`,
             department: profileData.department || null,
             title: profileData.title || null,
+          },
+        });
+      }
+
+      if (userRole === 'COORDINATOR') {
+        const component = profileData.componentId
+          ? await prisma.nSTPComponent.findUnique({ where: { id: profileData.componentId } })
+          : null;
+        await prisma.coordinatorProfile.upsert({
+          where: { userId: user.id },
+          update: {
+            employeeNumber: profileData.employeeNumber || `coord-${user.id.slice(0, 8)}`,
+            componentId: component?.id || null,
+          },
+          create: {
+            userId: user.id,
+            employeeNumber: profileData.employeeNumber || `coord-${user.id.slice(0, 8)}`,
+            componentId: component?.id || null,
           },
         });
       }

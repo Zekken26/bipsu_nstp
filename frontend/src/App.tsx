@@ -11,17 +11,19 @@ import AssessmentsPage from './pages/AssessmentsPage';
 import ProgressTracker from './features/progress/pages/ProgressTracker';
 import AdminDashboard from './features/admin/pages/AdminDashboard';
 import FacilitatorDashboard from './features/facilitator/pages/FacilitatorDashboard';
+import CoordinatorDashboard from './features/coordinator/pages/CoordinatorDashboard';
 import AnnouncementsCenter from './features/announcements/pages/AnnouncementsCenter';
 import ReportsCenter from './pages/ReportsPage';
 import GradesPage from './pages/GradesPage';
 import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
-import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi } from './data/nstpData';
+import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi, syncAllFromApi, syncCollectionFromApi, retryPendingSyncs } from './data/nstpData';
+import { connectSocket, disconnectSocket } from './services/socketClient';
 import { toast, Toaster } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
 import SectionErrorBoundary from './components/common/SectionErrorBoundary';
 
-type ShellSection = 'overview' | 'modules' | 'assessments' | 'progress' | 'grades' | 'admin' | 'facilitator' | 'announcements' | 'reports';
+type ShellSection = 'overview' | 'modules' | 'assessments' | 'progress' | 'grades' | 'admin' | 'facilitator' | 'coordinator' | 'announcements' | 'reports';
 type AccountUtility = 'profile' | 'settings' | 'security' | 'accessibility' | 'activity' | 'help';
 type AccountPreferences = {
   defaultLanding: ShellSection;
@@ -151,7 +153,13 @@ const NAV_ITEMS: Record<string, Array<{ id: ShellSection; label: string; icon: a
   facilitator: [
     { id: 'facilitator', label: 'Dashboard', icon: Mic2 },
     { id: 'modules', label: 'Modules', icon: BookOpen },
-    { id: 'assessments', label: 'Assessments', icon: ClipboardList },
+    { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'announcements', label: 'Announcements', icon: Bell },
+  ],
+  coordinator: [
+    { id: 'overview', label: 'Dashboard', icon: LayoutGrid },
+    { id: 'coordinator', label: 'Facilitators', icon: Users },
+    { id: 'modules', label: 'Modules', icon: BookOpen },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'announcements', label: 'Announcements', icon: Bell },
   ],
@@ -168,6 +176,7 @@ export default function App() {
     if (!parsedUser) return 'overview';
     if (parsedUser.role === 'admin') return 'overview';
     if (parsedUser.role === 'facilitator') return 'facilitator';
+    if (parsedUser.role === 'coordinator') return 'overview';
     return 'overview';
   });
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
@@ -188,7 +197,7 @@ export default function App() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [headerHint, setHeaderHint] = useState<string | null>(null);
-  const [notices, setNotices] = useState<Array<{ id: string; title: string; message: string; audience: 'all' | 'student' | 'admin' | 'facilitator'; priority: 'normal' | 'high'; createdBy: string; createdAt: string }>>([]);
+  const [notices, setNotices] = useState<Array<{ id: string; title: string; message: string; audience: 'all' | 'student' | 'admin' | 'coordinator' | 'facilitator'; priority: 'normal' | 'high'; createdBy: string; createdAt: string }>>([]);
   const [readNoticeIds, setReadNoticeIds] = useState<string[]>([]);
   const [authSplash, setAuthSplash] = useState<AuthSplashState>({ visible: false, mode: 'login' });
   const [isAuthTransitioning, setIsAuthTransitioning] = useState(false);
@@ -228,6 +237,8 @@ export default function App() {
           setActiveSection('overview');
         } else if (nextUser.role === 'facilitator') {
           setActiveSection('facilitator');
+        } else if (nextUser.role === 'coordinator') {
+          setActiveSection('overview');
         } else {
           setActiveSection('overview');
         }
@@ -244,14 +255,24 @@ export default function App() {
   };
 
   useEffect(() => {
+    let syncInterval: ReturnType<typeof setInterval> | null = null;
     async function init() {
       const raw = localStorage.getItem('nstpUser');
       if (raw) {
         await initializeFromApi();
+        await retryPendingSyncs();
+
+        syncInterval = setInterval(async () => {
+          await syncAllFromApi();
+          await retryPendingSyncs();
+        }, 5 * 60 * 1000);
       }
       setDataReady(true);
     }
     init();
+    return () => {
+      if (syncInterval !== null) clearInterval(syncInterval);
+    };
   }, [queryClient]);
 
   useEffect(() => {
@@ -264,6 +285,44 @@ export default function App() {
     return () => {
       window.removeEventListener('auth:expired', handleAuthExpired);
     };
+  }, []);
+
+  useEffect(() => {
+    if (user?.token) {
+      connectSocket(user.token);
+    } else {
+      disconnectSocket();
+    }
+    return () => {
+      disconnectSocket();
+    };
+  }, [user?.token]);
+
+  useEffect(() => {
+    const handleSocketSync = async (event: Event) => {
+      const collection = (event as CustomEvent).detail as string;
+      const apiMap: Record<string, string> = {
+        accounts: 'nstp-accounts',
+        modules: 'nstp-module-library',
+        assessments: 'nstp-assessment-library',
+        students: 'nstp-student-roster',
+        grades: 'nstp-grade-records',
+        'pending-registrations': 'nstp-pending-student-registrations',
+        'training-groups': 'nstp-training-groups',
+        'attendance-records': 'nstp-attendance-records',
+        'attendance-sessions': 'nstp-attendance-sessions',
+        'qualifying-results': 'qualifyingExamResults',
+        'component-state': 'nstp-component-application-state',
+        'audit-log': 'nstp-admin-audit-log',
+      };
+      const localKey = apiMap[collection];
+      if (localKey) {
+        await syncCollectionFromApi(localKey);
+        window.dispatchEvent(new CustomEvent(`${localKey}-synced`));
+      }
+    };
+    window.addEventListener('nstp-socket-sync', handleSocketSync);
+    return () => window.removeEventListener('nstp-socket-sync', handleSocketSync);
   }, []);
 
   useEffect(() => {
@@ -437,7 +496,7 @@ export default function App() {
 
     const noticeKey = 'nstp-system-notices';
     const readKey = `nstp-notice-read-${user.id}`;
-    const savedNotices = safeJsonParse<Array<{ id: string; title: string; message: string; audience: 'all' | 'student' | 'admin' | 'facilitator'; priority: 'normal' | 'high'; createdBy: string; createdAt: string }>>(localStorage.getItem(noticeKey), []);
+    const savedNotices = safeJsonParse<Array<{ id: string; title: string; message: string; audience: 'all' | 'student' | 'admin' | 'coordinator' | 'facilitator'; priority: 'normal' | 'high'; createdBy: string; createdAt: string }>>(localStorage.getItem(noticeKey), []);
     const savedReads = safeJsonParse<string[]>(localStorage.getItem(readKey), []);
 
     setNotices(savedNotices || []);
@@ -672,10 +731,17 @@ export default function App() {
       { label: 'Reports Center', detail: 'Analytics and exports', run: () => { setActiveSection('reports'); setHeaderHint('Opened Reports Center'); setWorkspaceMenuOpen(false); } },
       { label: 'Notice Center', detail: 'Announcements and alerts', run: () => { setActiveSection('announcements'); setHeaderHint('Opened Notice Center'); setWorkspaceMenuOpen(false); } },
     ]
+    : user.role === 'coordinator'
+      ? [
+        { label: 'Coordinator Dashboard', detail: 'Component overview and tools', run: () => { setActiveSection('overview'); setHeaderHint('Opened Coordinator Dashboard'); setWorkspaceMenuOpen(false); } },
+        { label: 'Module Library', detail: 'Create and manage modules', run: () => { setActiveSection('modules'); setHeaderHint('Opened Module Library'); setWorkspaceMenuOpen(false); } },
+        { label: 'Facilitator Accounts', detail: 'Manage component facilitators', run: () => { setActiveSection('coordinator'); setHeaderHint('Opened Facilitator Accounts'); setWorkspaceMenuOpen(false); } },
+        { label: 'Reports Center', detail: 'Component analytics', run: () => { setActiveSection('reports'); setHeaderHint('Opened Reports Center'); setWorkspaceMenuOpen(false); } },
+        { label: 'Notice Center', detail: 'Announcements and alerts', run: () => { setActiveSection('announcements'); setHeaderHint('Opened Notice Center'); setWorkspaceMenuOpen(false); } },
+      ]
     : user.role === 'facilitator'
       ? [
-        { label: 'Facilitator Dashboard', detail: 'Lecture and assessment overview', run: () => { setActiveSection('facilitator'); setHeaderHint('Opened Facilitator Dashboard'); setWorkspaceMenuOpen(false); } },
-        { label: 'Assessment Studio', detail: 'Create questions and answer keys', run: () => { setActiveSection('assessments'); setHeaderHint('Opened Assessment Studio'); setWorkspaceMenuOpen(false); } },
+        { label: 'Facilitator Dashboard', detail: 'Attendance and grade overview', run: () => { setActiveSection('facilitator'); setHeaderHint('Opened Facilitator Dashboard'); setWorkspaceMenuOpen(false); } },
         { label: 'Notice Center', detail: 'Read program updates', run: () => { setActiveSection('announcements'); setHeaderHint('Opened Notice Center'); setWorkspaceMenuOpen(false); } },
       ]
       : [
@@ -774,9 +840,11 @@ export default function App() {
   const refreshPermissionCheck = () => {
     const roleSummary = user.role === 'admin'
       ? 'Full administrative permissions confirmed.'
-      : user.role === 'facilitator'
-        ? 'Facilitator permissions confirmed for lecture and assessment publishing.'
-        : 'Student permissions confirmed for learning, assessments, progress, and grades.';
+      : user.role === 'coordinator'
+        ? 'Coordinator permissions confirmed for module and facilitator management.'
+        : user.role === 'facilitator'
+          ? 'Facilitator permissions confirmed for attendance and grade management.'
+          : 'Student permissions confirmed for learning, assessments, progress, and grades.';
     setHeaderHint(roleSummary);
     recordAccountActivity('Permission check refreshed', roleSummary);
   };
@@ -848,10 +916,16 @@ export default function App() {
         { label: 'Notice Center', keywords: ['notice', 'notices', 'announcement', 'announcements', 'alert'], run: () => { setActiveSection('announcements'); setHeaderHint('Opened Notice Center'); } },
       ]
       : []),
+    ...(user.role === 'coordinator'
+      ? [
+        { label: 'Module Library', keywords: ['module', 'modules', 'lesson', 'learning'], run: () => { setActiveSection('modules'); setHeaderHint('Opened Module Library'); } },
+        { label: 'Facilitator Accounts', keywords: ['facilitator', 'facilitators', 'accounts', 'manage'], run: () => { setActiveSection('coordinator'); setHeaderHint('Opened Facilitator Accounts'); } },
+        { label: 'Reports Center', keywords: ['report', 'reports', 'analytics', 'chart'], run: () => { setActiveSection('reports'); setHeaderHint('Opened Reports Center'); } },
+      ]
+      : []),
     ...(user.role === 'facilitator'
       ? [
-        { label: 'Lecture Upload', keywords: ['lecture', 'upload', 'video', 'lesson'], run: () => { setActiveSection('facilitator'); setHeaderHint('Opened Lecture Upload'); } },
-        { label: 'Answer Keys', keywords: ['answer', 'answer key', 'answers', 'keys', 'quiz', 'assessment'], run: () => { setActiveSection('assessments'); setHeaderHint('Opened Answer Key Manager'); } },
+        { label: 'Notice Center', keywords: ['notice', 'announcement'], run: () => { setActiveSection('announcements'); setHeaderHint('Opened Notice Center'); } },
       ]
       : []),
     ...(user.role === 'student'
@@ -915,11 +989,17 @@ export default function App() {
       return <SectionErrorBoundary name="Admin Dashboard"><AdminDashboard embedded initialView={activeSection === 'admin' ? adminInitialView : 'overview'} onNavigateApp={(target) => setActiveSection(target as ShellSection)} onLogout={handleLogout} /></SectionErrorBoundary>;
     }
 
+    if (user.role === 'coordinator') {
+      if (activeSection === 'reports') return <SectionErrorBoundary name="Reports"><ReportsCenter user={user} /></SectionErrorBoundary>;
+      if (activeSection === 'announcements') return <SectionErrorBoundary name="Announcements"><AnnouncementsCenter user={user} /></SectionErrorBoundary>;
+      if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="admin" onBack={() => setActiveSection('overview')} /></SectionErrorBoundary>;
+      return <SectionErrorBoundary name="Coordinator Dashboard"><CoordinatorDashboard embedded user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} /></SectionErrorBoundary>;
+    }
+
     if (user.role === 'facilitator') {
       if (activeSection === 'reports') return <SectionErrorBoundary name="Reports"><ReportsCenter user={user} /></SectionErrorBoundary>;
       if (activeSection === 'announcements') return <SectionErrorBoundary name="Announcements"><AnnouncementsCenter user={user} /></SectionErrorBoundary>;
       if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="student" onBack={() => setActiveSection('facilitator')} /></SectionErrorBoundary>;
-      if (activeSection === 'assessments') return <SectionErrorBoundary name="Assessments"><AssessmentsPage user={user} onBack={() => setActiveSection('facilitator')} /></SectionErrorBoundary>;
       return <SectionErrorBoundary name="Facilitator Dashboard"><FacilitatorDashboard embedded user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} /></SectionErrorBoundary>;
     }
 
@@ -1023,6 +1103,17 @@ export default function App() {
     return (
       <>
         <AdminDashboard initialView={adminView as any} onNavigateApp={(target) => setActiveSection(target as ShellSection)} onLogout={handleLogout} />
+        {showLogoutModal && renderLogoutModal()}
+        {isBootSplashVisible && <AuthSplash mode="boot" userName={user?.name} />}
+        {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
+      </>
+    );
+  }
+
+  if (user.role === 'coordinator') {
+    return (
+      <>
+        <CoordinatorDashboard user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} />
         {showLogoutModal && renderLogoutModal()}
         {isBootSplashVisible && <AuthSplash mode="boot" userName={user?.name} />}
         {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}

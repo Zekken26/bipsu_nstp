@@ -2,14 +2,20 @@ import { createApp } from './app.js';
 import { env, validateEnv } from './config/env.js';
 import prisma from './db/prisma.js';
 import { logger } from './utils/logger.js';
+import { setupWebSocket } from './websocket.js';
+import { seedAdmin } from './seed.js';
 
 validateEnv();
 
+seedAdmin().then(() => logger.info('Admin seeding complete.'));
+
 const app = createApp();
 
-const server = app.listen(env.port, () => {
-  logger.info(`NSTP backend listening on http://localhost:${env.port}`);
+const server = app.listen(env.port, '0.0.0.0', () => {
+  logger.info(`NSTP backend listening on http://0.0.0.0:${env.port}`);
 });
+
+setupWebSocket(server);
 
 async function shutdown(signal) {
   logger.info(`Received ${signal}. Shutting down backend.`);

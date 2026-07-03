@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Users, BookOpen, TrendingUp, Award, Search, ClipboardList, TriangleAlert, Siren, Target, Plus, Save, Pencil, Trash2, Mail, BarChart3, GraduationCap, BadgeCheck, X, UserRoundPlus, Eye, FileDown, FileUp, History, ArrowLeft, Bell, Building2, CalendarDays, Check, ChevronDown, Home, Settings, SunMedium, UserCheck, Printer, GripVertical, Menu, UserCog, ShieldCheck, Loader2 } from 'lucide-react';
+import { Users, BookOpen, TrendingUp, Award, Search, ClipboardList, TriangleAlert, Siren, Target, Plus, Save, Pencil, Trash2, Mail, BarChart3, GraduationCap, BadgeCheck, X, UserRoundPlus, Eye, EyeOff, FileDown, FileUp, History, ArrowLeft, Bell, Building2, CalendarDays, Check, ChevronDown, Home, Settings, SunMedium, UserCheck, Printer, GripVertical, Menu, UserCog, ShieldCheck, Loader2, KeyRound } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, CartesianGrid, XAxis, YAxis, Bar, LineChart, Line, Legend } from 'recharts';
 import ComponentAssignment from '../components/ComponentAssignment';
 import AssessmentManager from '../../assessments/components/AssessmentManager';
 import ModulesPage from '../../../pages/ModulesPage';
-import FacilitatorManagement from '../components/FacilitatorManagement';
+
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncToApi, AUDIT_LOG_KEY } from '../../../data/nstpData';
 import { apiPost, apiPut, apiDel } from '../../../services/apiClient';
@@ -126,7 +126,7 @@ const emptyLookup = () => ({
   graduated: 0,
 });
 
-type AdminDashboardView = 'overview' | 'enrollment' | 'students' | 'tools' | 'modules' | 'assessments' | 'facilitators' | 'municipalities' | 'assignments' | 'exports' | 'settings' | 'account';
+type AdminDashboardView = 'overview' | 'enrollment' | 'students' | 'tools' | 'modules' | 'assessments' | 'facilitators' | 'coordinators' | 'municipalities' | 'assignments' | 'exports' | 'settings' | 'account';
 
 type AdminDashboardProps = {
   initialView?: AdminDashboardView;
@@ -236,6 +236,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const publishedAssessmentCount = assessments.filter((assessment) => assessment.status === 'published').length;
   const modules = loadModules();
   const facilitatorAccounts = useMemo(() => loadAccounts().filter((account) => account.role === 'facilitator'), [accountVersion]);
+  const coordinatorAccounts = useMemo(() => loadAccounts().filter((account) => account.role === 'coordinator'), [accountVersion]);
   const currentAdmin = useMemo(() => loadAccounts().find((account) => account.role === 'admin') || null, [accountVersion]);
 
   const persistStudents = (nextStudents: NstpStudent[]) => {
@@ -1883,7 +1884,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     </section>
   );
 
-  if (['overview', 'enrollment', 'students', 'facilitators', 'municipalities', 'modules', 'assessments', 'tools', 'assignments', 'exports', 'settings', 'account'].includes(view)) {
+  if (['overview', 'enrollment', 'students', 'facilitators', 'coordinators', 'municipalities', 'modules', 'assessments', 'tools', 'assignments', 'exports', 'settings', 'account'].includes(view)) {
     return (
       <div className={`${embedded ? 'min-h-0 bg-transparent' : 'min-h-dvh overflow-x-hidden bg-[#f4f8fd]'} text-slate-950 dark:bg-slate-950 dark:text-slate-100`}>
         <div className={embedded ? 'min-h-0' : 'min-h-dvh'}>
@@ -1899,7 +1900,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   items: [
                     { label: 'Dashboard', icon: Home, onClick: () => setView('overview'), active: view === 'overview' },
                     { label: 'Student Approvals', icon: UserCheck, onClick: () => setView('enrollment'), active: view === 'enrollment' },
-                    { label: 'Facilitators', icon: Users, onClick: () => setView('facilitators'), active: view === 'facilitators' },
+                    { label: 'Coordinators', icon: UserCog, onClick: () => setView('coordinators'), active: view === 'coordinators' },
                     { label: 'NSTP Components', icon: Building2, onClick: () => setView('municipalities'), active: view === 'municipalities' },
                     { label: 'Students', icon: GraduationCap, onClick: () => setView('students'), active: view === 'students' },
                     { label: 'Modules', icon: BookOpen, onClick: () => setView('modules'), active: view === 'modules' },
@@ -2266,8 +2267,49 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                       </div>
                     )}
                   </section>
+                ) : view === 'coordinators' ? (
+                  <CoordinatorManagementView
+                    admin={currentAdmin || { id: 'admin-1', name: 'Administrator', email: 'bipsu_nstp_admin', password: '', role: 'admin' }}
+                    coordinators={coordinatorAccounts}
+                    onRefresh={() => setAccountVersion((v) => v + 1)}
+                  />
                 ) : view === 'facilitators' ? (
-                  <FacilitatorManagement admin={(currentAdmin || { id: 'admin-1', name: 'Administrator', email: 'bipsu_nstp_admin', password: '', role: 'admin' }) as NstpAccount} />
+                  <section className="space-y-5">
+                    <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 dark:border-slate-800 lg:flex-row lg:items-end lg:justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Facilitators</p>
+                        <h2 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">Facilitator Overview</h2>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Facilitators are now managed by component coordinators.</p>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                      <table className="w-full min-w-[600px] text-sm">
+                        <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                          <tr>
+                            <th className="px-4 py-3">Name</th>
+                            <th className="px-4 py-3">Email</th>
+                            <th className="px-4 py-3">Municipalities</th>
+                            <th className="px-4 py-3">Students</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {facilitatorAccounts.map((fac) => (
+                            <tr key={fac.id} className="border-t border-slate-100 dark:border-slate-800">
+                              <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{fac.name}</td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{fac.email}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex flex-wrap gap-1">
+                                  {(fac.municipalities || []).slice(0, 3).map((m) => <span key={m} className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{m}</span>)}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{loadStudents().filter((s) => s.facilitatorId === fac.id || fac.municipalities?.includes(s.municipality as BiliranMunicipality)).length}</td>
+                            </tr>
+                          ))}
+                          {facilitatorAccounts.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">No facilitators found.</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
                 ) : view === 'municipalities' ? (
                   <section className="space-y-5">
                     <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 dark:border-slate-800 lg:flex-row lg:items-end lg:justify-between">
@@ -2960,9 +3002,10 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   </section>
                 ) : (
                 <>
-                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                   {[
                     { label: 'Total Students', value: totalStudents.toLocaleString(), detail: 'Enrolled students', icon: Users, tone: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-200' },
+                    { label: 'Coordinators', value: coordinatorAccounts.length, detail: 'Component coordinators', icon: UserCog, tone: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-200' },
                     { label: 'Facilitators', value: facilitatorAccounts.length, detail: 'Active facilitators', icon: Users, tone: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-200' },
                     { label: 'Municipalities', value: BILIRAN_MUNICIPALITIES.length, detail: 'With assigned facilitators', icon: Building2, tone: 'bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-200' },
                     { label: 'Student Approvals', value: pendingRegistrations.length, detail: 'Pending approval', icon: UserCheck, tone: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-200' },
@@ -3112,7 +3155,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { label: 'Create Facilitator', detail: 'Add new facilitator account', icon: Plus, action: () => openQuickAction('facilitator') },
+                      { label: 'Create Coordinator', detail: 'Add new component coordinator', icon: UserCog, action: () => setView('coordinators') },
                       { label: 'Assign Municipalities', detail: 'Manage facilitator assignments', icon: Users, action: () => openQuickAction('municipality') },
                       { label: 'Student Approvals', detail: 'Review pending requests', icon: ClipboardList, action: () => openQuickAction('enrollment'), badge: pendingRegistrations.length },
                       { label: 'Generate Reports', detail: 'Download system reports', icon: FileDown, action: () => openQuickAction('reports') },
@@ -4170,6 +4213,193 @@ function AccountSettingsSection({ profile, onProfileUpdated }: { profile: Record
           </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: NstpAccount; coordinators: NstpAccount[]; onRefresh: () => void }) {
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingCoord, setEditingCoord] = useState<NstpAccount | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const openNew = () => {
+    setEditingCoord({
+      id: `coordinator-${Math.random().toString(36).slice(2, 9)}`,
+      name: '', email: '', password: '', role: 'coordinator',
+      employeeNumber: `COORD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+      contactNumber: '',
+      title: '',
+      component: 'CWTS',
+      municipalities: [],
+    } as NstpAccount);
+    setEditorOpen(true);
+  };
+
+  const openEdit = (c: NstpAccount) => {
+    setEditingCoord({ ...c });
+    setEditorOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!editingCoord) return;
+    setSaveError(null);
+    const next = { ...editingCoord, role: 'coordinator' as const };
+    const allAccounts = loadAccounts();
+    const others = allAccounts.filter((a) => a.role !== 'coordinator');
+    const existing = allAccounts.filter((a) => a.role === 'coordinator');
+    const updated = existing.some((c) => c.id === next.id)
+      ? existing.map((c) => c.id === next.id ? next : c)
+      : [next, ...existing];
+    try {
+      await saveAccounts([...others, ...updated]);
+    } catch {
+      setSaveError('Failed to sync to server, but saved locally.');
+    }
+    setEditorOpen(false);
+    setEditingCoord(null);
+    onRefresh();
+  };
+
+  const handleDelete = async (id: string) => {
+    const allAccounts = loadAccounts();
+    const others = allAccounts.filter((a) => a.role !== 'coordinator');
+    const remaining = allAccounts.filter((a) => a.role === 'coordinator' && a.id !== id);
+    await saveAccounts([...others, ...remaining]);
+    onRefresh();
+  };
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 dark:border-slate-800 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Coordinator Module</p>
+          <h2 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">Coordinator Management</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Create and manage coordinator accounts. Assign each coordinator an NSTP component.</p>
+        </div>
+        <button onClick={openNew} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800">
+          <Plus className="h-4 w-4" /> New Coordinator
+        </button>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <table className="w-full min-w-[700px] text-sm">
+          <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+            <tr>
+              <th className="px-4 py-3">Coordinator</th>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Component</th>
+              <th className="px-4 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {coordinators.map((c) => (
+              <tr key={c.id} className="border-t border-slate-100 hover:bg-blue-50/60 dark:border-slate-800 dark:hover:bg-slate-900">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-10 w-10 place-items-center rounded-full bg-amber-50 text-xs font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+                      {c.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
+                    </span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{c.name}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{c.email}</td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{c.component || 'CWTS'}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-2">
+                    <button onClick={() => openEdit(c)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-700 hover:bg-blue-50 dark:border-slate-700 dark:text-slate-100"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => handleDelete(c.id)} className="grid h-9 w-9 place-items-center rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {coordinators.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">No coordinators found.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {editorOpen && editingCoord && (
+        <div className="fixed inset-0 z-50 grid items-start justify-center overflow-y-auto bg-slate-950/50 px-4 pb-10 pt-10 md:pt-16">
+          <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{editingCoord.id.startsWith('coordinator-') ? 'Create' : 'Edit'} Coordinator</p>
+                <h3 className="text-xl font-semibold text-slate-950 dark:text-white">Coordinator Details</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Set up login credentials and assign an NSTP component and municipalities.</p>
+              </div>
+              <button onClick={() => { setEditorOpen(false); setEditingCoord(null); }} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="grid gap-5 md:grid-cols-2">
+              <label className="block space-y-1.5">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Name</span>
+                <input value={editingCoord.name} onChange={(e) => setEditingCoord({ ...editingCoord, name: e.target.value })} placeholder="Enter coordinator name" className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Title</span>
+                <input value={editingCoord.title || ''} onChange={(e) => setEditingCoord({ ...editingCoord, title: e.target.value })} placeholder="e.g. NSTP Coordinator" className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Email</span>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input value={editingCoord.email} onChange={(e) => setEditingCoord({ ...editingCoord, email: e.target.value })} placeholder="coordinator@bipsu.edu.ph" className="w-full rounded-xl border border-blue-200 px-4 py-3 pl-9 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                </div>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Employee Number</span>
+                <div className="relative">
+                  <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input value={editingCoord.employeeNumber || ''} onChange={(e) => setEditingCoord({ ...editingCoord, employeeNumber: e.target.value })} placeholder="COORD-001" className="w-full rounded-xl border border-blue-200 px-4 py-3 pl-9 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                </div>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Password</span>
+                <div className="relative">
+                  <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input type={showPassword ? 'text' : 'password'} value={editingCoord.password} onChange={(e) => setEditingCoord({ ...editingCoord, password: e.target.value })} placeholder="Enter password" className="w-full rounded-xl border border-blue-200 px-4 py-3 pl-9 pr-12 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                  <button type="button" onClick={() => setShowPassword((p) => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" tabIndex={-1}>
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Contact Number</span>
+                <input value={editingCoord.contactNumber || ''} onChange={(e) => setEditingCoord({ ...editingCoord, contactNumber: e.target.value })} placeholder="09xxxxxxxxx" className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">NSTP Component</span>
+                <select value={editingCoord.component || 'CWTS'} onChange={(e) => setEditingCoord({ ...editingCoord, component: e.target.value as NstpComponent })} className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                  {NSTP_COMPONENTS.map((comp) => <option key={comp} value={comp}>{comp}</option>)}
+                </select>
+              </label>
+              <div className="space-y-1.5 md:col-span-2">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Assigned Municipalities</span>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {BILIRAN_MUNICIPALITIES.map((item) => {
+                    const selected = editingCoord.municipalities?.includes(item) || false;
+                    return (
+                      <label key={item} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${selected ? 'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200' : 'border-blue-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'}`}>
+                        <input type="checkbox" checked={selected} onChange={() => {
+                          const current = editingCoord.municipalities || [];
+                          setEditingCoord({ ...editingCoord, municipalities: selected ? current.filter((m) => m !== item) : [...current, item] });
+                        }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-0 focus:outline-none" />
+                        {item}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            {saveError && <p className="text-sm text-amber-600 dark:text-amber-400">{saveError}</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => { setEditorOpen(false); setEditingCoord(null); }} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">Cancel</button>
+              <button onClick={handleSave} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800"><Save className="h-4 w-4" /> Save Coordinator</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -10,21 +10,18 @@ import {
   ClipboardList,
   Clock,
   Download,
-  FileQuestion,
-  FileVideo,
   LayoutDashboard,
   MapPin,
   Menu,
   Moon,
   Search,
   Settings,
-  Upload,
   UserCheck,
   Users,
   X,
 } from 'lucide-react';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import AssessmentManager from '../../assessments/components/AssessmentManager';
+
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import {
   createEmptyStudent,
@@ -51,13 +48,6 @@ import {
   AttendanceStatus,
 } from '../../../data/nstpData';
 
-type FacilitatorLecture = {
-  id: string;
-  title: string;
-  fileName: string;
-  uploadedAt: string;
-};
-
 const componentColors = ['#10b981', '#2563eb', '#f59e0b', '#8b5cf6', '#06b6d4'];
 const gradeColors = ['#10b981', '#2563eb', '#f59e0b', '#8b5cf6', '#ef4444'];
 
@@ -74,11 +64,10 @@ export default function FacilitatorDashboard({
   onNavigate?: (target: string) => void;
   embedded?: boolean;
 }) {
-  type FacilitatorView = 'dashboard' | 'enrollment-requests' | 'attendance-sheet' | 'grade-book' | 'lecture-uploads' | 'assessment-builder' | 'reports';
+  type FacilitatorView = 'dashboard' | 'enrollment-requests' | 'attendance-sheet' | 'grade-book' | 'modules' | 'reports';
 
   const [view, setView] = useState<FacilitatorView>('dashboard');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [lectures, setLectures] = useState<FacilitatorLecture[]>([]);
   const [students, setStudents] = useState<NstpStudent[]>([]);
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingStudentRegistration[]>([]);
   const [gradeRecords, setGradeRecords] = useState<NstpGradeRecord[]>([]);
@@ -90,21 +79,16 @@ export default function FacilitatorDashboard({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editSessionTitle, setEditSessionTitle] = useState('');
   const [editSessionDate, setEditSessionDate] = useState('');
-  const [lectureTitle, setLectureTitle] = useState('');
   const [search, setSearch] = useState('');
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const storageKey = `nstp-facilitator-lectures-${user.id}`;
 
   useEffect(() => {
-    const saved = localStorage.getItem(storageKey);
-    setLectures(saved ? JSON.parse(saved) : []);
     setStudents(loadStudents());
     setPendingRegistrations(loadPendingStudentRegistrations());
     setGradeRecords(loadGradeRecords());
     setAssessments(loadAssessments());
     setAttendanceRecords(loadAttendanceRecords());
     setAttendanceSessions(loadAttendanceSessions());
-  }, [storageKey]);
+  }, []);
 
   const assignedMunicipalities = user.municipalities || [];
   const scopedStudents = useMemo(
@@ -151,26 +135,7 @@ export default function FacilitatorDashboard({
     .filter((assessment) => assessment.ownerRole === 'facilitator' && (assessment.ownerId === user.id || assessment.ownerId === 'facilitator-1'))
     .slice(0, 4);
 
-  const persistLectures = (nextLectures: FacilitatorLecture[]) => {
-    localStorage.setItem(storageKey, JSON.stringify(nextLectures));
-    setLectures(nextLectures);
-  };
-
-  const handleLectureUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const nextLecture: FacilitatorLecture = {
-      id: `lecture-${Math.random().toString(36).slice(2, 10)}`,
-      title: lectureTitle.trim() || file.name.replace(/\.[^.]+$/, ''),
-      fileName: file.name,
-      uploadedAt: new Date().toISOString(),
-    };
-
-    persistLectures([nextLecture, ...lectures].slice(0, 12));
-    setLectureTitle('');
-    event.target.value = '';
-  };
+  const modules = (() => { try { return JSON.parse(localStorage.getItem('nstp-module-library') || '[]'); } catch { return []; } })();
 
   const approveRegistration = (registration: PendingStudentRegistration) => {
     if (!registration.municipality || !assignedMunicipalities.includes(registration.municipality)) return;
@@ -482,17 +447,14 @@ export default function FacilitatorDashboard({
       ],
     },
     {
-      label: 'Assessments',
+      label: 'Modules',
       items: [
-        { label: 'Assessment Management', icon: FileQuestion, active: view === 'assessment-builder', badge: null, target: 'assessment-builder' as FacilitatorView },
-        { label: 'Lecture Uploads', icon: FileVideo, active: view === 'lecture-uploads', badge: lectures.length || null, target: 'lecture-uploads' as FacilitatorView },
-        { label: 'Question Banks', icon: BookOpen, active: view === 'assessment-builder', badge: null, target: 'assessment-builder' as FacilitatorView },
+        { label: 'Module Library', icon: BookOpen, active: view === 'modules', badge: null, target: 'modules' as FacilitatorView },
       ],
     },
     {
       label: 'Reports',
       items: [
-        { label: 'Grade Book', icon: ClipboardList, active: view === 'grade-book', badge: null, target: 'grade-book' as FacilitatorView },
         { label: 'Reports', icon: BarChart3, active: view === 'reports', badge: null, target: 'reports' as FacilitatorView },
       ],
     },
@@ -731,7 +693,7 @@ export default function FacilitatorDashboard({
                   <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Recent Assessments</h2>
-                      <button onClick={() => setView('assessment-builder')} className="text-sm font-medium text-blue-700 dark:text-blue-300 hover:underline">View all</button>
+                      <button onClick={() => setView('reports')} className="text-sm font-medium text-blue-700 dark:text-blue-300 hover:underline">View all</button>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[680px] text-sm">
@@ -909,67 +871,50 @@ export default function FacilitatorDashboard({
               </section>
             )}
 
-            {view === 'lecture-uploads' && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setView('dashboard')} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300">
-                      <ChevronDown className="h-4 w-4 rotate-90" />
-                    </button>
-                    <div>
-                      <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Lecture Uploads</h2>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Upload and manage lecture materials.</p>
-                    </div>
-                  </div>
-                  <button onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
-                    <Upload className="h-4 w-4" />
-                    Upload Lecture
-                  </button>
-                </div>
-                <input ref={fileInputRef} type="file" accept="video/*" onChange={handleLectureUpload} className="hidden" />
-                <input
-                  value={lectureTitle}
-                  onChange={(event) => setLectureTitle(event.target.value)}
-                  placeholder="Optional lecture title before uploading"
-                  className="mb-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-400 dark:border-slate-800 dark:bg-slate-900"
-                />
-                {lectures.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
-                    <FileVideo className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
-                    <p className="mt-3 text-sm font-medium text-slate-500 dark:text-slate-400">No lectures uploaded yet</p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500">Upload lecture videos for your assigned classes.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {lectures.map((lecture) => (
-                      <div key={lecture.id} className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{lecture.title}</p>
-                          <p className="text-xs text-slate-500">{lecture.fileName} &middot; {new Date(lecture.uploadedAt).toLocaleDateString()}</p>
-                        </div>
-                        <FileVideo className="h-5 w-5 shrink-0 text-blue-600" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {view === 'assessment-builder' && (
+            {view === 'modules' && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                 <div className="mb-4 flex items-center gap-3">
                   <button onClick={() => setView('dashboard')} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300">
                     <ChevronDown className="h-4 w-4 rotate-90" />
                   </button>
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">
-                    <CheckCircle className="h-5 w-5" />
+                    <BookOpen className="h-5 w-5" />
                   </span>
                   <div>
-                    <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Assessment Builder</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Create assessments and answer keys for your assigned classes.</p>
+                    <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Module Library</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Browse published modules (read-only).</p>
                   </div>
                 </div>
-                <AssessmentManager user={user} role="facilitator" />
+                {modules.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+                    <BookOpen className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
+                    <p className="mt-3 text-sm font-medium text-slate-500 dark:text-slate-400">No modules available yet</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">Modules are created by the coordinator.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[500px] text-sm">
+                      <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                        <tr>
+                          <th className="px-4 py-3">Title</th>
+                          <th className="px-4 py-3">Hours</th>
+                          <th className="px-4 py-3">Difficulty</th>
+                          <th className="px-4 py-3">Component</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {modules.map((mod: any) => (
+                          <tr key={mod.id} className="border-t border-slate-100 dark:border-slate-800">
+                            <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{mod.title}</td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{mod.hours}h</td>
+                            <td className="px-4 py-3"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{mod.difficulty}</span></td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{mod.component || 'Common'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </section>
             )}
 

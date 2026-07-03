@@ -1,5 +1,6 @@
 import { sendError, sendSuccess } from '../../utils/apiResponse.js';
 import { batchUpsertRecords, deleteCollectionRecord, getAdminSummary, getDatabaseStatus, listCollection, upsertCollectionRecord } from './nstp.service.js';
+import { emitCollectionChange } from '../../websocket.js';
 
 const allowedCollections = ['accounts', 'modules', 'assessments', 'students', 'grades', 'notices', 'supportTickets', 'pending-registrations', 'training-groups', 'attendance-records', 'attendance-sessions', 'qualifying-results', 'component-state', 'audit-log'];
 
@@ -35,6 +36,7 @@ export async function upsertNstpCollectionRecord(req, res) {
         : { id: `${req.params.collection}-${Date.now()}` };
 
   const record = await upsertCollectionRecord(req.params.collection, lookup, { ...lookup, ...payload });
+  emitCollectionChange(req.params.collection, 'upserted');
   return res.status(201).json(record);
 }
 
@@ -49,6 +51,7 @@ export async function batchUpsertNstpCollectionRecords(req, res) {
   }
 
   const results = await batchUpsertRecords(req.params.collection, records);
+  emitCollectionChange(req.params.collection, 'batch-upserted');
   return sendSuccess(res, { upserted: results.length });
 }
 
@@ -67,5 +70,6 @@ export async function deleteNstpCollectionRecord(req, res) {
     return sendError(res, 'Record not found or could not be deleted.', 404);
   }
 
+  emitCollectionChange(req.params.collection, 'deleted');
   return sendSuccess(res, { deleted: result.id || id });
 }
