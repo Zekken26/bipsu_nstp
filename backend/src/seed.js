@@ -14,12 +14,12 @@ export async function seedAdmin() {
   try {
     const existing = await prisma.user.findUnique({ where: { email } });
     const passwordHash = await bcrypt.hash(password, 10);
+    const adminName = process.env.ADMIN_NAME || 'Dr. Reynold G. Bustillo';
 
     if (existing) {
-      const name = email.split('@')[0];
       await prisma.user.update({
         where: { email },
-        data: { passwordHash, role: 'ADMIN', name },
+        data: { passwordHash, role: 'ADMIN', name: adminName },
       });
       logger.info(`Admin password updated for ${email}`);
       return;
@@ -28,7 +28,7 @@ export async function seedAdmin() {
     await prisma.user.create({
       data: {
         email,
-        name: email.split('@')[0],
+        name: adminName,
         passwordHash,
         role: 'ADMIN',
         data: {},
