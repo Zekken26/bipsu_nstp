@@ -13,12 +13,18 @@ export async function seedAdmin() {
 
   try {
     const existing = await prisma.user.findUnique({ where: { email } });
+    const passwordHash = await bcrypt.hash(password, 10);
+
     if (existing) {
-      logger.info(`Admin account already exists for ${email}`);
+      const name = email.split('@')[0];
+      await prisma.user.update({
+        where: { email },
+        data: { passwordHash, role: 'ADMIN', name },
+      });
+      logger.info(`Admin password updated for ${email}`);
       return;
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
     await prisma.user.create({
       data: {
         email,

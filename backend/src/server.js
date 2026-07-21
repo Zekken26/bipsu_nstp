@@ -7,7 +7,7 @@ import { seedAdmin } from './seed.js';
 
 validateEnv();
 
-seedAdmin().then(() => logger.info('Admin seeding complete.'));
+await seedAdmin();
 
 const app = createApp();
 
