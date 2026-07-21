@@ -938,11 +938,10 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                             const found = municipalities.find((m) => m.name === value);
                             setMunicipalityCode(found ? found.code : '');
                           }}
-                          required={province === 'Biliran'}
-                          disabled={province !== 'Biliran'}
+                          required
                           options={municipalities.map((m) => m.name)}
-                          placeholder={!province ? 'Select a province first' : province !== 'Biliran' ? 'Auto-assigned (see below)' : 'Select municipality'}
-                          helper={province !== 'Biliran' ? 'Auto-assigned to Naval for NSTP routing.' : 'Your home municipality.'}
+                          placeholder={!province ? 'Select a province first' : 'Select municipality'}
+                          helper="Your home municipality."
                         />
                         <BarangaySearch
                           municipalityCode={municipalityCode}
