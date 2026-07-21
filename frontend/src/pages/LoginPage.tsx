@@ -926,8 +926,9 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                           onChange={(value) => { setProvince(value); }}
                           required
                           options={provinces.map((p) => p.name)}
-                          placeholder={provincesLoading ? 'Loading provinces...' : 'Select province'}
-                          helper="Select your home province."
+                          placeholder={provincesLoading ? 'Loading provinces...' : provinces.length === 0 ? 'Address data not yet loaded' : 'Select province'}
+                          disabled={provinces.length === 0 && !provincesLoading}
+                          helper={provinces.length === 0 && !provincesLoading ? 'The address database is still being populated. Please try again later or contact the administrator.' : 'Select your home province.'}
                         />
                         <SelectField
                           label="Municipality"
