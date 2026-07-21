@@ -12,14 +12,39 @@ interface BarangaySearchProps {
 export default function BarangaySearch({ municipalityCode, value, onChange, required, disabled }: BarangaySearchProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
-  const [results, setResults] = useState<Barangay[]>([]);
+  const [allBarangays, setAllBarangays] = useState<Barangay[]>([]);
+  const [filtered, setFiltered] = useState<Barangay[]>([]);
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     setQuery(value);
   }, [value]);
+
+  useEffect(() => {
+    if (!municipalityCode) {
+      setAllBarangays([]);
+      setFiltered([]);
+      return;
+    }
+    setLoading(true);
+    searchBarangays(municipalityCode, '').then((res) => {
+      if (res.success) {
+        setAllBarangays(res.data);
+        setFiltered(res.data);
+      }
+      setLoading(false);
+    });
+  }, [municipalityCode]);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setFiltered(allBarangays);
+      return;
+    }
+    const q = query.toLowerCase();
+    setFiltered(allBarangays.filter((b) => b.name.toLowerCase().includes(q)));
+  }, [query, allBarangays]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -30,23 +55,6 @@ export default function BarangaySearch({ municipalityCode, value, onChange, requ
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  useEffect(() => {
-    if (!municipalityCode || !query || query.length < 1) {
-      setResults([]);
-      return;
-    }
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      const res = await searchBarangays(municipalityCode, query);
-      if (res.success) {
-        setResults(res.data);
-      }
-      setLoading(false);
-    }, 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query, municipalityCode]);
 
   const handleSelect = (barangay: Barangay) => {
     onChange(barangay.name);
@@ -68,8 +76,8 @@ export default function BarangaySearch({ municipalityCode, value, onChange, requ
             setOpen(true);
             if (!e.target.value) onChange('');
           }}
-          onFocus={() => { if (query) setOpen(true); }}
-          placeholder="Type to search barangay..."
+          onFocus={() => { if (municipalityCode) setOpen(true); }}
+          placeholder={!municipalityCode ? 'Select a municipality first' : 'Search or select barangay...'}
           required={required}
           disabled={disabled || !municipalityCode}
           className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-950"
@@ -78,12 +86,12 @@ export default function BarangaySearch({ municipalityCode, value, onChange, requ
       {open && municipalityCode && (
         <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-blue-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
           {loading && (
-            <div className="px-4 py-3 text-sm text-slate-500">Searching...</div>
+            <div className="px-4 py-3 text-sm text-slate-500">Loading barangays...</div>
           )}
-          {!loading && results.length === 0 && query.length >= 1 && (
-            <div className="px-4 py-3 text-sm text-slate-500">No barangay found. You can continue typing.</div>
+          {!loading && filtered.length === 0 && (
+            <div className="px-4 py-3 text-sm text-slate-500">No barangay found.</div>
           )}
-          {!loading && results.map((b) => (
+          {!loading && filtered.map((b) => (
             <button
               key={b.code}
               type="button"
