@@ -113,5 +113,6 @@ async function seedAddress() {
 
 seedAddress().catch((err) => {
   console.error('Failed to seed address data:', err.message);
-  process.exit(1);
+  console.log('The server will start without address data. Run node scripts/seed-address.mjs manually when the PSGC API is reachable.');
+  process.exit(0);
 });
