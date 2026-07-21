@@ -31,8 +31,9 @@ export type NstpAccount = {
   employeeNumber?: string;
   title?: string;
   bio?: string;
-  municipalities?: BiliranMunicipality[];
-  municipality?: BiliranMunicipality;
+  municipalities?: string[];
+  municipality?: string;
+  assignedMunicipality?: string;
   generalEducationComplete?: boolean;
   preferredComponent?: NstpComponent;
   examTaken?: boolean;
@@ -66,7 +67,8 @@ export type PendingStudentRegistration = {
   cityAddress?: string;
   provincialAddress?: string;
   contactNumber?: string;
-  municipality?: BiliranMunicipality;
+  municipality?: string;
+  assignedMunicipality?: string;
   createdAt: string;
   _version?: number;
 };
@@ -142,7 +144,8 @@ export type NstpStudent = {
   provincialAddress?: string;
   contactNumber?: string;
   component: NstpComponent;
-  municipality?: BiliranMunicipality;
+  municipality?: string;
+  assignedMunicipality?: string;
   programSection?: string;
   trainingGroupId?: string;
   facilitatorId?: string;
@@ -163,7 +166,7 @@ export type NstpTrainingGroup = {
   facilitatorName: string;
   facilitatorId?: string;
   programHandles: string[];
-  municipality?: BiliranMunicipality;
+  municipality?: string;
   studentCount: number;
   maxRecommendedLoad: number;
   sourceDocument: string;

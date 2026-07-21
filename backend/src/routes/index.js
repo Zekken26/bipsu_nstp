@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRouter from '../modules/auth/auth.routes.js';
+import addressRouter from '../modules/address/address.routes.js';
 import eventsRouter from '../modules/events/events.routes.js';
 import followsRouter from '../modules/follows/follows.routes.js';
 import { getDbTest } from '../modules/nstp/nstp.controller.js';
@@ -13,6 +14,7 @@ const apiRouter = Router();
 
 apiRouter.get('/db-test', authenticate, asyncHandler(getDbTest));
 apiRouter.use('/auth', authRouter);
+apiRouter.use('/address', addressRouter);
 apiRouter.use('/nstp', authenticate, softReadLimiter, nstpRouter);
 apiRouter.use('/follows', authenticate, followsRouter);
 apiRouter.use('/payments', authenticate, paymentsRouter);

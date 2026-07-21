@@ -351,10 +351,36 @@ model PendingRegistration {
   cityAddress       String?
   provincialAddress String?
   contactNumber     String?
-  municipality      String?
+    municipality      String?
+    assignedMunicipality String?
   createdAt         DateTime  @default(now())
 
   @@map("pending_registration")
+}
+
+model Province {
+  code String @id
+  name String
+
+  @@map("province")
+}
+
+model Municipality {
+  code         String @id
+  name         String
+  provinceCode String
+
+  @@index([provinceCode])
+  @@map("municipality")
+}
+
+model Barangay {
+  code             String @id
+  name             String
+  municipalityCode String
+
+  @@index([municipalityCode])
+  @@map("barangay")
 }
 
 model TrainingGroup {

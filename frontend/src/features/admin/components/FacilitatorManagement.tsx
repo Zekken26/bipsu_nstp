@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Building2, Download, Eye, EyeOff, Filter, KeyRound, LockKeyhole, Mail, MoreVertical, Pencil, Plus, Save, Search, Trash2, Users, X } from 'lucide-react';
-import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, BiliranMunicipality, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadStudents, NstpAccount, NSTP_COMPONENTS, saveAccounts, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM } from '../../../data/nstpData';
+import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadStudents, NstpAccount, NSTP_COMPONENTS, saveAccounts, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM } from '../../../data/nstpData';
 import { apiDel } from '../../../services/apiClient';
 
 type Props = {
@@ -64,14 +64,14 @@ export default function FacilitatorManagement({ admin }: Props) {
   const unassignedMunicipalities = Math.max(0, BILIRAN_MUNICIPALITIES.length - coveredMunicipalities);
 
   const assignedStudentsFor = (facilitator: NstpAccount) => students.filter((student) => {
-    const studentMunicipality = student.municipality as BiliranMunicipality | undefined;
-    return student.facilitatorId === facilitator.id || Boolean(studentMunicipality && facilitator.municipalities?.includes(studentMunicipality));
+    const studentMun = student.assignedMunicipality || student.municipality || '';
+    return student.facilitatorId === facilitator.id || Boolean(studentMun && facilitator.municipalities?.includes(studentMun));
   });
 
   const filteredFacilitators = facilitators.filter((facilitator) => {
     const haystack = `${facilitator.name} ${facilitator.email} ${(facilitator.municipalities || []).join(' ')}`.toLowerCase();
     const matchesQuery = haystack.includes(query.toLowerCase());
-    const matchesMunicipality = municipalityFilter === 'all' || facilitator.municipalities?.includes(municipalityFilter as BiliranMunicipality);
+    const matchesMunicipality = municipalityFilter === 'all' || facilitator.municipalities?.includes(municipalityFilter);
     return matchesQuery && matchesMunicipality;
   });
 
@@ -107,7 +107,7 @@ export default function FacilitatorManagement({ admin }: Props) {
     const nextFacilitator = {
       ...form,
       role: 'facilitator' as const,
-      municipalities: form.municipalities?.length ? form.municipalities : ['Naval' as BiliranMunicipality],
+      municipalities: form.municipalities?.length ? form.municipalities : ['Naval'],
     };
     const nextFacilitators = facilitators.some((facilitator) => facilitator.id === nextFacilitator.id)
       ? facilitators.map((facilitator) => (facilitator.id === nextFacilitator.id ? nextFacilitator : facilitator))

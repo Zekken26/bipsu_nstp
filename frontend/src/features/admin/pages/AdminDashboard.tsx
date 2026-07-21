@@ -484,14 +484,16 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       cityAddress: registration.currentAddress || registration.cityAddress,
       provincialAddress: registration.provincialAddress,
       contactNumber: registration.contactNumber,
-      municipality: registration.municipality || 'Naval' as BiliranMunicipality,
+      municipality: registration.municipality || 'Naval',
+      assignedMunicipality: registration.assignedMunicipality || (registration.province && registration.province !== 'Biliran' ? 'Naval' : registration.municipality || 'Naval'),
     };
 
     const nextAccounts = [nextAccount, ...allAccounts];
     saveAccounts(nextAccounts);
 
     const studentRecord = createEmptyStudent();
-    const assignedFacilitator = loadAccounts().find((account) => account.role === 'facilitator' && account.municipalities?.includes((registration.municipality || 'Naval') as BiliranMunicipality));
+    const targetMun = registration.assignedMunicipality || registration.municipality || 'Naval';
+    const assignedFacilitator = loadAccounts().find((account) => account.role === 'facilitator' && account.municipalities?.includes(targetMun));
     const nextStudent: NstpStudent = {
       ...studentRecord,
       id: nextAccount.id,
@@ -516,6 +518,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       provincialAddress: registration.provincialAddress,
       contactNumber: registration.contactNumber,
       municipality: registration.municipality || 'Naval',
+      assignedMunicipality: registration.assignedMunicipality || (registration.province && registration.province !== 'Biliran' ? 'Naval' : registration.municipality || 'Naval'),
       programSection: registration.degreeProgram,
       facilitatorId: assignedFacilitator?.id,
       facilitatorName: assignedFacilitator?.name,
@@ -1034,7 +1037,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
 
   const progressTrendData = useMemo(() => {
     return BILIRAN_MUNICIPALITIES.map((municipality) => {
-      const rows = schoolYearStudents.filter((student) => student.municipality === municipality);
+      const rows = schoolYearStudents.filter((student) => (student.assignedMunicipality || student.municipality) === municipality);
       const averageProgress = rows.length ? Math.round(rows.reduce((sum, student) => sum + student.progress, 0) / rows.length) : 0;
       const averageAssessments = rows.length ? Math.round(rows.reduce((sum, student) => sum + student.assessments, 0) / rows.length) : 0;
       return { name: municipality, progress: averageProgress, assessments: averageAssessments, students: rows.length };
@@ -1045,14 +1048,14 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     BILIRAN_MUNICIPALITIES.map((municipality) => ({
       municipality,
       facilitators: facilitatorAccounts.filter((account) => account.municipalities?.includes(municipality)).length,
-      students: schoolYearStudents.filter((student) => student.municipality === municipality).length,
+      students: schoolYearStudents.filter((student) => (student.assignedMunicipality || student.municipality) === municipality).length,
     })).sort((a, b) => b.students - a.students)
   ), [facilitatorAccounts, schoolYearStudents]);
 
   const facilitatorLoadData = useMemo(() => (
     facilitatorAccounts.map((facilitator) => ({
       name: facilitator.name.split(' ').slice(-1)[0] || facilitator.name,
-      students: schoolYearStudents.filter((student) => student.facilitatorId === facilitator.id || facilitator.municipalities?.includes((student.municipality || 'Naval') as BiliranMunicipality)).length,
+      students: schoolYearStudents.filter((student) => student.facilitatorId === facilitator.id || facilitator.municipalities?.includes(student.assignedMunicipality || student.municipality || 'Naval')).length,
       municipalities: facilitator.municipalities?.length || 0,
     })).sort((a, b) => b.students - a.students).slice(0, 8)
   ), [facilitatorAccounts, schoolYearStudents]);
@@ -2011,7 +2014,8 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                         </thead>
                         <tbody>
                           {pendingRegistrations.map((registration) => {
-                            const assignedFacilitator = facilitatorAccounts.find((account) => account.municipalities?.includes((registration.municipality || 'Naval') as BiliranMunicipality));
+                            const targetMun = registration.assignedMunicipality || registration.municipality || 'Naval';
+                            const assignedFacilitator = facilitatorAccounts.find((account) => account.municipalities?.includes(targetMun));
                             return (
                               <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
                                 <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{registration.name}</td>
@@ -2302,7 +2306,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                                   {(fac.municipalities || []).slice(0, 3).map((m) => <span key={m} className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{m}</span>)}
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{loadStudents().filter((s) => s.facilitatorId === fac.id || fac.municipalities?.includes(s.municipality as BiliranMunicipality)).length}</td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{loadStudents().filter((s) => s.facilitatorId === fac.id || fac.municipalities?.includes(s.assignedMunicipality || s.municipality || '')).length}</td>
                             </tr>
                           ))}
                           {facilitatorAccounts.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">No facilitators found.</td></tr>}

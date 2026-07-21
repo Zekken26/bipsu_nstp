@@ -140,3 +140,23 @@ export async function upsertAuditLogEntry(payload: AuditLogEntry) {
 export async function batchUpsert<T>(collection: string, records: T[]) {
   return apiPost<{ upserted: number }>(`${BASE}/batch/${collection}`, records, null as unknown as { upserted: number });
 }
+
+// --- Address API ---
+
+export type Province = { code: string; name: string };
+export type Municipality = { code: string; name: string; provinceCode: string };
+export type Barangay = { code: string; name: string; municipalityCode: string };
+
+export async function fetchProvinces() {
+  return apiGet<{ success: boolean; data: Province[] }>('/address/provinces', { success: false, data: [] });
+}
+
+export async function fetchMunicipalities(provinceCode: string) {
+  return apiGet<{ success: boolean; data: Municipality[] }>(`/address/municipalities?provinceCode=${encodeURIComponent(provinceCode)}`, { success: false, data: [] });
+}
+
+export async function searchBarangays(municipalityCode: string, query: string) {
+  const params = new URLSearchParams({ municipalityCode });
+  if (query) params.set('q', query);
+  return apiGet<{ success: boolean; data: Barangay[] }>(`/address/barangays/search?${params.toString()}`, { success: false, data: [] });
+}

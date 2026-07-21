@@ -34,9 +34,11 @@ import {
   Users,
 } from 'lucide-react';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, BiliranMunicipality, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadPendingStudentRegistrations, saveAccounts, savePendingStudentRegistrations, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS, NstpAccount, initializeFromApi } from '../data/nstpData';
+import { BIPSU_PROGRAMS, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadPendingStudentRegistrations, saveAccounts, savePendingStudentRegistrations, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS, NstpAccount, initializeFromApi } from '../data/nstpData';
 import splashImage from '../assets/images/splash.png';
 import { apiPost } from '../services/apiClient';
+import { fetchProvinces, fetchMunicipalities, type Province, type Municipality } from '../services/api';
+import BarangaySearch from '../components/BarangaySearch';
 
 type LoginMode = 'login' | 'register';
 type PublicView = 'home' | 'nstp' | 'school' | 'portal' | 'feature' | 'preview';
@@ -234,8 +236,13 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
   const [birthdate, setBirthdate] = useState('');
   const [houseStreetPurok, setHouseStreetPurok] = useState('');
   const [barangay, setBarangay] = useState('');
-  const [municipality, setMunicipality] = useState<BiliranMunicipality | ''>('');
-  const [province, setProvince] = useState('Biliran');
+  const [municipality, setMunicipality] = useState('');
+  const [municipalityCode, setMunicipalityCode] = useState('');
+  const [assignedMunicipality, setAssignedMunicipality] = useState('');
+  const [province, setProvince] = useState('');
+  const [provinces, setProvinces] = useState<Province[]>([]);
+  const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
+  const [provincesLoading, setProvincesLoading] = useState(false);
   const [provincialAddress, setProvincialAddress] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [email, setEmail] = useState('');
@@ -254,6 +261,18 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
   const selectedSchoolPrograms = BIPSU_PROGRAMS.find((item) => item.school === school)?.programs || [];
 
   useEffect(() => {
+    if (!province) {
+      setAssignedMunicipality('');
+      return;
+    }
+    if (province !== 'Biliran') {
+      setAssignedMunicipality('Naval');
+    } else {
+      setAssignedMunicipality(municipality);
+    }
+  }, [province, municipality]);
+
+  useEffect(() => {
     document.documentElement.classList.toggle('dark', themeMode === 'dark');
     localStorage.setItem('nstp-theme', themeMode);
   }, [themeMode]);
@@ -265,6 +284,30 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     }, 2600);
     return () => window.clearInterval(timer);
   }, [publicView]);
+
+  useEffect(() => {
+    setProvincesLoading(true);
+    fetchProvinces().then((res) => {
+      if (res.success) setProvinces(res.data);
+    }).finally(() => setProvincesLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!province) {
+      setMunicipalities([]);
+      setMunicipality('');
+      setMunicipalityCode('');
+      return;
+    }
+    const found = provinces.find((p) => p.name === province);
+    if (found) {
+      fetchMunicipalities(found.code).then((res) => {
+        if (res.success) setMunicipalities(res.data);
+      });
+    }
+    setMunicipality('');
+    setMunicipalityCode('');
+  }, [province, provinces]);
 
   const showPublicView = (view: PublicView, featureLabel?: string, targetId = 'public-sections') => {
     if (featureLabel) {
@@ -309,8 +352,13 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         return;
       }
 
-      if (!surname.trim() || !firstName.trim() || !school || !degreeProgram.trim() || !gender.trim() || !birthdate.trim() || !barangay.trim() || !municipality || !contactNumber.trim() || !email.trim() || !password || !confirmPassword) {
+      if (!surname.trim() || !firstName.trim() || !school || !degreeProgram.trim() || !gender.trim() || !birthdate.trim() || !province || !barangay.trim() || !contactNumber.trim() || !email.trim() || !password || !confirmPassword) {
         setError('Complete the required official student profile fields before submission.');
+        return;
+      }
+
+      if (province === 'Biliran' && !municipality) {
+        setError('Municipality is required for Biliran residents.');
         return;
       }
 
@@ -396,7 +444,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         barangay: barangay.trim(),
         municipality,
         province: province.trim(),
-        currentAddress: buildCurrentAddress(houseStreetPurok, barangay, municipality, province),
+        assignedMunicipality,
+        currentAddress: buildCurrentAddress(houseStreetPurok, barangay, assignedMunicipality, province),
         provincialAddress: provincialAddress.trim(),
         contactNumber: contactNumber.trim(),
         createdAt: new Date().toISOString(),
@@ -419,7 +468,9 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
       setHouseStreetPurok('');
       setBarangay('');
       setMunicipality('');
-      setProvince('Biliran');
+      setMunicipalityCode('');
+      setAssignedMunicipality('');
+      setProvince('');
       setProvincialAddress('');
       setContactNumber('');
       setEmail('');
@@ -479,12 +530,13 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
           birthdate: userData.birthdate,
           houseStreetPurok: userData.houseStreetPurok,
           barangay: userData.barangay,
-          province: userData.province || 'Biliran',
+          province: userData.province,
           currentAddress: userData.currentAddress,
           cityAddress: userData.cityAddress,
           provincialAddress: userData.provincialAddress,
           contactNumber: userData.contactNumber,
-          municipality: userData.municipality || 'Naval',
+          municipality: userData.municipality,
+          assignedMunicipality: userData.assignedMunicipality || (userData.province && userData.province !== 'Biliran' ? 'Naval' : userData.municipality || 'Naval'),
         };
         onLogin({ ...syncedAccount, ...userData, id: userData.id || syncedAccount.id, token: apiResult.data.token });
         saveAccounts([syncedAccount, ...accounts]);
@@ -868,25 +920,46 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
                           optional
                           helper="You may include your house number, street, or purok."
                         />
-                        <Field
-                          label="Barangay"
-                          value={barangay}
-                          onChange={setBarangay}
-                          placeholder="Example: Brgy. P.I. Garcia"
+                        <SelectField
+                          label="Province"
+                          value={province}
+                          onChange={(value) => { setProvince(value); }}
                           required
-                          helper="This helps assign the correct municipal facilitator."
+                          options={provinces.map((p) => p.name)}
+                          placeholder={provincesLoading ? 'Loading provinces...' : 'Select province'}
+                          helper="Select your home province."
                         />
                         <SelectField
                           label="Municipality"
                           value={municipality}
-                          onChange={(value) => setMunicipality(value as BiliranMunicipality | '')}
-                          required
-                          options={BILIRAN_MUNICIPALITIES}
-                          placeholder="Select municipality"
-                          helper="This helps assign the correct municipal facilitator."
+                          onChange={(value) => {
+                            setMunicipality(value);
+                            const found = municipalities.find((m) => m.name === value);
+                            setMunicipalityCode(found ? found.code : '');
+                          }}
+                          required={province === 'Biliran'}
+                          disabled={province !== 'Biliran'}
+                          options={municipalities.map((m) => m.name)}
+                          placeholder={!province ? 'Select a province first' : province !== 'Biliran' ? 'Auto-assigned (see below)' : 'Select municipality'}
+                          helper={province !== 'Biliran' ? 'Auto-assigned to Naval for NSTP routing.' : 'Your home municipality.'}
                         />
-                        <Field label="Province" value={province} onChange={setProvince} placeholder="Example: Biliran" required readOnly helper="Default province for current BiPSU NSTP routing." />
+                        <BarangaySearch
+                          municipalityCode={municipalityCode}
+                          value={barangay}
+                          onChange={setBarangay}
+                          required
+                        />
                         <Field label="Provincial Address" value={provincialAddress} onChange={setProvincialAddress} placeholder="Permanent home address" optional helper="Optional if same as current address." />
+                      </FormSection>
+                      <FormSection title="NSTP Assignment">
+                        <Field
+                          label="Assigned Municipality (NSTP)"
+                          value={assignedMunicipality}
+                          onChange={() => {}}
+                          placeholder="Auto-determined"
+                          readOnly
+                          helper="Automatically assigned for facilitator routing. Biliran students use their municipality; non-Biliran students are assigned to Naval."
+                        />
                       </FormSection>
                     </div>
                   )}

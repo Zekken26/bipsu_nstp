@@ -135,7 +135,7 @@ export default function ReportsCenter({ user }: { user: any }) {
       student.name,
       student.email,
       student.degreeProgram || '',
-      student.municipality || '',
+      student.assignedMunicipality || student.municipality || '',
       student.facilitatorName || '',
       student.component,
       `${student.progress}%`,
@@ -163,7 +163,7 @@ export default function ReportsCenter({ user }: { user: any }) {
     facilitator.name,
     facilitator.email,
     facilitator.municipalities?.join(', ') || 'Unassigned',
-    String(students.filter((student) => student.facilitatorId === facilitator.id || facilitator.municipalities?.includes(student.municipality as any)).length),
+    String(students.filter((student) => student.facilitatorId === facilitator.id || facilitator.municipalities?.includes((student.assignedMunicipality || student.municipality) as any)).length),
   ]), [facilitators, students]);
 
   const trainingGroupRows = useMemo(() => trainingGroups.map((group) => [
