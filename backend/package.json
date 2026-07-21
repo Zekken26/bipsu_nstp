@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node --watch-path=./src --watch-path=./prisma src/server.js",
     "start": "node src/server.js",
-    "build": "npm install && npx prisma generate && node scripts/resolve-failed-migrations.mjs && node scripts/seed-address.mjs",
+    "build": "npm install && npx prisma generate && node scripts/resolve-failed-migrations.mjs && node scripts/ensure-tables.mjs && node scripts/seed-address.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"
