@@ -51,8 +51,14 @@ export async function batchUpsertNstpCollectionRecords(req, res) {
   }
 
   const results = await batchUpsertRecords(req.params.collection, records);
+  const ok = results.filter((r) => r && !r.error);
+  const failed = results.filter((r) => r && r.error);
   emitCollectionChange(req.params.collection, 'batch-upserted');
-  return sendSuccess(res, { upserted: results.length });
+  if (failed.length > 0) {
+    console.warn(`[batchUpsert] ${failed.length}/${results.length} records failed:`, failed.map((f) => f.error));
+    return res.status(207).json({ upserted: ok.length, failed: failed.length, errors: failed.map((f) => f.error) });
+  }
+  return sendSuccess(res, { upserted: ok.length });
 }
 
 export async function deleteNstpCollectionRecord(req, res) {

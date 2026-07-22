@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Building2, Download, Eye, EyeOff, Filter, KeyRound, LockKeyhole, Mail, MoreVertical, Pencil, Plus, Save, Search, Trash2, Users, X } from 'lucide-react';
 import { BILIRAN_MUNICIPALITIES, BIPSU_PROGRAMS, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadStudents, NstpAccount, NSTP_COMPONENTS, saveAccounts, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM } from '../../../data/nstpData';
-import { apiDel } from '../../../services/apiClient';
+import { apiDel, apiPost } from '../../../services/apiClient';
 
 type Props = {
   admin: NstpAccount;
@@ -78,9 +78,9 @@ export default function FacilitatorManagement({ admin }: Props) {
   const selectedFacilitator = facilitators.find((facilitator) => facilitator.id === selectedId) || filteredFacilitators[0] || facilitators[0] || null;
   const selectedStudents = selectedFacilitator ? assignedStudentsFor(selectedFacilitator) : [];
 
-  const persist = (nextFacilitators: NstpAccount[]) => {
+  const persist = async (nextFacilitators: NstpAccount[]) => {
     const allAccounts = loadAccounts().filter((account) => account.role !== 'facilitator');
-    saveAccounts([...allAccounts, ...nextFacilitators]);
+    await saveAccounts([...allAccounts, ...nextFacilitators]);
     setFacilitators(nextFacilitators);
   };
 
@@ -96,26 +96,31 @@ export default function FacilitatorManagement({ admin }: Props) {
   };
 
   const removeFacilitator = async (facilitatorId: string) => {
-    await apiDel(`/nstp/accounts/${facilitatorId}`, null);
-    const nextFacilitators = facilitators.filter((facilitator) => facilitator.id !== facilitatorId);
-    persist(nextFacilitators);
-    setSelectedId(nextFacilitators[0]?.id ?? null);
+    const result = await apiDel(`/nstp/accounts/${facilitatorId}`, null);
+    if (result) {
+      const nextFacilitators = facilitators.filter((facilitator) => facilitator.id !== facilitatorId);
+      persist(nextFacilitators);
+      setSelectedId(nextFacilitators[0]?.id ?? null);
+    }
   };
 
-  const saveFacilitator = () => {
+  const saveFacilitator = async () => {
     if (!form) return;
     const nextFacilitator = {
       ...form,
       role: 'facilitator' as const,
       municipalities: form.municipalities?.length ? form.municipalities : ['Naval'],
     };
-    const nextFacilitators = facilitators.some((facilitator) => facilitator.id === nextFacilitator.id)
-      ? facilitators.map((facilitator) => (facilitator.id === nextFacilitator.id ? nextFacilitator : facilitator))
-      : [nextFacilitator, ...facilitators];
-    persist(nextFacilitators);
-    setSelectedId(nextFacilitator.id);
-    setEditingId(null);
-    setForm(null);
+    const result = await apiPost<any>('/nstp/accounts', nextFacilitator, null);
+    if (result) {
+      const nextFacilitators = facilitators.some((facilitator) => facilitator.id === nextFacilitator.id)
+        ? facilitators.map((facilitator) => (facilitator.id === nextFacilitator.id ? nextFacilitator : facilitator))
+        : [nextFacilitator, ...facilitators];
+      persist(nextFacilitators);
+      setSelectedId(nextFacilitator.id);
+      setEditingId(null);
+      setForm(null);
+    }
   };
 
   return (

@@ -137,6 +137,7 @@ export async function upsertCollectionRecord(name, lookup, payload) {
           name: nextPayload.name,
           role: userRole,
           data: profileData,
+          ...(passwordHash ? { passwordHash } : {}),
         },
         create: {
           id: nextPayload.id,
@@ -166,9 +167,12 @@ export async function upsertCollectionRecord(name, lookup, payload) {
       }
 
       if (userRole === 'COORDINATOR') {
-        const component = profileData.componentId
+        let component = profileData.componentId
           ? await prisma.nSTPComponent.findUnique({ where: { id: profileData.componentId } })
           : null;
+        if (!component && profileData.component) {
+          component = await prisma.nSTPComponent.findUnique({ where: { type: toComponentType(profileData.component) } });
+        }
         await prisma.coordinatorProfile.upsert({
           where: { userId: user.id },
           update: {
@@ -329,14 +333,9 @@ export async function upsertCollectionRecord(name, lookup, payload) {
       return index >= 0 ? items[index] : nextPayload;
     }
   } catch (error) {
-    console.warn(`Prisma ${name} upsert failed. Using local fallback data: ${error?.message || error}`);
+    console.warn(`Prisma ${name} upsert failed: ${error?.message || error}`);
+    throw error;
   }
-
-  const items = fallback[name] || [];
-  const index = items.findIndex((item) => Object.entries(lookup).every(([key, value]) => item[key] === value));
-  if (index >= 0) items[index] = { ...items[index], ...nextPayload };
-  else items.unshift(nextPayload);
-  return index >= 0 ? items[index] : nextPayload;
 }
 
 export async function deleteCollectionRecord(name, id) {
@@ -382,8 +381,12 @@ export async function batchUpsertRecords(name, records) {
         : payload.email
           ? { email: payload.email }
           : { id: `${name}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}` };
-    const result = await upsertCollectionRecord(name, lookup, { ...lookup, ...payload });
-    results.push(result);
+    try {
+      const result = await upsertCollectionRecord(name, lookup, { ...lookup, ...payload });
+      results.push(result);
+    } catch (err) {
+      results.push({ error: err.message || 'Unknown error', email: payload.email, id: payload.id });
+    }
   }
   return results;
 }

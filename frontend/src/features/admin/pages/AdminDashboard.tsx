@@ -4249,16 +4249,22 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
     if (!editingCoord) return;
     setSaveError(null);
     const next = { ...editingCoord, role: 'coordinator' as const };
-    const allAccounts = loadAccounts();
-    const others = allAccounts.filter((a) => a.role !== 'coordinator');
-    const existing = allAccounts.filter((a) => a.role === 'coordinator');
-    const updated = existing.some((c) => c.id === next.id)
-      ? existing.map((c) => c.id === next.id ? next : c)
-      : [next, ...existing];
     try {
-      await saveAccounts([...others, ...updated]);
-    } catch {
-      setSaveError('Failed to sync to server, but saved locally.');
+      const result = await apiPost<any>('/nstp/accounts', next, null);
+      if (result) {
+        const allAccounts = loadAccounts();
+        const others = allAccounts.filter((a) => a.role !== 'coordinator');
+        const existing = allAccounts.filter((a) => a.role === 'coordinator');
+        const updated = existing.some((c) => c.id === next.id)
+          ? existing.map((c) => c.id === next.id ? next : c)
+          : [next, ...existing];
+        saveAccounts([...others, ...updated]);
+      } else {
+        setSaveError('Server did not confirm the account was created.');
+      }
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || 'Failed to create account on server.';
+      setSaveError(msg);
     }
     setEditorOpen(false);
     setEditingCoord(null);
