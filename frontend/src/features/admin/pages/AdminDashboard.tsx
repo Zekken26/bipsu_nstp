@@ -8,6 +8,7 @@ import ModulesPage from '../../../pages/ModulesPage';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncToApi, AUDIT_LOG_KEY } from '../../../data/nstpData';
 import { apiPost, apiPut, apiDel } from '../../../services/apiClient';
+import { toast } from 'sonner';
 import { useCurrentUser, useUpdateCurrentUser } from '../../../hooks/index';
 
 type AdminAuditEntry = {
@@ -4251,7 +4252,7 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
     const next = { ...editingCoord, role: 'coordinator' as const };
     try {
       const result = await apiPost<any>('/nstp/accounts', next, null);
-      if (result) {
+      if (result && !(result as any).error) {
         const allAccounts = loadAccounts();
         const others = allAccounts.filter((a) => a.role !== 'coordinator');
         const existing = allAccounts.filter((a) => a.role === 'coordinator');
@@ -4259,19 +4260,22 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
           ? existing.map((c) => c.id === next.id ? next : c)
           : [next, ...existing];
         saveAccounts([...others, ...updated]);
+        toast.success('Coordinator created successfully');
+        setEditorOpen(false);
+        setEditingCoord(null);
+        onRefresh();
       } else {
-        setSaveError('Server did not confirm the account was created.');
+        const errMsg = (result as any)?.error || 'Server did not confirm the account was created.';
+        setSaveError(errMsg);
       }
     } catch (e: any) {
       const msg = e?.response?.data?.error || e?.message || 'Failed to create account on server.';
       setSaveError(msg);
     }
-    setEditorOpen(false);
-    setEditingCoord(null);
-    onRefresh();
   };
 
   const handleDelete = async (id: string) => {
+    await apiDel(`/nstp/accounts/${id}`, null);
     const allAccounts = loadAccounts();
     const others = allAccounts.filter((a) => a.role !== 'coordinator');
     const remaining = allAccounts.filter((a) => a.role === 'coordinator' && a.id !== id);

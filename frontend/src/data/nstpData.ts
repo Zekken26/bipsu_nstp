@@ -293,6 +293,10 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
           role: (a.role || 'student').toLowerCase() as NstpRole,
           employeeNumber: (ip.employeeNumber as string) || (cp.employeeNumber as string) || (d.employeeNumber as string) || '',
           componentId: (cp.componentId as string) || (d.componentId as string) || '',
+          component: (d.component as NstpComponent) || 'CWTS',
+          municipalities: (d.municipalities as string[]) || [],
+          title: (d.title as string) || '',
+          contactNumber: (d.contactNumber as string) || '',
           studentId: (d.studentId as string) || '',
           surname: d.surname as string, firstName: d.firstName as string,
           middleName: d.middleName as string, school: d.school as string,
@@ -303,7 +307,6 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
           province: (d.province as string) || 'Biliran',
           currentAddress: d.currentAddress as string, cityAddress: d.cityAddress as string,
           provincialAddress: d.provincialAddress as string,
-          contactNumber: d.contactNumber as string,
           municipality: (d.municipality as BiliranMunicipality) || 'Naval',
         };
       });
