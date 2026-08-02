@@ -46,6 +46,8 @@ jobs:
 
       - name: Validate Prisma schema
         run: npm exec --workspace backend prisma validate
+        env:
+          DATABASE_URL: postgresql://prisma_ci:prisma_ci@localhost:5432/prisma_ci
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
