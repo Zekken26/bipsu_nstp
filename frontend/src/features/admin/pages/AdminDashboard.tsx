@@ -6,7 +6,7 @@ import AssessmentManager from '../../assessments/components/AssessmentManager';
 import ModulesPage from '../../../pages/ModulesPage';
 
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
-import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncToApi, AUDIT_LOG_KEY } from '../../../data/nstpData';
+import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncCollectionFromApi, syncToApi, AUDIT_LOG_KEY } from '../../../data/nstpData';
 import { apiPost, apiPut, apiDel } from '../../../services/apiClient';
 import { toast } from 'sonner';
 import { useCurrentUser, useUpdateCurrentUser } from '../../../hooks/index';
@@ -194,7 +194,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     setFormTemplate({ ...DEFAULT_FORM_TEMPLATE, ...safeJsonParse<Partial<OfficialProfileTemplate>>(localStorage.getItem(FORM_TEMPLATE_KEY), {}) });
 
     // Sync with backend API on mount — backend data takes priority
-    syncAllFromApi().then(() => {
+    Promise.all([syncAllFromApi(), syncCollectionFromApi('nstp-student-roster')]).then(() => {
       setStudents(loadStudents());
       setPendingRegistrations(loadPendingStudentRegistrations());
       setTrainingGroups(loadTrainingGroups());

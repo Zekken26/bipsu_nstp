@@ -17,7 +17,7 @@ const ReportsCenter = React.lazy(() => import('./pages/ReportsPage'));
 const GradesPage = React.lazy(() => import('./pages/GradesPage'));
 const RoleDashboardHome = React.lazy(() => import('./features/dashboard/pages/RoleDashboardHome'));
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
-import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi, syncAllFromApi, syncCollectionFromApi, retryPendingSyncs } from './data/nstpData';
+import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi, syncAllFromApi, syncCollectionFromApi, retryPendingSyncs, setSessionUser } from './data/nstpData';
 import { connectSocket, disconnectSocket } from './services/socketClient';
 import { fetchCurrentUser, logoutCurrentUser } from './services/api';
 import { toast, Toaster } from 'sonner';
@@ -237,6 +237,7 @@ export default function App() {
       const nextUser = pendingLoginRef.current;
       if (nextUser) {
         setUser(nextUser);
+        setSessionUser(nextUser);
         if (nextUser.role === 'admin') {
           setActiveSection('overview');
         } else if (nextUser.role === 'facilitator') {
@@ -249,6 +250,7 @@ export default function App() {
       }
     } else {
       setUser(null);
+      setSessionUser(null);
       setActiveSection('overview');
     }
 
@@ -265,13 +267,16 @@ export default function App() {
         const current = await fetchCurrentUser();
         if (current?.success && current.data) {
           const { id, name, email, role, ...profile } = current.data;
-          setUser({ id, name, email, role: String(role || '').toLowerCase(), ...profile });
+          const authenticatedUser = { id, name, email, role: String(role || '').toLowerCase(), ...profile };
+          setUser(authenticatedUser);
+          setSessionUser(authenticatedUser);
           await initializeFromApi();
         }
       } catch {
         // apiClient has already shown the appropriate error; do not strand the
         // visitor behind the boot splash when a session has expired.
         setUser(null);
+        setSessionUser(null);
       } finally {
         setDataReady(true);
       }
@@ -285,6 +290,7 @@ export default function App() {
   useEffect(() => {
     const handleAuthExpired = () => {
       setUser(null);
+      setSessionUser(null);
       setActiveSection('overview');
       setDataReady(true);
       setIsBootSplashVisible(false);

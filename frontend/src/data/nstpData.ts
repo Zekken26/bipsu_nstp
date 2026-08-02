@@ -263,6 +263,12 @@ function getAdminResource(localKey: string): string | null {
   return currentUser?.role === 'admin' ? ADMIN_RESOURCE_MAP[localKey] || null : null;
 }
 
+export function setSessionUser(user: { id: string; role: string } | null) {
+  if (typeof window === 'undefined') return;
+  if (user) writeSensitive('session-user', JSON.stringify(user));
+  else removeSensitive('session-user');
+}
+
 export async function syncToApi<T>(localKey: string, data: T[]): Promise<boolean> {
   const collection = getAdminResource(localKey);
   if (!collection || !Array.isArray(data) || data.length === 0) return true;
