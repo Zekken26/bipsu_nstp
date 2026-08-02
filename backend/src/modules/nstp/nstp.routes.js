@@ -12,9 +12,10 @@ import {
   adminAccounts, adminAssessments, adminAttendanceRecords, adminAttendanceSessions,
   adminAuditLog, adminComponentState, adminGrades, adminModules,
   adminPendingRegistrations, adminQualifyingResults, adminStudents, adminTrainingGroups,
-  createInstructorGrade, getAdminSummaryController, getMyAttendance, getMyGrades,
+  createInstructorGrade, getAdminSummaryController, getMyAttendance, getMyGrades, getMyProgress,
   getMyQualifyingResults, getMyStudentProfile, listCoordinatorClasses,
   listCoordinatorStudents, listInstructorClasses, listInstructorClassStudents,
+  completeMyModule, submitMyAssessment,
 } from './nstp.controller.js';
 
 const router = Router();
@@ -45,6 +46,9 @@ router.get('/admin/summary', ...admin, asyncHandler(getAdminSummaryController));
 
 router.get('/students/me', authenticate, requireRole('STUDENT'), asyncHandler(getCurrentStudent), asyncHandler(getMyStudentProfile));
 router.get('/students/me/grades', authenticate, requireRole('STUDENT'), asyncHandler(getCurrentStudent), asyncHandler(getMyGrades));
+router.get('/students/me/progress', authenticate, requireRole('STUDENT'), asyncHandler(getCurrentStudent), asyncHandler(getMyProgress));
+router.post('/students/me/modules/:moduleId/complete', authenticate, requireRole('STUDENT'), strictWriteLimiter, asyncHandler(getCurrentStudent), asyncHandler(completeMyModule));
+router.post('/students/me/assessments/:assessmentId/attempts', authenticate, requireRole('STUDENT'), strictWriteLimiter, asyncHandler(getCurrentStudent), asyncHandler(submitMyAssessment));
 router.get('/students/me/attendance', authenticate, requireRole('STUDENT'), asyncHandler(getCurrentStudent), asyncHandler(getMyAttendance));
 router.get('/students/me/qualifying-results', authenticate, requireRole('STUDENT'), asyncHandler(getMyQualifyingResults));
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { FileText, CheckCircle, Clock, Award, TrendingUp, History, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { loadAssessments, NstpAssessment } from '../data/nstpData';
+import { apiGet, apiPost } from '../services/apiClient';
 
 export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: () => void }) {
   const [library, setLibrary] = useState<NstpAssessment[]>([]);
@@ -28,13 +29,21 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
   }, [user.id]);
 
   useEffect(() => {
-    const saved = localStorage.getItem(`assessments-${user.id}`);
-    const savedHistory = localStorage.getItem(`assessments-history-${user.id}`);
-    if (saved) setResults(JSON.parse(saved));
-    if (savedHistory) setAttemptHistory(JSON.parse(savedHistory));
+    apiGet<{ success: boolean; data: { attempts: any[] } }>('/nstp/students/me/progress')
+      .then(({ data }) => {
+        const history = data.attempts.reduce<Record<string, any[]>>((all, attempt) => {
+          if (!attempt.quizId) return all;
+          const row = { score: attempt.score, date: attempt.submittedAt, passed: false };
+          all[attempt.quizId] = [...(all[attempt.quizId] || []), row];
+          return all;
+        }, {});
+        setAttemptHistory(history);
+        setResults(Object.fromEntries(Object.entries(history).map(([id, attempts]) => [id, attempts[0]])));
+      })
+      .catch(() => { /* server error is surfaced by apiClient; never read browser storage as official data */ });
   }, [user.id]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const currentAssessment = activeAssessmentRef.current;
     const currentQuestions = shuffledQuestionsRef.current;
     const currentAnswers = answersRef.current;
@@ -43,30 +52,25 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
 
     if (!currentAssessment) return;
 
-    const correct = currentQuestions.reduce((acc, question, index) => {
-      return currentAnswers[index] === question.correctIndex ? acc + 1 : acc;
-    }, 0);
-    const total = currentQuestions.length;
-    const score = total > 0 ? Math.round((correct / total) * 100) : 0;
+    let serverAttempt;
+    try {
+      serverAttempt = await apiPost<any>(`/nstp/students/me/assessments/${currentAssessment.id}/attempts`, {
+        answers: currentQuestions.map((_, index) => currentAnswers[index] ?? null),
+      });
+    } catch { return; }
 
     const nextResults = {
       ...currentResults,
       [currentAssessment.id]: {
-        score,
-        correct,
-        total,
-        passed: score >= currentAssessment.passingScore,
-        date: new Date().toISOString(),
+        score: serverAttempt.data?.score ?? serverAttempt.score,
+        correct: serverAttempt.data?.correct ?? serverAttempt.correct,
+        total: serverAttempt.data?.total ?? serverAttempt.total,
+        passed: serverAttempt.data?.passed ?? serverAttempt.passed,
+        date: serverAttempt.data?.submittedAt ?? serverAttempt.submittedAt,
       },
     };
 
-    const attempt = {
-      score,
-      correct,
-      total,
-      passed: score >= currentAssessment.passingScore,
-      date: new Date().toISOString(),
-    };
+    const attempt = nextResults[currentAssessment.id];
 
     const nextHistory = {
       ...currentHistory,
@@ -75,8 +79,6 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
 
     setResults(nextResults);
     setAttemptHistory(nextHistory);
-    localStorage.setItem(`assessments-${user.id}`, JSON.stringify(nextResults));
-    localStorage.setItem(`assessments-history-${user.id}`, JSON.stringify(nextHistory));
     setActiveAssessment(null);
     setTimeLeft(null);
   };

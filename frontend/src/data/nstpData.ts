@@ -439,7 +439,12 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
 }
 
 export async function syncAllFromApi(): Promise<void> {
-  const keys = Object.keys(ADMIN_RESOURCE_MAP);
+  // Login refresh is intentionally narrow.  Official student records come from
+  // /students/me endpoints; the remaining admin views fetch their own data.
+  const currentUser = safeJsonParse<NstpAccount | null>(readSensitive('session-user'), null);
+  const keys = currentUser?.role === 'admin'
+    ? [MODULES_KEY, ASSESSMENTS_KEY]
+    : [];
   await Promise.allSettled(keys.map((key) => syncCollectionFromApi(key)));
 }
 export const NSTP_COMPONENTS: NstpComponent[] = ['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)', 'CWTS (Coast Guard)'];

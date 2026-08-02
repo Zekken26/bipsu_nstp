@@ -91,6 +91,40 @@ export async function getMyGrades(req, res) {
   return sendSuccess(res, grades);
 }
 
+export async function getMyProgress(req, res) {
+  const [progress, attempts] = await Promise.all([
+    prisma.moduleProgress.findMany({ where: { studentId: req.student.id }, orderBy: { updatedAt: 'desc' } }),
+    prisma.submission.findMany({ where: { studentId: req.student.id, quizId: { not: null } }, orderBy: { submittedAt: 'desc' }, take: 100 }),
+  ]);
+  return sendSuccess(res, { progress, attempts });
+}
+
+export async function completeMyModule(req, res) {
+  const module = await prisma.module.findUnique({ where: { id: req.params.moduleId } });
+  if (!module || !module.isPublished) return sendError(res, 'Module is not available for completion.', 404);
+  const progress = await prisma.moduleProgress.upsert({
+    where: { studentId_moduleId: { studentId: req.student.id, moduleId: module.id } },
+    update: { completedAt: new Date() },
+    create: { studentId: req.student.id, moduleId: module.id, completedAt: new Date() },
+  });
+  return sendSuccess(res, progress, 201);
+}
+
+export async function submitMyAssessment(req, res) {
+  const quiz = await prisma.quiz.findUnique({ where: { id: req.params.assessmentId } });
+  const definition = quiz?.data || {};
+  if (!quiz || definition.status !== 'published') return sendError(res, 'Assessment is not available.', 404);
+  const questions = Array.isArray(definition.questions) ? definition.questions : [];
+  const answers = req.body?.answers;
+  if (!Array.isArray(answers) || questions.length === 0 || answers.length !== questions.length) return sendError(res, 'Invalid assessment answers.', 400);
+  const correct = questions.reduce((total, question, index) => total + (Number(answers[index]) === Number(question.correctIndex) ? 1 : 0), 0);
+  const score = Math.round((correct / questions.length) * 100);
+  const attempt = await prisma.submission.create({
+    data: { studentId: req.student.id, quizId: quiz.id, content: { answers }, score, status: 'GRADED', gradedAt: new Date() },
+  });
+  return sendSuccess(res, { id: attempt.id, assessmentId: quiz.id, score, correct, total: questions.length, passed: score >= Number(definition.passingScore || 0), submittedAt: attempt.submittedAt }, 201);
+}
+
 export async function getMyAttendance(req, res) {
   const records = await prisma.attendanceRecord.findMany({
     where: { studentId: { in: [req.student.id, req.user.id] } }, orderBy: { createdAt: 'desc' },

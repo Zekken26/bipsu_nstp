@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Clock, CheckCircle, Search, Sparkles, Gauge, ChevronRight, Plus, Trash2, Save, ArrowLeft, ArrowUp, ArrowDown, Copy, Wrench, Video, ExternalLink } from 'lucide-react';
 import { createEmptyModule, loadAssessments, loadModules, loadStudents, safeJsonParse, saveModules, type NstpModule } from '../data/nstpData';
 import { toSafeEmbedUrl, toSafeExternalUrl } from '../utils/moduleUrls';
+import { apiGet, apiPost } from '../services/apiClient';
 
 const MODULE_VISIBILITY_KEY = 'nstp-module-visibility';
 
@@ -31,10 +32,9 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem(`progress-${user.id}`);
-    if (saved) {
-      setProgress(safeJsonParse<Record<string, boolean>>(saved, {}));
-    }
+    apiGet<{ success: boolean; data: { progress: Array<{ moduleId: string; completedAt: string | null }> } }>('/nstp/students/me/progress')
+      .then(({ data }) => setProgress(Object.fromEntries(data.progress.map((entry) => [entry.moduleId, Boolean(entry.completedAt)]))))
+      .catch(() => { /* displayed state remains unconfirmed; local storage is never used as completion evidence */ });
   }, [user.id]);
 
   const selectedModule = useMemo(() => modules.find((module) => module.id === selectedModuleId) || null, [modules, selectedModuleId]);
@@ -68,13 +68,12 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
     localStorage.setItem(MODULE_VISIBILITY_KEY, JSON.stringify(nextVisibility));
   };
 
-  const toggleModuleComplete = (moduleId: string) => {
-    const nextProgress = {
-      ...progress,
-      [moduleId]: !progress[moduleId],
-    };
-    setProgress(nextProgress);
-    localStorage.setItem(`progress-${user.id}`, JSON.stringify(nextProgress));
+  const toggleModuleComplete = async (moduleId: string) => {
+    if (progress[moduleId]) return;
+    try {
+      const response = await apiPost<{ success: boolean; data: { moduleId: string; completedAt: string | null } }>(`/nstp/students/me/modules/${moduleId}/complete`, {});
+      setProgress((current) => ({ ...current, [response.data.moduleId]: Boolean(response.data.completedAt) }));
+    } catch { /* optimistic state is not applied until the server confirms completion */ }
   };
 
   const getModuleProgress = (module: NstpModule) => {

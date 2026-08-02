@@ -266,7 +266,6 @@ export default function App() {
         const { id, name, email, role, ...profile } = current.data;
         setUser({ id, name, email, role: String(role || '').toLowerCase(), ...profile });
         await initializeFromApi();
-        syncInterval = setInterval(() => { void syncAllFromApi(); }, 5 * 60 * 1000);
       }
       setDataReady(true);
     }
