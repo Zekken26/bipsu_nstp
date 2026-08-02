@@ -6,9 +6,12 @@ const defaultOrigins = [
 ];
 
 export function getAllowedOrigins() {
-  return process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean)
-    : defaultOrigins;
+  const configuredOrigins = process.env.CORS_ORIGIN?.split(',').map((origin) => origin.trim()).filter(Boolean);
+  if (configuredOrigins?.length) return configuredOrigins;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('CORS_ORIGIN is required in production and must list approved frontend origins.');
+  }
+  return defaultOrigins;
 }
 
 export function createCorsMiddleware() {

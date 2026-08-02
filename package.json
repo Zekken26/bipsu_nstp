@@ -12,8 +12,16 @@
     "frontend:dev": "npm run dev --workspace frontend",
     "frontend:build": "npm run build --workspace frontend",
     "frontend:typecheck": "npm run typecheck --workspace frontend",
+    "frontend:lint": "npm run lint --workspace frontend",
+    "frontend:test": "npm run test --workspace frontend",
+    "backend:lint": "npm run lint --workspace backend",
+    "backend:test": "npm run test --workspace backend",
     "prisma:migrate": "npm run prisma:migrate --workspace backend",
+    "migrate:deploy": "npm run migrate:deploy --workspace backend",
+    "migrate:status": "npm run migrate:status --workspace backend",
+    "migrate:recover": "npm run migrate:recover --workspace backend",
+    "seed": "npm run seed --workspace backend",
     "prisma:studio": "npm run prisma:studio --workspace backend",
-    "build": "npm run build --workspace backend"
+    "build": "npm run frontend:build && npm run build --workspace backend"
   }
 }

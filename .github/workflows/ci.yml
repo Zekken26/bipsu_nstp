@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  typecheck-and-build:
+  checks:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,8 +24,63 @@ jobs:
       - name: TypeScript check (frontend)
         run: npm run frontend:typecheck
 
-      - name: Run tests
-        run: npm run --workspace frontend test
+      - name: Lint frontend
+        run: npm run frontend:lint
+
+      - name: Test frontend
+        run: npm run frontend:test
 
       - name: Build frontend
         run: npm run frontend:build
+        env:
+          VITE_API_BASE_URL: https://api.example.edu/api
+
+      - name: Lint backend
+        run: npm run backend:lint
+
+      - name: Test backend
+        run: npm run backend:test
+
+      - name: Validate Prisma schema
+        run: npm exec --workspace backend prisma validate
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  migration-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nstp
+          POSTGRES_PASSWORD: nstp_ci_password
+          POSTGRES_DB: nstp_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nstp -d nstp_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Apply migrations to a fresh database
+        env:
+          DATABASE_URL: postgresql://nstp:nstp_ci_password@localhost:5432/nstp_ci
+        run: npm run migrate:deploy
+      - name: Check migration status
+        env:
+          DATABASE_URL: postgresql://nstp:nstp_ci_password@localhost:5432/nstp_ci
+        run: npm run migrate:status
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build frontend container
+        run: docker build --build-arg VITE_API_BASE_URL=https://api.example.edu/api -t nstp-frontend-smoke ./frontend

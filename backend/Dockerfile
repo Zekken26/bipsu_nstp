@@ -1,7 +1,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
+COPY package.json ./
+RUN npm install --include=dev
 COPY prisma ./prisma
 RUN npx prisma generate
 
@@ -12,4 +12,4 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY . .
 EXPOSE 5000
-CMD ["sh", "-c", "npx prisma migrate deploy; node scripts/seed-address.mjs; node src/server.js"]
+CMD ["node", "src/server.js"]

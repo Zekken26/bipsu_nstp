@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+import { API_BASE } from './apiConfig';
 const REQUEST_TIMEOUT = 15000;
 
 export type ApiErrorPayload = { error?: string; message?: string; details?: unknown; problem?: { type?: string; title?: string } };

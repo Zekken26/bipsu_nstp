@@ -69,13 +69,37 @@ JWT_SECRET=replace-with-a-secure-secret
 CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-Frontend environment file, optional: `frontend/.env`
+Frontend environment file: `frontend/.env`
 
 ```env
-VITE_API_BASE_URL=http://localhost:5000/api
+# Development: /api (Vite proxies it to http://localhost:5000)
+VITE_API_BASE_URL=/api
+# Vercel production (required): https://api.example.edu/api
 ```
 
 Do not commit real `.env` files.
+
+## Deployment configuration
+
+Vercel serves the frontend only. Set `VITE_API_BASE_URL` in the Vercel Production
+environment to the public HTTPS backend URL ending in `/api`; the frontend fails at
+startup with a clear message if it is missing or invalid. Do not use the Vite proxy
+in production. Configure the backend `CORS_ORIGIN` with a comma-separated list of
+exact approved frontend origins, for example `https://app.example.edu` (no wildcard).
+
+For Docker Compose, the public frontend and API share an origin: Nginx proxies
+`/api` and `/socket.io` to the internal backend. Before starting the application,
+run the separate migration command:
+
+```bash
+docker compose --profile maintenance run --rm migrate
+docker compose --profile maintenance run --rm seed
+docker compose up -d
+```
+
+Root commands are intentionally separated: `npm run build` only builds artifacts;
+`npm run migrate:deploy`, `npm run migrate:status`, `npm run migrate:recover`, and
+`npm run seed` are explicit database maintenance operations.
 
 ## Backend Setup
 

@@ -3,11 +3,8 @@ import { env, validateEnv } from './config/env.js';
 import prisma from './db/prisma.js';
 import { logger } from './utils/logger.js';
 import { setupWebSocket } from './websocket.js';
-import { seedAdmin } from './seed.js';
 
 validateEnv();
-
-await seedAdmin();
 
 const app = createApp();
 

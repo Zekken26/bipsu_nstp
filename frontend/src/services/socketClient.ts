@@ -1,9 +1,10 @@
 import { io, Socket } from 'socket.io-client';
+import { API_BASE } from './apiConfig';
 
 let socket: Socket | null = null;
 
 function getSocketUrl(): string {
-  const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+  const apiBase = API_BASE;
   if (apiBase === '/api') return window.location.origin;
   return apiBase.replace(/\/api\/?$/, '');
 }

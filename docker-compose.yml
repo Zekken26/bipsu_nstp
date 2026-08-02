@@ -30,6 +30,7 @@ services:
       JWT_EXPIRES_IN: 24h
       ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
     networks:
       - app-internal
 
@@ -45,6 +46,33 @@ services:
       - "80:80"
     networks:
       - edge
+      - app-internal
+
+  # Run manually before an application deployment; it is never part of build/start.
+  migrate:
+    build: ./backend
+    profiles: ["maintenance"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+    command: ["npx", "prisma", "migrate", "deploy"]
+    networks:
+      - app-internal
+
+  seed:
+    build: ./backend
+    profiles: ["maintenance"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+    command: ["npm", "run", "seed"]
+    networks:
       - app-internal
 
 volumes:
