@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Users, BarChart3, LogOut, CalendarDays, LayoutGrid, ClipboardList, MoonStar, SunMedium, Mic2, Bell, Maximize2, Search, ChevronDown, TrendingUp, Award, Menu, X, UserRound, Settings, ShieldCheck, SlidersHorizontal, History, CircleHelp, LockKeyhole, CheckCircle2, Download, Send, Save, Mail, RotateCcw } from 'lucide-react';
-import LoginPage from './pages/LoginPage';
+import LoginPage from './features/auth/pages/LoginPage';
 import GeneralEducation from './features/enrollment/GeneralEducation';
 import EnrollmentPage from './pages/EnrollmentPage';
 import QualifyingExam from './features/enrollment/QualifyingExam';

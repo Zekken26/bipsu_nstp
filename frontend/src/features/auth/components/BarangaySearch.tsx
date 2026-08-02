@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { searchBarangays, type Barangay } from '../services/api';
+import { searchBarangays, type Barangay } from '../../../services/api';
 
 interface BarangaySearchProps {
   municipalityCode: string;

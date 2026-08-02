@@ -34,10 +34,10 @@ import {
   Users,
 } from 'lucide-react';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-import { BIPSU_PROGRAMS, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS } from '../data/nstpData';
-import splashImage from '../assets/images/splash.png';
-import { apiPost } from '../services/apiClient';
-import { fetchProvinces, fetchMunicipalities, type Province, type Municipality } from '../services/api';
+import { BIPSU_PROGRAMS, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS } from '../../../data/nstpData';
+import splashImage from '../../../assets/images/splash.png';
+import { apiPost } from '../../../services/apiClient';
+import { fetchProvinces, fetchMunicipalities, type Province, type Municipality } from '../../../services/api';
 import BarangaySearch from '../components/BarangaySearch';
 
 type LoginMode = 'login' | 'register';
