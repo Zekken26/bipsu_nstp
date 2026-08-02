@@ -462,10 +462,10 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     const loginInput = email.trim();
 
     // Try backend login first (retry once if backend was restarting)
-    let apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any> } } | null>('/auth/login', { identifier: loginInput, password, role: loginRole }, null);
+    let apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any> } } | null>('/auth/login', { identifier: loginInput, password }, null);
     if (apiResult === null) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any> } } | null>('/auth/login', { identifier: loginInput, password, role: loginRole }, null);
+      apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any> } } | null>('/auth/login', { identifier: loginInput, password }, null);
     }
     if (apiResult?.success && apiResult?.data) {
       const userData = apiResult.data.user;
