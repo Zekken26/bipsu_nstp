@@ -371,11 +371,11 @@ export default function FacilitatorManagement({ admin }: Props) {
               </label>
               <div className="space-y-1.5 md:col-span-2">
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Assigned Municipalities <span className="text-rose-600 dark:text-rose-300">*</span></span>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
                   {BILIRAN_MUNICIPALITIES.map((item) => {
                     const selected = form.municipalities?.includes(item) || false;
                     return (
-                      <label key={item} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${selected ? 'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200' : 'border-blue-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'}`}>
+                      <label key={item} className={`inline-flex cursor-pointer items-center gap-2 px-1 py-1 text-sm font-semibold ${selected ? 'text-blue-800 dark:text-blue-200' : 'text-slate-600 dark:text-slate-300'}`}>
                         <input type="checkbox" checked={selected} onChange={(event) => {
                           const current = form.municipalities || [];
                           setForm({ ...form, municipalities: event.target.checked ? [...current, item] : current.filter((municipality) => municipality !== item) });
