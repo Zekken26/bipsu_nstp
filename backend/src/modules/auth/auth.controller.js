@@ -1,5 +1,14 @@
 import { sendSuccess, sendCreated, sendError } from '../../utils/apiResponse.js';
-import { registerUser, loginUser, getUserById, updateUserProfile } from './auth.service.js';
+import { approvePendingRegistration, registerUser, loginUser, getUserById, rejectPendingRegistration, submitPendingRegistration, updateUserProfile } from './auth.service.js';
+
+const SESSION_COOKIE = 'nstp_auth';
+const sessionCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  maxAge: 24 * 60 * 60 * 1000,
+  path: '/',
+};
 
 export async function getAuthStatus(req, res) {
   return sendSuccess(res, {
@@ -20,11 +29,36 @@ export async function handleRegister(req, res) {
 export async function handleLogin(req, res) {
   try {
     const { identifier, password } = req.body;
-    const result = await loginUser(identifier, password);
-    return sendSuccess(res, result);
+    const { token, user } = await loginUser(identifier, password);
+    res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
+    return sendSuccess(res, { user });
   } catch (err) {
     return sendError(res, err.message, err.statusCode || 500);
   }
+}
+
+export async function handlePendingRegistration(req, res) {
+  try {
+    return sendCreated(res, await submitPendingRegistration(req.body));
+  } catch (err) {
+    return sendError(res, err.message, err.statusCode || 500);
+  }
+}
+
+export function handleLogout(req, res) {
+  const { maxAge, ...clearCookieOptions } = sessionCookieOptions;
+  res.clearCookie(SESSION_COOKIE, clearCookieOptions);
+  return res.status(204).end();
+}
+
+export async function handleApproveRegistration(req, res) {
+  try { return sendSuccess(res, await approvePendingRegistration(req.params.id, req.user.id)); }
+  catch (err) { return sendError(res, err.message, err.statusCode || 500); }
+}
+
+export async function handleRejectRegistration(req, res) {
+  try { await rejectPendingRegistration(req.params.id, req.user.id, req.body?.reason); return res.status(204).end(); }
+  catch (err) { return sendError(res, err.message, err.statusCode || 500); }
 }
 
 export async function handleGetProfile(req, res) {

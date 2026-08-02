@@ -6,21 +6,12 @@ function logApiError(method: string, path: string, error: unknown) {
   console.warn(`[apiClient] ${method} ${path} failed:`, error instanceof Error ? error.message : error);
 }
 
-function getAuthHeaders(): Record<string, string> {
-  const raw = localStorage.getItem('nstpUser');
-  if (!raw) return {};
-  try {
-    const user = JSON.parse(raw);
-    if (user?.token) return { 'Authorization': `Bearer ${user.token}` };
-  } catch { /* ignore */ }
-  return {};
-}
-
 async function fetchWithTimeout(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
   try {
-    const response = await fetch(input, { ...init, signal: controller.signal });
+    const response = await fetch(input, { ...init, credentials: 'include', signal: controller.signal });
+    if (response.status === 401) window.dispatchEvent(new Event('auth:expired'));
     return response;
   } finally {
     clearTimeout(timeoutId);
@@ -52,7 +43,7 @@ export async function apiPut<T>(path: string, payload: unknown, fallback: T): Pr
   try {
     const response = await fetchWithRetry(`${API_BASE}${path}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -68,7 +59,7 @@ export async function apiPut<T>(path: string, payload: unknown, fallback: T): Pr
 export async function apiGet<T>(path: string, fallback: T): Promise<T> {
   try {
     const response = await fetchWithRetry(`${API_BASE}${path}`, {
-      headers: { ...getAuthHeaders() },
+      headers: {},
     });
     if (!response.ok) {
       return parseErrorResponse(response, fallback);
@@ -84,7 +75,7 @@ export async function apiDel<T>(path: string, fallback: T): Promise<T> {
   try {
     const response = await fetchWithRetry(`${API_BASE}${path}`, {
       method: 'DELETE',
-      headers: { ...getAuthHeaders() },
+      headers: {},
     });
     if (!response.ok) {
       return parseErrorResponse(response, fallback);
@@ -100,7 +91,7 @@ export async function apiPost<T>(path: string, payload: unknown, fallback: T): P
   try {
     const response = await fetchWithRetry(`${API_BASE}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     if (!response.ok) {

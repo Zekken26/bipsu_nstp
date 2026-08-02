@@ -1,5 +1,7 @@
 import bcrypt from 'bcrypt';
 import prisma from '../../db/prisma.js';
+import { adminAccountSelect, adminStudentSelect, pendingRegistrationSelect, toAdminAccountDto, toAdminStudentDto } from '../auth/user.dto.js';
+import { assertPlaintextPassword } from '../auth/passwords.js';
 
 const now = () => new Date().toISOString();
 
@@ -55,12 +57,15 @@ const withFallback = async (name, operation) => {
   }
 };
 
-export async function listCollection(name) {
+// These functions deliberately receive a resource name only from server-side
+// route handlers. Never pass a client-controlled collection name here.
+export async function listAdminResource(name) {
   if (name === 'accounts') {
-    return withFallback(name, async () => prisma.user.findMany({
+    const accounts = await withFallback(name, () => prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { instructorProfile: true, coordinatorProfile: true },
+      select: adminAccountSelect,
     }));
+    return accounts.map(toAdminAccountDto);
   }
 
   if (name === 'modules') {
@@ -75,10 +80,11 @@ export async function listCollection(name) {
   }
 
   if (name === 'students') {
-    return withFallback(name, async () => prisma.studentProfile.findMany({
+    const students = await withFallback(name, () => prisma.studentProfile.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { user: true, component: true, section: true },
+      select: adminStudentSelect,
     }));
+    return students.map(toAdminStudentDto);
   }
 
   if (name === 'grades') {
@@ -105,7 +111,11 @@ export async function listCollection(name) {
 
   const simpleList = (model) => withFallback(name, () => model.findMany({ orderBy: { createdAt: 'desc' } }));
 
-  if (name === 'pending-registrations') return simpleList(prisma.pendingRegistration);
+  if (name === 'pending-registrations') {
+    return withFallback(name, () => prisma.pendingRegistration.findMany({
+      orderBy: { createdAt: 'desc' }, select: pendingRegistrationSelect,
+    }));
+  }
   if (name === 'training-groups') return simpleList(prisma.trainingGroup);
   if (name === 'attendance-records') return simpleList(prisma.attendanceRecord);
   if (name === 'attendance-sessions') return simpleList(prisma.attendanceSession);
@@ -116,7 +126,12 @@ export async function listCollection(name) {
   return fallback[name] || [];
 }
 
-export async function upsertCollectionRecord(name, lookup, payload) {
+export async function upsertAdminResource(name, lookup, payload) {
+  if (Object.hasOwn(payload || {}, 'passwordHash')) {
+    const error = new Error('passwordHash is not accepted. Supply a plaintext password through the approved provisioning flow.');
+    error.statusCode = 400;
+    throw error;
+  }
   const nextPayload = { ...payload, updatedAt: payload.updatedAt || now() };
 
   try {
@@ -126,10 +141,16 @@ export async function upsertCollectionRecord(name, lookup, payload) {
       for (const field of explicitFields) {
         if (nextPayload[field] !== undefined) profileData[field] = nextPayload[field];
       }
-      let passwordHash = nextPayload.passwordHash;
-      if (!passwordHash && nextPayload.password) {
-        passwordHash = await bcrypt.hash(nextPayload.password, 10);
+      const existingUser = nextPayload.email
+        ? await prisma.user.findUnique({ where: { email: nextPayload.email }, select: { id: true } })
+        : null;
+      if (!existingUser && nextPayload.password === undefined) {
+        const error = new Error('A password of at least 8 characters is required when creating an account.');
+        error.statusCode = 400;
+        throw error;
       }
+      if (nextPayload.password !== undefined) assertPlaintextPassword(nextPayload.password);
+      const passwordHash = nextPayload.password ? await bcrypt.hash(nextPayload.password, 10) : undefined;
       const userRole = toUserRole(nextPayload.role);
       const user = await prisma.user.upsert({
         where: { email: nextPayload.email },
@@ -143,10 +164,11 @@ export async function upsertCollectionRecord(name, lookup, payload) {
           id: nextPayload.id,
           name: nextPayload.name || nextPayload.email,
           email: nextPayload.email,
-          passwordHash: passwordHash || 'change-me',
+          passwordHash,
           role: userRole,
           data: profileData,
         },
+        select: { id: true },
       });
 
       if (userRole === 'INSTRUCTOR') {
@@ -187,7 +209,7 @@ export async function upsertCollectionRecord(name, lookup, payload) {
         });
       }
 
-      return user;
+      return toAdminAccountDto(await prisma.user.findUnique({ where: { id: user.id }, select: adminAccountSelect }));
     }
 
     if (name === 'modules') {
@@ -242,19 +264,26 @@ export async function upsertCollectionRecord(name, lookup, payload) {
     }
 
     if (name === 'students') {
-      let studentPasswordHash = nextPayload.passwordHash;
-      if (!studentPasswordHash && nextPayload.password) {
-        studentPasswordHash = await bcrypt.hash(nextPayload.password, 10);
+      const existingUser = nextPayload.email
+        ? await prisma.user.findUnique({ where: { email: nextPayload.email }, select: { id: true } })
+        : null;
+      if (!existingUser && nextPayload.password === undefined) {
+        const error = new Error('A password of at least 8 characters is required when creating a student account.');
+        error.statusCode = 400;
+        throw error;
       }
+      if (nextPayload.password !== undefined) assertPlaintextPassword(nextPayload.password);
+      const studentPasswordHash = nextPayload.password ? await bcrypt.hash(nextPayload.password, 10) : undefined;
       const user = await prisma.user.upsert({
         where: { email: nextPayload.email },
         update: { name: nextPayload.name, role: 'STUDENT' },
         create: {
           name: nextPayload.name || nextPayload.email,
           email: nextPayload.email,
-          passwordHash: studentPasswordHash || 'change-me',
+          passwordHash: studentPasswordHash,
           role: 'STUDENT',
         },
+        select: { id: true },
       });
 
       const component = await prisma.nSTPComponent.upsert({
@@ -266,7 +295,7 @@ export async function upsertCollectionRecord(name, lookup, payload) {
         },
       });
 
-      const studentKnownFields = ['id', 'studentId', 'studentNumber', 'userId', 'componentId', 'component', 'course', 'yearLevel', 'sectionId', 'email', 'password', 'passwordHash', 'name', 'updatedAt', 'createdAt'];
+      const studentKnownFields = ['id', 'studentId', 'studentNumber', 'userId', 'componentId', 'component', 'course', 'yearLevel', 'sectionId', 'email', 'password', 'name', 'updatedAt', 'createdAt'];
       const studentExtras = {};
       for (const key of Object.keys(nextPayload)) {
         if (!studentKnownFields.includes(key)) studentExtras[key] = nextPayload[key];
@@ -302,7 +331,8 @@ export async function upsertCollectionRecord(name, lookup, payload) {
 
     if (name === 'pending-registrations') {
       const regPayload = { ...nextPayload };
-      if (regPayload.password && !regPayload.password.startsWith('$2b$')) {
+      if (regPayload.password) {
+        assertPlaintextPassword(regPayload.password);
         regPayload.password = await bcrypt.hash(regPayload.password, 10);
       }
       const { updatedAt, ...regClean } = regPayload;
@@ -338,7 +368,7 @@ export async function upsertCollectionRecord(name, lookup, payload) {
   }
 }
 
-export async function deleteCollectionRecord(name, id) {
+export async function deleteAdminResource(name, id) {
   try {
     const modelMap = {
       accounts: prisma.user,
@@ -371,7 +401,7 @@ export async function deleteCollectionRecord(name, id) {
   }
 }
 
-export async function batchUpsertRecords(name, records) {
+export async function batchUpsertAdminResources(name, records) {
   const results = [];
   for (const payload of records) {
     const lookup = payload.id
@@ -382,7 +412,7 @@ export async function batchUpsertRecords(name, records) {
           ? { email: payload.email }
           : { id: `${name}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}` };
     try {
-      const result = await upsertCollectionRecord(name, lookup, { ...lookup, ...payload });
+      const result = await upsertAdminResource(name, lookup, { ...lookup, ...payload });
       results.push(result);
     } catch (err) {
       results.push({ error: err.message || 'Unknown error', email: payload.email, id: payload.id });
@@ -393,10 +423,10 @@ export async function batchUpsertRecords(name, records) {
 
 export async function getAdminSummary() {
   const [students, modules, assessments, grades] = await Promise.all([
-    listCollection('students'),
-    listCollection('modules'),
-    listCollection('assessments'),
-    listCollection('grades'),
+    listAdminResource('students'),
+    listAdminResource('modules'),
+    listAdminResource('assessments'),
+    listAdminResource('grades'),
   ]);
 
   return {

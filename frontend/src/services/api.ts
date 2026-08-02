@@ -3,7 +3,7 @@ import type { NstpAccount, NstpStudent, NstpModule, NstpAssessment, NstpGradeRec
 
 type AuditLogEntry = { id: string; actor: string; action: string; detail?: string; at: string };
 
-const BASE = '/nstp';
+const BASE = '/nstp/admin';
 
 export async function fetchAccounts() {
   return apiGet<NstpAccount[]>(`${BASE}/accounts`, []);
@@ -125,6 +125,10 @@ export async function fetchCurrentUser() {
   return apiGet<{ success: boolean; data: Record<string, any> } | null>('/auth/me', null);
 }
 
+export async function logoutCurrentUser() {
+  return apiPost<null>('/auth/logout', {}, null);
+}
+
 export async function updateCurrentUser(payload: Record<string, any>) {
   return apiPut<{ success: boolean; data: Record<string, any> } | null>('/auth/me', payload, null);
 }
@@ -138,7 +142,7 @@ export async function upsertAuditLogEntry(payload: AuditLogEntry) {
 }
 
 export async function batchUpsert<T>(collection: string, records: T[]) {
-  return apiPost<{ upserted: number }>(`${BASE}/batch/${collection}`, records, null as unknown as { upserted: number });
+  return apiPost<{ upserted: number }>(`${BASE}/${collection}/batch`, records, null as unknown as { upserted: number });
 }
 
 // --- Address API ---

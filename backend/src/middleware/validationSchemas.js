@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const registerSchema = z.object({
   body: z.object({
     email: z.string().email('Invalid email address'),
-    password: z.string().min(6, 'Password must be at least 6 characters'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
     studentId: z.string().min(1, 'Student ID is required'),
     firstName: z.string().optional(),
     middleName: z.string().optional(),
@@ -20,7 +20,10 @@ export const registerSchema = z.object({
     municipality: z.string().optional(),
     province: z.string().optional(),
     contactNumber: z.string().optional(),
-  }),
+    currentAddress: z.string().optional(),
+    provincialAddress: z.string().optional(),
+    assignedMunicipality: z.string().optional(),
+  }).strict(),
   params: z.object({}).optional(),
   query: z.object({}).optional(),
 });
@@ -29,7 +32,7 @@ export const loginSchema = z.object({
   body: z.object({
     identifier: z.string().min(1, 'Email or student ID is required'),
     password: z.string().min(1, 'Password is required'),
-  }),
+  }).strict(),
   params: z.object({}).optional(),
   query: z.object({}).optional(),
 });
@@ -38,29 +41,19 @@ export const updateProfileSchema = z.object({
   body: z.object({
     name: z.string().min(1).optional(),
     email: z.string().email().optional(),
-    password: z.string().min(6).optional(),
+    password: z.string().min(8).optional(),
     data: z.object({
       title: z.string().optional(),
       subtitle: z.string().optional(),
       contactNumber: z.string().optional(),
-    }).optional(),
-  }),
+    }).strict().optional(),
+  }).strict(),
   params: z.object({}).optional(),
-  query: z.object({}).optional(),
-});
-
-export const nstpCollectionSchema = z.object({
-  body: z.record(z.unknown()),
-  params: z.object({
-    collection: z.string().min(1),
-  }).optional(),
   query: z.object({}).optional(),
 });
 
 export const nstpBatchSchema = z.object({
   body: z.array(z.record(z.unknown())).min(1, 'Expected a non-empty array'),
-  params: z.object({
-    collection: z.string().min(1),
-  }).optional(),
+  params: z.object({}).optional(),
   query: z.object({}).optional(),
 });

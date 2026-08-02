@@ -1,6 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
-import { createCorsMiddleware } from './config/cors.js';
+import { createCorsMiddleware, validateCookieRequestOrigin } from './config/cors.js';
 import { isPostgresReady } from './db/prisma.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
@@ -13,6 +13,7 @@ export function createApp() {
   app.use(helmet());
   app.use(createCorsMiddleware());
   app.use(express.json({ limit: '1mb' }));
+  app.use('/api', validateCookieRequestOrigin);
 
   app.get('/health', async (req, res) => {
     res.json({

@@ -12,18 +12,15 @@ export async function seedAdmin() {
   }
 
   try {
-    const existing = await prisma.user.findUnique({ where: { email } });
-    const passwordHash = await bcrypt.hash(password, 10);
+    const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     const adminName = process.env.ADMIN_NAME || 'Dr. Reynold G. Bustillo';
 
     if (existing) {
-      await prisma.user.update({
-        where: { email },
-        data: { passwordHash, role: 'ADMIN', name: adminName },
-      });
-      logger.info(`Admin password updated for ${email}`);
+      logger.info(`Admin account already exists for ${email}; skipping seed.`);
       return;
     }
+
+    const passwordHash = await bcrypt.hash(password, 10);
 
     await prisma.user.create({
       data: {
@@ -33,6 +30,7 @@ export async function seedAdmin() {
         role: 'ADMIN',
         data: {},
       },
+      select: { id: true },
     });
     logger.info(`Admin account created for ${email}`);
   } catch (error) {

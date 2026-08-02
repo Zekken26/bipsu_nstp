@@ -449,7 +449,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     // Save to PostgreSQL via backend API
     let backendOk = false;
     try {
-      const backendResult = await apiPost<any>('/auth/register', registration, null);
+      const backendResult = await apiPost<any>(`/auth/admin/registrations/${registration.id}/approve`, {}, null);
       if (backendResult && backendResult.success) {
         backendOk = true;
       }
@@ -601,7 +601,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   };
 
   const deleteStudent = async (studentId: string) => {
-    await apiDel(`/nstp/students/${studentId}`, null);
+    await apiDel(`/nstp/admin/students/${studentId}`, null);
     const nextStudents = students.filter((student) => student.id !== studentId);
     persistStudents(nextStudents);
     if (editingStudentId === studentId) {
@@ -4251,7 +4251,7 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
     setSaveError(null);
     const next = { ...editingCoord, role: 'coordinator' as const };
     try {
-      const result = await apiPost<any>('/nstp/accounts', next, null);
+      const result = await apiPost<any>('/nstp/admin/accounts', next, null);
       if (result && !(result as any).error) {
         const allAccounts = loadAccounts();
         const others = allAccounts.filter((a) => a.role !== 'coordinator');
@@ -4275,7 +4275,7 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
   };
 
   const handleDelete = async (id: string) => {
-    await apiDel(`/nstp/accounts/${id}`, null);
+    await apiDel(`/nstp/admin/accounts/${id}`, null);
     const allAccounts = loadAccounts();
     const others = allAccounts.filter((a) => a.role !== 'coordinator');
     const remaining = allAccounts.filter((a) => a.role === 'coordinator' && a.id !== id);

@@ -34,7 +34,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-import { BIPSU_PROGRAMS, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, loadAccounts, loadPendingStudentRegistrations, saveAccounts, savePendingStudentRegistrations, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS, NstpAccount, initializeFromApi } from '../data/nstpData';
+import { BIPSU_PROGRAMS, INDUSTRIAL_TECHNOLOGY_MAJORS, INDUSTRIAL_TECHNOLOGY_PROGRAM, SECONDARY_EDUCATION_MAJORS, SECONDARY_EDUCATION_PROGRAM, YEAR_LEVEL_OPTIONS } from '../data/nstpData';
 import splashImage from '../assets/images/splash.png';
 import { apiPost } from '../services/apiClient';
 import { fetchProvinces, fetchMunicipalities, type Province, type Municipality } from '../services/api';
@@ -342,9 +342,6 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     setNotice(null);
     setError(null);
 
-    const accounts = loadAccounts();
-    const pendingRegistrations = loadPendingStudentRegistrations();
-
     if (mode === 'register') {
       const cleanStudentId = studentId.trim();
       if (!cleanStudentId) {
@@ -403,27 +400,6 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         return;
       }
 
-      const duplicateAccount = accounts.find((account) => account.email.toLowerCase() === email.toLowerCase());
-      if (duplicateAccount) {
-        setError('An account with this email already exists. Please sign in.');
-        return;
-      }
-
-      const duplicateStudentId = accounts.find((account) => account.studentId?.toLowerCase() === cleanStudentId.toLowerCase());
-      if (duplicateStudentId) {
-        setError('This student ID is already connected to an approved account.');
-        return;
-      }
-
-      const duplicatePending = pendingRegistrations.find((registration) =>
-        registration.email.toLowerCase() === email.toLowerCase() ||
-        registration.studentId?.toLowerCase() === cleanStudentId.toLowerCase()
-      );
-      if (duplicatePending) {
-        setError('Your registration is already pending admin approval.');
-        return;
-      }
-
       const pendingRequest = {
         id: `pending-${Math.random().toString(36).slice(2, 10)}`,
         studentId: cleanStudentId,
@@ -451,8 +427,11 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         createdAt: new Date().toISOString(),
       };
 
-      // Save to localStorage and sync to backend for admin review
-      savePendingStudentRegistrations([pendingRequest, ...pendingRegistrations]);
+      const submission = await apiPost<{ success: boolean } | null>('/auth/pending-registration', pendingRequest, null);
+      if (!submission?.success) {
+        setError('Unable to submit your registration. Please try again.');
+        return;
+      }
 
       setNotice('Registration submitted. Please wait for admin approval before signing in.');
       setSurname('');
@@ -483,16 +462,13 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     const loginInput = email.trim();
 
     // Try backend login first (retry once if backend was restarting)
-    let apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any>; token: string } } | null>('/auth/login', { identifier: loginInput, password, role: loginRole }, null);
+    let apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any> } } | null>('/auth/login', { identifier: loginInput, password, role: loginRole }, null);
     if (apiResult === null) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any>; token: string } } | null>('/auth/login', { identifier: loginInput, password, role: loginRole }, null);
+      apiResult = await apiPost<{ success: boolean; data: { user: Record<string, any> } } | null>('/auth/login', { identifier: loginInput, password, role: loginRole }, null);
     }
     if (apiResult?.success && apiResult?.data) {
       const userData = apiResult.data.user;
-
-      // Sync all collections from API before proceeding
-      await initializeFromApi();
 
       // Verify the backend returned user role matches the selected login role
       const backendRole = (userData.role || '').toLowerCase();
@@ -501,48 +477,8 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
         return;
       }
 
-      const matchAccount = accounts.find((account) => {
-        if (account.role !== loginRole) return false;
-        if (loginRole === 'student') {
-          return account.studentId?.toLowerCase() === loginInput.toLowerCase() && account.password === password;
-        }
-        return account.email.toLowerCase() === loginInput.toLowerCase() && account.password === password;
-      });
-
-      // If backend has the account but localStorage doesn't, sync it
-      if (!matchAccount && userData.email) {
-        const syncedAccount: NstpAccount = {
-          id: userData.id || `sync-${Math.random().toString(36).slice(2, 10)}`,
-          name: userData.name || userData.email,
-          email: userData.email,
-          password,
-          role: (userData.role || loginRole) as NstpAccount['role'],
-          studentId: userData.studentId,
-          surname: userData.surname,
-          firstName: userData.firstName,
-          middleName: userData.middleName,
-          school: userData.school,
-          department: userData.department,
-          degreeProgram: userData.degreeProgram,
-          yearLevel: userData.yearLevel,
-          major: userData.major,
-          gender: userData.gender,
-          birthdate: userData.birthdate,
-          houseStreetPurok: userData.houseStreetPurok,
-          barangay: userData.barangay,
-          province: userData.province,
-          currentAddress: userData.currentAddress,
-          cityAddress: userData.cityAddress,
-          provincialAddress: userData.provincialAddress,
-          contactNumber: userData.contactNumber,
-          municipality: userData.municipality,
-          assignedMunicipality: userData.assignedMunicipality || (userData.province && userData.province !== 'Biliran' ? 'Naval' : userData.municipality || 'Naval'),
-        };
-        onLogin({ ...syncedAccount, ...userData, id: userData.id || syncedAccount.id, token: apiResult.data.token });
-        saveAccounts([syncedAccount, ...accounts]);
-      } else {
-        onLogin({ ...matchAccount, ...userData, id: userData.id || matchAccount?.id, token: apiResult.data.token });
-      }
+      setPassword('');
+      onLogin({ id: userData.id, name: userData.name, email: userData.email, role: userData.role });
       return;
     }
 
@@ -554,16 +490,6 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
     if (apiResult && typeof apiResult === 'object' && 'success' in apiResult && !apiResult.success && 'error' in apiResult) {
       setError((apiResult as any).error);
       return;
-    }
-
-    if (loginRole === 'student') {
-      const pending = pendingRegistrations.find((registration) =>
-        registration.studentId?.toLowerCase() === loginInput.toLowerCase()
-      );
-      if (pending) {
-        setError('Your account is still pending admin approval.');
-        return;
-      }
     }
 
     setError(`Invalid ${loginRole === 'student' ? 'Student ID' : 'email'} or password.`);

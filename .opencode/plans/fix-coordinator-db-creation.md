@@ -224,14 +224,63 @@ const mapped: NstpAccount[] = apiAccounts.map((a: any) => {
 
 ---
 
+---
+
+## Fix 4: Show actual error message in development mode
+
+**File:** `backend/src/middleware/errorHandler.js`
+
+**Problem:** The error handler returns a generic `"Internal server error"` for any error without a `statusCode`. Prisma errors and runtime errors fall into this category, making debugging impossible from the frontend.
+
+**Solution:** Include the actual error message in non-production environments so the frontend shows useful information.
+
+**Before:**
+```js
+res.status(err.statusCode || 500).json({
+  success: false,
+  error: err.statusCode ? err.message : 'Internal server error',
+});
+```
+
+**After:**
+```js
+res.status(err.statusCode || 500).json({
+  success: false,
+  error: err.statusCode ? err.message : 'Internal server error',
+  ...(process.env.NODE_ENV !== 'production' && err.message ? { detail: err.message } : {}),
+});
+```
+
+This adds a `detail` field with the actual error message in development/test environments. The frontend will display it in the `handleSave` error path.
+
+---
+
+## Diagnostic Procedure
+
+After deploying all 4 fixes:
+
+1. **Run `npx prisma generate`** in the `backend/` directory to ensure the Prisma client is up to date with the schema
+2. **Restart the backend server**
+3. **Try creating a coordinator** — the modal will now show the actual error message (e.g., "Unique constraint failed on the fields: (...)", "prisma.nSTPComponent is not a function", etc.)
+4. **Report the error message back** so we can apply the specific fix
+
+### Most likely issues (based on code analysis):
+
+| Error Pattern | Likely Cause | Fix |
+|---|---|---|
+| `Unique constraint failed on employeeNumber` | Duplicate employee number in CoordinatorProfile | Add uniqueness handling or use `coord-${random}` fallback |
+| `nSTPComponent is not a function` or `coordinatorProfile is not a function` | Prisma client outdated | Run `npx prisma generate` |
+| `Foreign key constraint failed` | Missing NSTPComponent record | Use `upsert` instead of `findUnique` for component lookup |
+| `email is required` / `name is required` | Empty fields from frontend | Add validation before sending |
+
 ## Verification
 
 After applying all fixes, run the app and test:
 
 1. **Admin login** → navigate to Coordinator Management
 2. **Create a new coordinator** with valid data
-3. **Verify** the modal stays open on API error, shows the error message
-4. **Verify** on success, the modal closes and coordinator appears in the list
+3. **Verify** the modal stays open on API error, shows the detailed error message
+4. **Verify** on success, the modal closes, a success toast appears, and coordinator shows in the list
 5. **Refresh the page** — coordinator should still appear (confirming API → localStorage sync works)
 6. **Check the database** — `SELECT * FROM "user" WHERE email = 'coordinator@test.com'` should return a row with `role = 'COORDINATOR'`
 7. **Delete the coordinator** — verify it disappears from the list AND from the database

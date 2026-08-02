@@ -113,9 +113,11 @@ npm run prisma:studio
 - `PUT /api/modules/:id`
 - `GET /api/assessments`
 - `GET /api/grades`
-- `GET /api/nstp/summary/admin`
-- `GET /api/nstp/:collection`
-- `POST /api/nstp/:collection`
+- `GET /api/nstp/admin/summary` (admin only)
+- `GET|POST|DELETE /api/nstp/admin/<explicit-resource>` (admin only)
+- `GET /api/nstp/students/me`, `/grades`, `/attendance`, and `/qualifying-results` (student ownership enforced)
+- `GET /api/nstp/instructors/classes` and assigned-class student/grade routes (instructor assignment enforced)
+- `GET /api/nstp/coordinators/component/students` and `/classes` (assigned component enforced)
 - `POST /api/payments/charge`
 - `POST /api/follows`
 - `GET /api/events/stream`

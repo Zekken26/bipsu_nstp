@@ -37,6 +37,12 @@ enum SubmissionStatus {
   RETURNED
 }
 
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id                String             @id @default(cuid())
   name              String
@@ -353,6 +359,11 @@ model PendingRegistration {
   contactNumber     String?
     municipality      String?
     assignedMunicipality String?
+  status            RegistrationStatus @default(PENDING)
+  rejectionReason   String?
+  approvedById      String?
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
   createdAt         DateTime  @default(now())
 
   @@map("pending_registration")

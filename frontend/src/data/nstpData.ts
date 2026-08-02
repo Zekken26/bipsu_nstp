@@ -224,8 +224,23 @@ export const QUALIFYING_RESULTS_KEY = 'qualifyingExamResults';
 export const COMPONENT_APPLICATION_STATE_KEY = 'nstp-component-application-state';
 export const AUDIT_LOG_KEY = 'nstp-admin-audit-log';
 const PENDING_SYNC_KEY = 'nstp-pending-sync';
+const runtimeStore = new Map<string, string>();
 
-const API_COLLECTION_MAP: Record<string, string> = {
+// Academic and administrative records are intentionally session-only until
+// their dedicated server APIs replace every legacy local-only feature.
+function readSensitive(key: string) {
+  return runtimeStore.get(key) ?? null;
+}
+
+function writeSensitive(key: string, value: string) {
+  runtimeStore.set(key, value);
+}
+
+function removeSensitive(key: string) {
+  runtimeStore.delete(key);
+}
+
+const ADMIN_RESOURCE_MAP: Record<string, string> = {
   [ACCOUNTS_KEY]: 'accounts',
   [STUDENTS_KEY]: 'students',
   [MODULES_KEY]: 'modules',
@@ -240,31 +255,36 @@ const API_COLLECTION_MAP: Record<string, string> = {
   [AUDIT_LOG_KEY]: 'audit-log',
 };
 
+function getAdminResource(localKey: string): string | null {
+  const currentUser = safeJsonParse<NstpAccount | null>(readSensitive('session-user'), null);
+  return currentUser?.role === 'admin' ? ADMIN_RESOURCE_MAP[localKey] || null : null;
+}
+
 export async function syncToApi<T>(localKey: string, data: T[]): Promise<boolean> {
-  const collection = API_COLLECTION_MAP[localKey];
+  const collection = getAdminResource(localKey);
   if (!collection || !Array.isArray(data) || data.length === 0) return true;
-  const result = await apiPost<{ upserted: number } | null>(`/nstp/batch/${collection}`, data, null);
-  return result !== null;
+  const result = await apiPost<{ success?: boolean; data?: { upserted: number } } | null>(`/nstp/admin/${collection}/batch`, data, null);
+  return result?.success === true;
 }
 
 async function syncSingleToApi<T>(localKey: string, data: T): Promise<boolean> {
-  const collection = API_COLLECTION_MAP[localKey];
+  const collection = getAdminResource(localKey);
   if (!collection) return true;
-  const result = await apiPost<T | null>(`/nstp/${collection}`, data, null);
+  const result = await apiPost<T | null>(`/nstp/admin/${collection}`, data, null);
   return result !== null;
 }
 
 function addToPendingSync(localKey: string, data: unknown[]) {
-  const queue = safeJsonParse<PendingSyncItem[]>(localStorage.getItem(PENDING_SYNC_KEY), []);
+  const queue = safeJsonParse<PendingSyncItem[]>(readSensitive(PENDING_SYNC_KEY), []);
   const existing = queue.findIndex((item) => item.localKey === localKey);
   const entry: PendingSyncItem = { localKey, data, timestamp: new Date().toISOString() };
   if (existing >= 0) queue[existing] = entry;
   else queue.push(entry);
-  localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(queue));
+  writeSensitive(PENDING_SYNC_KEY, JSON.stringify(queue));
 }
 
 export async function retryPendingSyncs(): Promise<number> {
-  const queue = safeJsonParse<PendingSyncItem[]>(localStorage.getItem(PENDING_SYNC_KEY), []);
+  const queue = safeJsonParse<PendingSyncItem[]>(readSensitive(PENDING_SYNC_KEY), []);
   if (queue.length === 0) return 0;
   let synced = 0;
   const remaining: PendingSyncItem[] = [];
@@ -273,16 +293,16 @@ export async function retryPendingSyncs(): Promise<number> {
     if (ok) synced++;
     else remaining.push(item);
   }
-  if (remaining.length > 0) localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(remaining));
-  else localStorage.removeItem(PENDING_SYNC_KEY);
+  if (remaining.length > 0) writeSensitive(PENDING_SYNC_KEY, JSON.stringify(remaining));
+  else removeSensitive(PENDING_SYNC_KEY);
   return synced;
 }
 
 export async function syncCollectionFromApi(localKey: string): Promise<void> {
-  const collection = API_COLLECTION_MAP[localKey];
+  const collection = getAdminResource(localKey);
   if (!collection) return;
   if (collection === 'accounts') {
-    const apiAccounts = await apiGet<any[]>('/nstp/accounts', []);
+    const apiAccounts = await apiGet<any[]>('/nstp/admin/accounts', []);
     if (apiAccounts.length > 0) {
       const mapped: NstpAccount[] = apiAccounts.map((a: any) => {
         const d = (a.data || {}) as Record<string, unknown>;
@@ -311,7 +331,7 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
         };
       });
       if (mapped.length > 0) {
-        const existing = safeJsonParse<NstpAccount[]>(localStorage.getItem(localKey), []);
+        const existing = safeJsonParse<NstpAccount[]>(readSensitive(localKey), []);
         const merged = [...existing];
         for (const m of mapped) {
           const idx = merged.findIndex((x) => x.email?.toLowerCase() === m.email?.toLowerCase());
@@ -321,13 +341,13 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
             merged[idx] = incomingVer >= existingVer ? { ...merged[idx], ...m, password: merged[idx].password } : merged[idx];
           } else merged.unshift(m);
         }
-        localStorage.setItem(localKey, JSON.stringify(merged));
+        writeSensitive(localKey, JSON.stringify(merged));
       }
     }
     return;
   }
   if (collection === 'students') {
-    const apiStudents = await apiGet<any[]>('/nstp/students', []);
+    const apiStudents = await apiGet<any[]>('/nstp/admin/students', []);
     if (apiStudents.length > 0) {
       const mapped: NstpStudent[] = apiStudents.map((bs: any) => {
         const userData = bs.user || {};
@@ -357,7 +377,7 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
         };
       });
       if (mapped.length > 0) {
-        const existing = safeJsonParse<NstpStudent[]>(localStorage.getItem(localKey), []);
+        const existing = safeJsonParse<NstpStudent[]>(readSensitive(localKey), []);
         const merged = [...existing];
         for (const m of mapped) {
           const idx = merged.findIndex((x) => x.studentId === m.studentId || x.email?.toLowerCase() === m.email?.toLowerCase());
@@ -367,14 +387,14 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
             merged[idx] = incomingVer >= existingVer ? m : merged[idx];
           } else merged.unshift(m);
         }
-        localStorage.setItem(localKey, JSON.stringify(merged));
+        writeSensitive(localKey, JSON.stringify(merged));
       }
     }
     return;
   }
-  const apiData = await apiGet<any[]>(`/nstp/${collection}`, []);
+  const apiData = await apiGet<any[]>(`/nstp/admin/${collection}`, []);
   if (Array.isArray(apiData) && apiData.length > 0) {
-    const existing = safeJsonParse<any[]>(localStorage.getItem(localKey), []);
+    const existing = safeJsonParse<any[]>(readSensitive(localKey), []);
     const merged = [...existing];
     for (const item of apiData) {
       const idx = merged.findIndex((x: any) => x.id === item.id);
@@ -384,12 +404,12 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
         merged[idx] = incomingVer >= existingVer ? item : merged[idx];
       } else merged.unshift(item);
     }
-    localStorage.setItem(localKey, JSON.stringify(merged));
+    writeSensitive(localKey, JSON.stringify(merged));
   }
 }
 
 export async function syncAllFromApi(): Promise<void> {
-  const keys = Object.keys(API_COLLECTION_MAP);
+  const keys = Object.keys(ADMIN_RESOURCE_MAP);
   await Promise.allSettled(keys.map((key) => syncCollectionFromApi(key)));
 }
 export const NSTP_COMPONENTS: NstpComponent[] = ['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)', 'CWTS (Coast Guard)'];
@@ -535,26 +555,26 @@ function incrementVersions<T extends { _version?: number }>(records: T[]): T[] {
 export function ensureNstpSeedData() {
   if (typeof window === 'undefined') return;
 
-  if (!localStorage.getItem(ACCOUNTS_KEY)) {
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify([]));
+  if (!readSensitive(ACCOUNTS_KEY)) {
+    writeSensitive(ACCOUNTS_KEY, JSON.stringify([]));
   }
-  if (!localStorage.getItem(ASSESSMENTS_KEY)) {
-    localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify([]));
+  if (!readSensitive(ASSESSMENTS_KEY)) {
+    writeSensitive(ASSESSMENTS_KEY, JSON.stringify([]));
   }
-  if (!localStorage.getItem(MODULES_KEY)) {
-    localStorage.setItem(MODULES_KEY, JSON.stringify([]));
+  if (!readSensitive(MODULES_KEY)) {
+    writeSensitive(MODULES_KEY, JSON.stringify([]));
   }
-  if (!localStorage.getItem(STUDENTS_KEY)) {
-    localStorage.setItem(STUDENTS_KEY, JSON.stringify([]));
+  if (!readSensitive(STUDENTS_KEY)) {
+    writeSensitive(STUDENTS_KEY, JSON.stringify([]));
   }
-  if (!localStorage.getItem(PENDING_REGISTRATIONS_KEY)) {
-    localStorage.setItem(PENDING_REGISTRATIONS_KEY, JSON.stringify([]));
+  if (!readSensitive(PENDING_REGISTRATIONS_KEY)) {
+    writeSensitive(PENDING_REGISTRATIONS_KEY, JSON.stringify([]));
   }
-  if (!localStorage.getItem(GRADES_KEY)) {
-    localStorage.setItem(GRADES_KEY, JSON.stringify([]));
+  if (!readSensitive(GRADES_KEY)) {
+    writeSensitive(GRADES_KEY, JSON.stringify([]));
   }
-  if (!localStorage.getItem(TRAINING_GROUPS_KEY)) {
-    localStorage.setItem(TRAINING_GROUPS_KEY, JSON.stringify([]));
+  if (!readSensitive(TRAINING_GROUPS_KEY)) {
+    writeSensitive(TRAINING_GROUPS_KEY, JSON.stringify([]));
   }
 }
 
@@ -568,13 +588,13 @@ export async function initializeFromApi() {
 export function loadAccounts(): NstpAccount[] {
   if (typeof window === 'undefined') return [];
   ensureNstpSeedData();
-  return safeJsonParse<NstpAccount[]>(localStorage.getItem(ACCOUNTS_KEY), []);
+  return safeJsonParse<NstpAccount[]>(readSensitive(ACCOUNTS_KEY), []);
 }
 
 export async function saveAccounts(accounts: NstpAccount[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const versioned = incrementVersions(accounts);
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(versioned));
+  writeSensitive(ACCOUNTS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-accounts-updated'));
   const ok = await syncToApi(ACCOUNTS_KEY, versioned);
   if (!ok) addToPendingSync(ACCOUNTS_KEY, versioned);
@@ -584,13 +604,13 @@ export async function saveAccounts(accounts: NstpAccount[]): Promise<boolean> {
 export function loadAssessments(): NstpAssessment[] {
   if (typeof window === 'undefined') return [];
   ensureNstpSeedData();
-  return safeJsonParse<NstpAssessment[]>(localStorage.getItem(ASSESSMENTS_KEY), []);
+  return safeJsonParse<NstpAssessment[]>(readSensitive(ASSESSMENTS_KEY), []);
 }
 
 export async function saveAssessments(assessments: NstpAssessment[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const versioned = incrementVersions(assessments);
-  localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify(versioned));
+  writeSensitive(ASSESSMENTS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-assessments-updated'));
   const ok = await syncToApi(ASSESSMENTS_KEY, versioned);
   if (!ok) addToPendingSync(ASSESSMENTS_KEY, versioned);
@@ -600,13 +620,13 @@ export async function saveAssessments(assessments: NstpAssessment[]): Promise<bo
 export function loadModules(): NstpModule[] {
   if (typeof window === 'undefined') return [];
   ensureNstpSeedData();
-  return safeJsonParse<NstpModule[]>(localStorage.getItem(MODULES_KEY), []);
+  return safeJsonParse<NstpModule[]>(readSensitive(MODULES_KEY), []);
 }
 
 export async function saveModules(modules: NstpModule[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const versioned = incrementVersions(modules);
-  localStorage.setItem(MODULES_KEY, JSON.stringify(versioned));
+  writeSensitive(MODULES_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-modules-updated'));
   const ok = await syncToApi(MODULES_KEY, versioned);
   if (!ok) addToPendingSync(MODULES_KEY, versioned);
@@ -616,13 +636,13 @@ export async function saveModules(modules: NstpModule[]): Promise<boolean> {
 export function loadStudents(): NstpStudent[] {
   if (typeof window === 'undefined') return [];
   ensureNstpSeedData();
-  return safeJsonParse<NstpStudent[]>(localStorage.getItem(STUDENTS_KEY), []);
+  return safeJsonParse<NstpStudent[]>(readSensitive(STUDENTS_KEY), []);
 }
 
 export async function saveStudents(students: NstpStudent[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const versioned = incrementVersions(students);
-  localStorage.setItem(STUDENTS_KEY, JSON.stringify(versioned));
+  writeSensitive(STUDENTS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-students-updated'));
   const ok = await syncToApi(STUDENTS_KEY, versioned);
   if (!ok) addToPendingSync(STUDENTS_KEY, versioned);
@@ -632,7 +652,7 @@ export async function saveStudents(students: NstpStudent[]): Promise<boolean> {
 export function loadComponentApplicationState(): ComponentApplicationState {
   if (typeof window === 'undefined') return DEFAULT_COMPONENT_APPLICATION_STATE;
 
-  const saved = safeJsonParse<Partial<ComponentApplicationState>>(localStorage.getItem(COMPONENT_APPLICATION_STATE_KEY), {});
+  const saved = safeJsonParse<Partial<ComponentApplicationState>>(readSensitive(COMPONENT_APPLICATION_STATE_KEY), {});
   return {
     ...DEFAULT_COMPONENT_APPLICATION_STATE,
     ...saved,
@@ -648,7 +668,7 @@ export function loadComponentApplicationState(): ComponentApplicationState {
 export async function saveComponentApplicationState(state: ComponentApplicationState): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const records = incrementVersions([state]);
-  localStorage.setItem(COMPONENT_APPLICATION_STATE_KEY, JSON.stringify(records[0]));
+  writeSensitive(COMPONENT_APPLICATION_STATE_KEY, JSON.stringify(records[0]));
   window.dispatchEvent(new CustomEvent('nstp-component-state-updated'));
   const ok = await syncToApi(COMPONENT_APPLICATION_STATE_KEY, records);
   if (!ok) addToPendingSync(COMPONENT_APPLICATION_STATE_KEY, records);
@@ -657,13 +677,13 @@ export async function saveComponentApplicationState(state: ComponentApplicationS
 
 export function loadQualifyingExamResults(): QualifyingExamResult[] {
   if (typeof window === 'undefined') return [];
-  return safeJsonParse<QualifyingExamResult[]>(localStorage.getItem(QUALIFYING_RESULTS_KEY), []);
+  return safeJsonParse<QualifyingExamResult[]>(readSensitive(QUALIFYING_RESULTS_KEY), []);
 }
 
 export async function saveQualifyingExamResults(results: QualifyingExamResult[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const versioned = incrementVersions(results);
-  localStorage.setItem(QUALIFYING_RESULTS_KEY, JSON.stringify(versioned));
+  writeSensitive(QUALIFYING_RESULTS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-qualifying-results-updated'));
   const ok = await syncToApi(QUALIFYING_RESULTS_KEY, versioned);
   if (!ok) addToPendingSync(QUALIFYING_RESULTS_KEY, versioned);
@@ -716,10 +736,9 @@ export function syncStudentAccessFromQualifyingResult(result: QualifyingExamResu
 
   saveStudents(nextStudents);
 
-  const currentUser = safeJsonParse<NstpAccount | null>(localStorage.getItem('nstpUser'), null);
+  const currentUser = safeJsonParse<NstpAccount | null>(readSensitive('session-user'), null);
   if (currentUser?.id === result.userId) {
     const updatedUser = nextAccounts.find((account) => account.id === result.userId) || currentUser;
-    localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
     window.dispatchEvent(new CustomEvent('nstp-current-user-updated', { detail: updatedUser }));
   }
 }
@@ -760,13 +779,13 @@ export function autoAssignQualifyingResult(result: QualifyingExamResult, existin
 export function loadPendingStudentRegistrations(): PendingStudentRegistration[] {
   if (typeof window === 'undefined') return [];
   ensureNstpSeedData();
-  return safeJsonParse<PendingStudentRegistration[]>(localStorage.getItem(PENDING_REGISTRATIONS_KEY), []);
+  return safeJsonParse<PendingStudentRegistration[]>(readSensitive(PENDING_REGISTRATIONS_KEY), []);
 }
 
 export async function savePendingStudentRegistrations(registrations: PendingStudentRegistration[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const versioned = incrementVersions(registrations);
-  localStorage.setItem(PENDING_REGISTRATIONS_KEY, JSON.stringify(versioned));
+  writeSensitive(PENDING_REGISTRATIONS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-pending-registrations-updated'));
   const ok = await syncToApi(PENDING_REGISTRATIONS_KEY, versioned);
   if (!ok) addToPendingSync(PENDING_REGISTRATIONS_KEY, versioned);
@@ -776,13 +795,13 @@ export async function savePendingStudentRegistrations(registrations: PendingStud
 export function loadGradeRecords(): NstpGradeRecord[] {
   if (typeof window === 'undefined') return [];
   ensureNstpSeedData();
-  return safeJsonParse<NstpGradeRecord[]>(localStorage.getItem(GRADES_KEY), []);
+  return safeJsonParse<NstpGradeRecord[]>(readSensitive(GRADES_KEY), []);
 }
 
 export async function saveGradeRecords(records: NstpGradeRecord[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const versioned = incrementVersions(records);
-  localStorage.setItem(GRADES_KEY, JSON.stringify(versioned));
+  writeSensitive(GRADES_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-grades-updated'));
   const ok = await syncToApi(GRADES_KEY, versioned);
   if (!ok) addToPendingSync(GRADES_KEY, versioned);
@@ -791,13 +810,13 @@ export async function saveGradeRecords(records: NstpGradeRecord[]): Promise<bool
 
 export function loadAttendanceRecords(): NstpAttendanceRecord[] {
   if (typeof window === 'undefined') return [];
-  return safeJsonParse<NstpAttendanceRecord[]>(localStorage.getItem(ATTENDANCE_RECORDS_KEY), []);
+  return safeJsonParse<NstpAttendanceRecord[]>(readSensitive(ATTENDANCE_RECORDS_KEY), []);
 }
 
 export async function saveAttendanceRecords(records: NstpAttendanceRecord[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const versioned = incrementVersions(records);
-  localStorage.setItem(ATTENDANCE_RECORDS_KEY, JSON.stringify(versioned));
+  writeSensitive(ATTENDANCE_RECORDS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-attendance-records-updated'));
   const ok = await syncToApi(ATTENDANCE_RECORDS_KEY, versioned);
   if (!ok) addToPendingSync(ATTENDANCE_RECORDS_KEY, versioned);
@@ -806,13 +825,13 @@ export async function saveAttendanceRecords(records: NstpAttendanceRecord[]): Pr
 
 export function loadAttendanceSessions(): NstpAttendanceSession[] {
   if (typeof window === 'undefined') return [];
-  return safeJsonParse<NstpAttendanceSession[]>(localStorage.getItem(ATTENDANCE_SESSIONS_KEY), []);
+  return safeJsonParse<NstpAttendanceSession[]>(readSensitive(ATTENDANCE_SESSIONS_KEY), []);
 }
 
 export async function saveAttendanceSessions(sessions: NstpAttendanceSession[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const versioned = incrementVersions(sessions);
-  localStorage.setItem(ATTENDANCE_SESSIONS_KEY, JSON.stringify(versioned));
+  writeSensitive(ATTENDANCE_SESSIONS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-attendance-sessions-updated'));
   const ok = await syncToApi(ATTENDANCE_SESSIONS_KEY, versioned);
   if (!ok) addToPendingSync(ATTENDANCE_SESSIONS_KEY, versioned);
@@ -822,13 +841,13 @@ export async function saveAttendanceSessions(sessions: NstpAttendanceSession[]):
 export function loadTrainingGroups(): NstpTrainingGroup[] {
   if (typeof window === 'undefined') return [];
   ensureNstpSeedData();
-  return safeJsonParse<NstpTrainingGroup[]>(localStorage.getItem(TRAINING_GROUPS_KEY), []);
+  return safeJsonParse<NstpTrainingGroup[]>(readSensitive(TRAINING_GROUPS_KEY), []);
 }
 
 export async function saveTrainingGroups(groups: NstpTrainingGroup[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const versioned = incrementVersions(groups);
-  localStorage.setItem(TRAINING_GROUPS_KEY, JSON.stringify(versioned));
+  writeSensitive(TRAINING_GROUPS_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-training-groups-updated'));
   const ok = await syncToApi(TRAINING_GROUPS_KEY, versioned);
   if (!ok) addToPendingSync(TRAINING_GROUPS_KEY, versioned);

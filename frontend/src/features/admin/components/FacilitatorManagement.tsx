@@ -96,7 +96,7 @@ export default function FacilitatorManagement({ admin }: Props) {
   };
 
   const removeFacilitator = async (facilitatorId: string) => {
-    const result = await apiDel(`/nstp/accounts/${facilitatorId}`, null);
+    const result = await apiDel(`/nstp/admin/accounts/${facilitatorId}`, null);
     if (result) {
       const nextFacilitators = facilitators.filter((facilitator) => facilitator.id !== facilitatorId);
       persist(nextFacilitators);
@@ -111,7 +111,7 @@ export default function FacilitatorManagement({ admin }: Props) {
       role: 'facilitator' as const,
       municipalities: form.municipalities?.length ? form.municipalities : ['Naval'],
     };
-    const result = await apiPost<any>('/nstp/accounts', nextFacilitator, null);
+    const result = await apiPost<any>('/nstp/admin/accounts', nextFacilitator, null);
     if (result) {
       const nextFacilitators = facilitators.some((facilitator) => facilitator.id === nextFacilitator.id)
         ? facilitators.map((facilitator) => (facilitator.id === nextFacilitator.id ? nextFacilitator : facilitator))

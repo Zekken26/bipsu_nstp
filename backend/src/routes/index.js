@@ -15,7 +15,7 @@ const apiRouter = Router();
 apiRouter.get('/db-test', authenticate, asyncHandler(getDbTest));
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/address', addressRouter);
-apiRouter.use('/nstp', authenticate, softReadLimiter, nstpRouter);
+apiRouter.use('/nstp', softReadLimiter, nstpRouter);
 apiRouter.use('/follows', authenticate, followsRouter);
 apiRouter.use('/payments', authenticate, paymentsRouter);
 apiRouter.use('/events', authenticate, eventsRouter);

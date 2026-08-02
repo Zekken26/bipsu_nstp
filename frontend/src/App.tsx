@@ -17,8 +17,9 @@ import ReportsCenter from './pages/ReportsPage';
 import GradesPage from './pages/GradesPage';
 import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
-import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi, syncAllFromApi, syncCollectionFromApi, retryPendingSyncs } from './data/nstpData';
+import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi, syncAllFromApi, syncCollectionFromApi } from './data/nstpData';
 import { connectSocket, disconnectSocket } from './services/socketClient';
+import { fetchCurrentUser, logoutCurrentUser } from './services/api';
 import { toast, Toaster } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
 import SectionErrorBoundary from './components/common/SectionErrorBoundary';
@@ -48,6 +49,21 @@ type AuthSplashState = {
   mode: 'login' | 'logout';
   userName?: string;
 };
+
+const SENSITIVE_STORAGE_KEYS = new Set([
+  'nstpUser', 'nstp-accounts', 'nstp-pending-student-registrations', 'nstp-grade-records',
+  'nstp-attendance-records', 'nstp-attendance-sessions', 'nstp-student-roster',
+  'nstp-assessment-library', 'nstp-module-library', 'nstp-training-groups',
+  'qualifyingExamResults', 'nstp-component-application-state', 'nstp-admin-audit-log', 'nstp-pending-sync',
+]);
+
+function cleanupSensitiveStorage() {
+  for (const key of Object.keys(localStorage)) {
+    if (SENSITIVE_STORAGE_KEYS.has(key) || /^(progress-|assessments-|assessments-history-|examResult-|general-education-)/.test(key)) {
+      localStorage.removeItem(key);
+    }
+  }
+}
 
 const DEFAULT_ACCOUNT_PREFERENCES: AccountPreferences = {
   defaultLanding: 'overview',
@@ -166,19 +182,8 @@ const NAV_ITEMS: Record<string, Array<{ id: ShellSection; label: string; icon: a
 };
 
 export default function App() {
-  const [user, setUser] = useState<any>(() => {
-    const savedUser = localStorage.getItem('nstpUser');
-    return savedUser ? safeJsonParse<any>(savedUser, null) : null;
-  });
-  const [activeSection, setActiveSection] = useState<ShellSection>(() => {
-    const savedUser = localStorage.getItem('nstpUser');
-    const parsedUser = savedUser ? safeJsonParse<any>(savedUser, null) : null;
-    if (!parsedUser) return 'overview';
-    if (parsedUser.role === 'admin') return 'overview';
-    if (parsedUser.role === 'facilitator') return 'facilitator';
-    if (parsedUser.role === 'coordinator') return 'overview';
-    return 'overview';
-  });
+  const [user, setUser] = useState<any>(null);
+  const [activeSection, setActiveSection] = useState<ShellSection>('overview');
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     const savedTheme = localStorage.getItem('nstp-theme') as 'light' | 'dark' | null;
     return savedTheme === 'dark' ? 'dark' : 'light';
@@ -232,7 +237,6 @@ export default function App() {
       const nextUser = pendingLoginRef.current;
       if (nextUser) {
         setUser(nextUser);
-        localStorage.setItem('nstpUser', JSON.stringify(nextUser));
         if (nextUser.role === 'admin') {
           setActiveSection('overview');
         } else if (nextUser.role === 'facilitator') {
@@ -245,7 +249,6 @@ export default function App() {
       }
     } else {
       setUser(null);
-      localStorage.removeItem('nstpUser');
       setActiveSection('overview');
     }
 
@@ -257,15 +260,13 @@ export default function App() {
   useEffect(() => {
     let syncInterval: ReturnType<typeof setInterval> | null = null;
     async function init() {
-      const raw = localStorage.getItem('nstpUser');
-      if (raw) {
+      cleanupSensitiveStorage();
+      const current = await fetchCurrentUser();
+      if (current?.success && current.data) {
+        const { id, name, email, role, ...profile } = current.data;
+        setUser({ id, name, email, role: String(role || '').toLowerCase(), ...profile });
         await initializeFromApi();
-        await retryPendingSyncs();
-
-        syncInterval = setInterval(async () => {
-          await syncAllFromApi();
-          await retryPendingSyncs();
-        }, 5 * 60 * 1000);
+        syncInterval = setInterval(() => { void syncAllFromApi(); }, 5 * 60 * 1000);
       }
       setDataReady(true);
     }
@@ -278,7 +279,6 @@ export default function App() {
   useEffect(() => {
     const handleAuthExpired = () => {
       setUser(null);
-      localStorage.removeItem('nstpUser');
       setActiveSection('overview');
     };
     window.addEventListener('auth:expired', handleAuthExpired);
@@ -288,15 +288,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (user?.token) {
-      connectSocket(user.token);
+    if (user) {
+      connectSocket();
     } else {
       disconnectSocket();
     }
     return () => {
       disconnectSocket();
     };
-  }, [user?.token]);
+  }, [user]);
 
   useEffect(() => {
     const handleSocketSync = async (event: Event) => {
@@ -378,7 +378,6 @@ export default function App() {
 
       if (JSON.stringify(nextUser) !== JSON.stringify(user)) {
         setUser(nextUser);
-        localStorage.setItem('nstpUser', JSON.stringify(nextUser));
       }
     };
 
@@ -543,7 +542,7 @@ export default function App() {
     setShowLogoutModal(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setShowLogoutModal(false);
     if (isAuthTransitioning) return;
 
@@ -552,6 +551,8 @@ export default function App() {
     setNotificationsOpen(false);
     setWorkspaceMenuOpen(false);
     setHeaderHint(null);
+
+    await logoutCurrentUser();
 
     authModeRef.current = 'logout';
     setIsAuthTransitioning(true);
@@ -616,7 +617,6 @@ export default function App() {
         onComplete={() => {
           const updatedUser = { ...user, generalEducationComplete: true };
           setUser(updatedUser);
-          localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
         }}
       />
       {showLogoutModal && renderLogoutModal()}
@@ -631,7 +631,6 @@ export default function App() {
         onEnroll={(component) => {
           const updatedUser = { ...user, preferredComponent: component };
           setUser(updatedUser);
-          localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
         }}
       />
       {showLogoutModal && renderLogoutModal()}
@@ -657,7 +656,6 @@ export default function App() {
               : {}),
           };
           setUser(updatedUser);
-          localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
           if (assignment?.assignedComponent) {
             setActiveSection('modules');
             setHeaderHint(`Access granted to the ${assignment.assignedComponent} LMS.`);
@@ -673,7 +671,6 @@ export default function App() {
       <PendingAssignment user={user} onLogout={handleLogout} onAssign={(component) => {
         const updatedUser = { ...user, component };
         setUser(updatedUser);
-        localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
       }} />
       {showLogoutModal && renderLogoutModal()}
     </>;
@@ -782,9 +779,7 @@ export default function App() {
       account.id === user.id ? { ...account, name: nextName, email: nextEmail } : account
     ));
     setUser(updatedUser);
-    localStorage.setItem('nstpUser', JSON.stringify(updatedUser));
-    saveAccounts(updatedAccounts);
-    setHeaderHint('Profile details saved locally.');
+    setHeaderHint('Profile details updated for this session.');
     recordAccountActivity('Profile updated', `${nextName} updated account display details.`);
   };
 

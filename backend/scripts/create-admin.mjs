@@ -11,7 +11,7 @@ if (!email || !password) {
   process.exit(1);
 }
 
-const existing = await prisma.user.findUnique({ where: { email } });
+const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
 if (existing) {
   console.log('Admin already exists:', email);
   await prisma.$disconnect();
@@ -32,6 +32,7 @@ const user = await prisma.user.create({
       contactNumber: '',
     },
   },
+  select: { email: true },
 });
 
 console.log('Admin created:', user.email);

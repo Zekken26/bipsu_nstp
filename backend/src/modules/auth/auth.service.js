@@ -2,6 +2,13 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import prisma from '../../db/prisma.js';
 import { env } from '../../config/env.js';
+import { studentSelfSelect, toStudentSelfProfileDto } from './user.dto.js';
+import { assertPlaintextPassword } from './passwords.js';
+
+const loginUserSelect = {
+  id: true, name: true, email: true, role: true, passwordHash: true, data: true,
+  studentProfile: { select: { studentNumber: true } },
+};
 
 function generateToken(user) {
   return jwt.sign(
@@ -12,6 +19,10 @@ function generateToken(user) {
 }
 
 export async function registerUser(payload) {
+  return submitPendingRegistration(payload);
+  /* Legacy activation logic is intentionally unreachable: registration must
+     never create an active account before administrator approval. */
+  /*
   const {
     surname, firstName, middleName,
     email, password,
@@ -27,8 +38,9 @@ export async function registerUser(payload) {
     err.statusCode = 400;
     throw err;
   }
+  assertPlaintextPassword(password);
 
-  const existingEmail = await prisma.user.findUnique({ where: { email } });
+  const existingEmail = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (existingEmail) {
     const err = new Error('An account with this email already exists.');
     err.statusCode = 409;
@@ -76,13 +88,10 @@ export async function registerUser(payload) {
         },
       },
     },
-    include: { studentProfile: true },
+    select: studentSelfSelect,
   });
 
-  const token = generateToken(user);
-
   return {
-    token,
     user: {
       id: user.id,
       name: user.name,
@@ -92,21 +101,88 @@ export async function registerUser(payload) {
       ...(user.data || {}),
     },
   };
+  */
+}
+
+export async function submitPendingRegistration(payload) {
+  const { email, password, studentId, firstName, middleName, surname, ...details } = payload;
+  const name = [firstName, middleName, surname].filter(Boolean).join(' ').trim();
+  if (!name || !email || !password || !studentId) {
+    const err = new Error('Name, email, password, and student ID are required.');
+    err.statusCode = 400;
+    throw err;
+  }
+  assertPlaintextPassword(password);
+  const [existingUser, existingStudent, pending] = await Promise.all([
+    prisma.user.findUnique({ where: { email }, select: { id: true } }),
+    prisma.studentProfile.findUnique({ where: { studentNumber: studentId }, select: { id: true } }),
+    prisma.pendingRegistration.findFirst({ where: { OR: [{ email }, { studentId }] }, select: { id: true } }),
+  ]);
+  if (existingUser || existingStudent || pending) {
+    const err = new Error('An account or registration with this email or student ID already exists.');
+    err.statusCode = 409;
+    throw err;
+  }
+  await prisma.pendingRegistration.create({
+    data: {
+      id: `pending-${crypto.randomUUID()}`,
+      name, email, studentId, surname, firstName, middleName,
+      password: await bcrypt.hash(password, 10),
+      ...details,
+    },
+    select: { id: true, createdAt: true },
+  });
+  return { submitted: true };
+}
+
+export async function approvePendingRegistration(id, adminId) {
+  return prisma.$transaction(async (tx) => {
+    const registration = await tx.pendingRegistration.findUnique({ where: { id } });
+    if (!registration || registration.status !== 'PENDING') {
+      const err = new Error('Registration is not pending approval.'); err.statusCode = 409; throw err;
+    }
+    const duplicate = await tx.user.findUnique({ where: { email: registration.email }, select: { id: true } });
+    const duplicateStudent = registration.studentId
+      ? await tx.studentProfile.findUnique({ where: { studentNumber: registration.studentId }, select: { id: true } }) : null;
+    if (duplicate || duplicateStudent) { const err = new Error('Registration conflicts with an existing account.'); err.statusCode = 409; throw err; }
+    const user = await tx.user.create({ data: {
+      name: registration.name, email: registration.email, passwordHash: registration.password,
+      role: 'STUDENT', data: {
+        surname: registration.surname, firstName: registration.firstName, middleName: registration.middleName,
+        school: registration.school, department: registration.department, degreeProgram: registration.degreeProgram,
+        yearLevel: registration.yearLevel, major: registration.major, gender: registration.gender,
+        birthdate: registration.birthdate, houseStreetPurok: registration.houseStreetPurok,
+        barangay: registration.barangay, municipality: registration.municipality, province: registration.province,
+        currentAddress: registration.currentAddress, provincialAddress: registration.provincialAddress, contactNumber: registration.contactNumber,
+      }, studentProfile: { create: { studentNumber: registration.studentId || `PENDING-${registration.id}`, yearLevel: registration.yearLevel, course: registration.degreeProgram } },
+    }, select: { id: true, email: true } });
+    await tx.pendingRegistration.update({ where: { id }, data: { status: 'APPROVED', approvedById: adminId, approvedAt: new Date() } });
+    await tx.auditLogEntry.create({ data: { id: crypto.randomUUID(), actor: adminId, action: 'REGISTRATION_APPROVED', detail: registration.id } });
+    return user;
+  });
+}
+
+export async function rejectPendingRegistration(id, adminId, reason) {
+  const result = await prisma.pendingRegistration.updateMany({ where: { id, status: 'PENDING' }, data: { status: 'REJECTED', rejectionReason: reason || null, approvedById: adminId, rejectedAt: new Date() } });
+  if (result.count !== 1) { const err = new Error('Registration is not pending approval.'); err.statusCode = 409; throw err; }
+  await prisma.auditLogEntry.create({ data: { id: crypto.randomUUID(), actor: adminId, action: 'REGISTRATION_REJECTED', detail: id } });
 }
 
 export async function getUserById(id) {
-  const user = await prisma.user.findUnique({ where: { id } });
+  const user = await prisma.user.findUnique({ where: { id }, select: studentSelfSelect });
   if (!user) {
     const err = new Error('User not found.');
     err.statusCode = 404;
     throw err;
   }
-  const { passwordHash, ...profile } = user;
-  return profile;
+  return toStudentSelfProfileDto(user);
 }
 
 export async function updateUserProfile(id, payload) {
-  const user = await prisma.user.findUnique({ where: { id } });
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, data: true },
+  });
   if (!user) {
     const err = new Error('User not found.');
     err.statusCode = 404;
@@ -118,6 +194,7 @@ export async function updateUserProfile(id, payload) {
   if (payload.name !== undefined) updateData.name = payload.name;
   if (payload.email !== undefined) updateData.email = payload.email;
   if (payload.password !== undefined) {
+    assertPlaintextPassword(payload.password);
     updateData.passwordHash = await bcrypt.hash(payload.password, 10);
   }
 
@@ -129,10 +206,10 @@ export async function updateUserProfile(id, payload) {
   const updated = await prisma.user.update({
     where: { id },
     data: updateData,
+    select: studentSelfSelect,
   });
 
-  const { passwordHash, ...profile } = updated;
-  return profile;
+  return toStudentSelfProfileDto(updated);
 }
 
 export async function loginUser(identifier, password) {
@@ -144,13 +221,13 @@ export async function loginUser(identifier, password) {
 
   let user = await prisma.user.findUnique({
     where: { email: identifier },
-    include: { studentProfile: true },
+    select: loginUserSelect,
   });
 
   if (!user) {
     user = await prisma.user.findFirst({
       where: { studentProfile: { studentNumber: identifier } },
-      include: { studentProfile: true },
+      select: loginUserSelect,
     });
   }
 
