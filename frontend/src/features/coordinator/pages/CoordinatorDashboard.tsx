@@ -412,7 +412,7 @@ export default function CoordinatorDashboard({
                 <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
                   <label className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:min-w-[16rem] xl:w-[24rem]">
                     <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
-                    <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search modules or facilitators..." aria-label="Search modules or facilitators" className="w-full bg-transparent text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100" />
+                    <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search modules or facilitators..." aria-label="Search modules or facilitators" className="w-full bg-transparent text-slate-900 outline-none placeholder:text-slate-400 focus:border-transparent focus:shadow-none dark:text-slate-100" />
                   </label>
                   {onNavigate && (
                     <button type="button" onClick={() => onNavigate('announcements')} aria-label="View announcements" className="grid h-12 w-12 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-blue-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
@@ -517,7 +517,7 @@ export default function CoordinatorDashboard({
                         <input type="checkbox" checked={selected} onChange={(e) => {
                           const current = editingFacilitator.municipalities || [];
                           setEditingFacilitator({ ...editingFacilitator, municipalities: e.target.checked ? [...current, item] : current.filter((m) => m !== item) });
-                        }} className="h-4 w-4 rounded border-slate-300 text-blue-600" />
+                        }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" />
                         {item}
                       </label>
                     );
