@@ -25,6 +25,24 @@ class DatabaseUnavailableError extends Error {
   }
 }
 
+function classifyDatabaseError(error, resource) {
+  if (error?.statusCode) return error;
+  // Prisma's connection/pool failures are the only errors that should become 503.
+  if (['P1000', 'P1001', 'P1002', 'P1008', 'P1017', 'P2024'].includes(error?.code)) return new DatabaseUnavailableError(resource, error);
+  if (/\b(connection|database)\b.*\b(lost|unavailable|refused|timeout)\b/i.test(error?.message || '')) return new DatabaseUnavailableError(resource, error);
+  if (error?.code === 'P2002') {
+    const conflict = new Error('A record with one of these unique values already exists.');
+    conflict.statusCode = 409;
+    return conflict;
+  }
+  if (error?.name === 'PrismaClientValidationError') {
+    const invalid = new Error('Invalid account data. Please review the required fields.');
+    invalid.statusCode = 400;
+    return invalid;
+  }
+  return error;
+}
+
 const toUserRole = (role) => {
   const normalized = String(role || '').toLowerCase();
   if (normalized === 'admin') return 'ADMIN';
@@ -49,7 +67,7 @@ const withDatabase = async (name, operation) => {
     // Never substitute empty or in-memory data for official academic records.
     // The error handler deliberately returns a safe, structured 503 response.
     console.warn(`Prisma ${name} operation failed: ${error?.message || error}`);
-    throw new DatabaseUnavailableError(name, error);
+    throw classifyDatabaseError(error, name);
   }
 };
 
@@ -356,8 +374,7 @@ export async function upsertAdminResource(name, lookup, payload) {
     if (name === 'audit-log') return await upsertSimple(prisma.auditLogEntry);
   } catch (error) {
     console.warn(`Prisma ${name} upsert failed: ${error?.message || error}`);
-    if (error?.statusCode) throw error;
-    throw new DatabaseUnavailableError(name, error);
+    throw classifyDatabaseError(error, name);
   }
 }
 
@@ -390,7 +407,7 @@ export async function deleteAdminResource(name, id) {
     return null;
   } catch (error) {
     console.warn(`Prisma ${name} delete failed: ${error?.message || error}`);
-    throw new DatabaseUnavailableError(name, error);
+    throw classifyDatabaseError(error, name);
   }
 }
 
