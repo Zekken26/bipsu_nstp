@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Calendar, Clock, Users, Video, CheckCircle, Play, Lock, Award, Sparkles, Flame, ShieldCheck, ArrowRight, LayoutDashboard, BookOpen, ExternalLink } from 'lucide-react';
 import RoleShell from '../../components/layout/RoleShell';
 import { loadModules, loadAssessments, type NstpModule, type NstpAssessment } from '../../data/nstpData';
+import { toSafeEmbedUrl, toSafeExternalUrl } from '../../utils/moduleUrls';
 
 const shuffleArray = <T,>(array: T[]): T[] => {
   const copy = [...array];
@@ -38,19 +39,6 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
   const [mediaConsumed, setMediaConsumed] = useState<Record<string, boolean>>({});
 
   const MEDIA_CONSUMED_KEY = `nstp-media-consumed-${user.id}`;
-
-  function getEmbedUrl(url: string): string {
-    if (!url) return url;
-    const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
-    if (youtubeMatch) {
-      return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
-    }
-    const youtubeEmbedMatch = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/);
-    if (youtubeEmbedMatch) {
-      return url;
-    }
-    return url;
-  }
 
   const commonModules = useMemo(() =>
     modules.filter((m) => (m.component || 'Common') === 'Common'),
@@ -155,9 +143,12 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
 
   // Media Consumption View
   if (isLive && selectedModule) {
-    const hasVideo = !!selectedModule.videoUrl;
-    const hasDocument = !!selectedModule.documentLink;
-    const hasMeeting = !!selectedModule.meetingLink;
+    const videoEmbedUrl = toSafeEmbedUrl(selectedModule.videoUrl);
+    const documentUrl = toSafeExternalUrl(selectedModule.documentLink);
+    const meetingUrl = toSafeExternalUrl(selectedModule.meetingLink);
+    const hasVideo = !!videoEmbedUrl;
+    const hasDocument = !!documentUrl;
+    const hasMeeting = !!meetingUrl;
     const hasContent = hasVideo || hasDocument || hasMeeting;
     const isConsumed = mediaConsumed[selectedModule.id] || false;
 
@@ -166,9 +157,11 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
         <div className="flex-1 flex items-center justify-center bg-slate-800 relative overflow-hidden">
           {hasVideo ? (
             <iframe
-              src={getEmbedUrl(selectedModule.videoUrl!)}
+              src={videoEmbedUrl}
               className="w-full h-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              sandbox="allow-scripts allow-same-origin allow-presentation"
+              referrerPolicy="no-referrer"
+              allow="autoplay; encrypted-media; picture-in-picture"
               allowFullScreen
               title={selectedModule.title}
             />
@@ -177,13 +170,14 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
               <ExternalLink className="w-16 h-16 text-slate-400 mx-auto mb-4" />
               <p className="text-white text-lg mb-4">Document available for this module</p>
               <a
-                href={selectedModule.documentLink}
+                href={documentUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
                 className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors font-medium"
               >
                 <ExternalLink className="w-4 h-4" />
-                Open Document
+                Open External Document
               </a>
             </div>
           ) : hasMeeting ? (
@@ -191,13 +185,14 @@ export default function GeneralEducation({ user, onComplete, onLogout }: { user:
               <Users className="w-16 h-16 text-slate-400 mx-auto mb-4" />
               <p className="text-white text-lg mb-4">Meeting link available for this module</p>
               <a
-                href={selectedModule.meetingLink}
+                href={meetingUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
                 className="inline-flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-700 transition-colors font-medium"
               >
                 <Video className="w-4 h-4" />
-                Join Meeting
+                Join External Meeting
               </a>
             </div>
           ) : (

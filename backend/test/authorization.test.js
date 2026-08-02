@@ -75,6 +75,11 @@ test('students cannot list, create, or delete accounts', async () => {
   assert.equal((await request('/api/nstp/admin/accounts/another-user', { role: 'STUDENT', method: 'DELETE' })).status, 403);
 });
 
+test('students cannot create or modify modules', async () => {
+  assert.equal((await request('/api/nstp/admin/modules', { role: 'STUDENT', method: 'POST', body: { id: 'module-1', title: 'Blocked' } })).status, 403);
+  assert.equal((await request('/api/nstp/admin/modules/module-1', { role: 'STUDENT', method: 'DELETE' })).status, 403);
+});
+
 test('students cannot modify grades or use the removed generic route', async () => {
   assert.equal((await request('/api/nstp/admin/grades', { role: 'STUDENT', method: 'POST', body: {} })).status, 403);
   assert.equal((await request('/api/nstp/accounts', { role: 'STUDENT' })).status, 404);

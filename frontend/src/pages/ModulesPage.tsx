@@ -1,21 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Clock, CheckCircle, Search, Sparkles, Gauge, ChevronRight, Plus, Trash2, Save, ArrowLeft, ArrowUp, ArrowDown, Copy, Wrench, Video, ExternalLink } from 'lucide-react';
 import { createEmptyModule, loadAssessments, loadModules, loadStudents, safeJsonParse, saveModules, type NstpModule } from '../data/nstpData';
+import { toSafeEmbedUrl, toSafeExternalUrl } from '../utils/moduleUrls';
 
 const MODULE_VISIBILITY_KEY = 'nstp-module-visibility';
-
-function getEmbedUrl(url: string): string {
-  if (!url) return url;
-  const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
-  if (youtubeMatch) {
-    return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
-  }
-  const youtubeEmbedMatch = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/);
-  if (youtubeEmbedMatch) {
-    return url;
-  }
-  return url;
-}
 
 export default function ModulesPage({ user, role = 'student', onBack }: { user: any; role?: 'student' | 'admin' | 'coordinator'; onBack?: () => void }) {
   const [modules, setModules] = useState<NstpModule[]>([]);
@@ -262,6 +250,10 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   }
 
   const detailModule = editorDraft && isAdmin ? editorDraft : selectedModule;
+  const videoEmbedUrl = toSafeEmbedUrl(detailModule?.videoUrl);
+  const videoUrl = toSafeExternalUrl(detailModule?.videoUrl);
+  const meetingUrl = toSafeExternalUrl(detailModule?.meetingLink);
+  const documentUrl = toSafeExternalUrl(detailModule?.documentLink);
   const navigationModules = visibleModules;
   const detailModuleIndex = detailModule ? navigationModules.findIndex((module) => module.id === detailModule.id) : -1;
   const previousModule = detailModuleIndex > 0 ? navigationModules[detailModuleIndex - 1] : null;
@@ -697,7 +689,7 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              {detailModule.videoUrl && (
+              {videoEmbedUrl && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                   <div className="flex items-center gap-2 mb-4">
                     <Video className="w-5 h-5 text-blue-600" />
@@ -705,24 +697,28 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                   </div>
                   <div className="aspect-video rounded-lg overflow-hidden mb-4 bg-slate-100">
                     <iframe
-                      src={getEmbedUrl(detailModule.videoUrl)}
+                      src={videoEmbedUrl}
                       className="w-full h-full"
+                      sandbox="allow-scripts allow-same-origin allow-presentation"
+                      referrerPolicy="no-referrer"
+                      allow="autoplay; encrypted-media; picture-in-picture"
                       allowFullScreen
                       title={`${detailModule.title} video`}
                     />
                   </div>
                   <a
-                    href={detailModule.videoUrl}
+                    href={videoUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    referrerPolicy="no-referrer"
                     className="inline-flex items-center gap-2 text-sm text-blue-700 hover:text-blue-800 font-medium"
                   >
                     <ExternalLink className="w-4 h-4" />
-                    Open in new tab
+                    Open external video
                   </a>
                 </div>
               )}
-              {detailModule.meetingLink && (
+              {meetingUrl && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                   <div className="flex items-center gap-2 mb-4">
                     <ExternalLink className="w-5 h-5 text-amber-600" />
@@ -732,17 +728,18 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                     Join the live session for this module through the meeting link below.
                   </p>
                   <a
-                    href={detailModule.meetingLink}
+                    href={meetingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    referrerPolicy="no-referrer"
                     className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-white hover:bg-amber-600 transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
-                    Join Meeting
+                    Join External Meeting
                   </a>
                 </div>
               )}
-              {detailModule.documentLink && (
+              {documentUrl && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                   <div className="flex items-center gap-2 mb-4">
                     <ExternalLink className="w-5 h-5 text-blue-600" />
@@ -752,17 +749,18 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                     Download or view the reference document for this module.
                   </p>
                   <a
-                    href={detailModule.documentLink}
+                    href={documentUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    referrerPolicy="no-referrer"
                     className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
-                    Open Document
+                    Open External Document
                   </a>
                 </div>
               )}
-              {!detailModule.videoUrl && !detailModule.meetingLink && !detailModule.documentLink && (
+              {!videoEmbedUrl && !meetingUrl && !documentUrl && (
                 <div className="md:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm text-center">
                   <p className="text-slate-500">No content added yet for this module.</p>
                 </div>

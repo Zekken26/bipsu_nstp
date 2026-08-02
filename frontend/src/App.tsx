@@ -553,6 +553,7 @@ export default function App() {
     setHeaderHint(null);
 
     await logoutCurrentUser();
+    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_SENSITIVE_CACHES' });
 
     authModeRef.current = 'logout';
     setIsAuthTransitioning(true);

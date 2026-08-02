@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import prisma from '../../db/prisma.js';
 import { adminAccountSelect, adminStudentSelect, pendingRegistrationSelect, toAdminAccountDto, toAdminStudentDto } from '../auth/user.dto.js';
 import { assertPlaintextPassword } from '../auth/passwords.js';
+import { normalizeModuleUrls } from './module-url.validation.js';
 
 const now = () => new Date().toISOString();
 
@@ -213,27 +214,28 @@ export async function upsertAdminResource(name, lookup, payload) {
     }
 
     if (name === 'modules') {
-      const moduleKnownFields = ['id', 'title', 'description', 'hours', 'published', 'isPublished', 'updatedAt', 'createdAt'];
+      const normalizedModulePayload = normalizeModuleUrls(nextPayload);
+      const moduleKnownFields = ['id', 'title', 'description', 'hours', 'published', 'isPublished', 'updatedAt', 'createdAt', 'data'];
       const moduleExtras = {};
-      for (const key of Object.keys(nextPayload)) {
-        if (!moduleKnownFields.includes(key)) moduleExtras[key] = nextPayload[key];
+      for (const key of Object.keys(normalizedModulePayload)) {
+        if (!moduleKnownFields.includes(key)) moduleExtras[key] = normalizedModulePayload[key];
       }
-      const updatedModuleData = { ...(nextPayload.data || {}), ...moduleExtras };
+      const updatedModuleData = { ...(normalizedModulePayload.data || {}), ...moduleExtras };
       return await prisma.module.upsert({
-        where: { id: nextPayload.id },
+        where: { id: normalizedModulePayload.id },
         update: {
-          title: nextPayload.title,
-          description: nextPayload.description,
-          hours: Number(nextPayload.hours) || null,
-          isPublished: Boolean(nextPayload.published ?? nextPayload.isPublished),
+          title: normalizedModulePayload.title,
+          description: normalizedModulePayload.description,
+          hours: Number(normalizedModulePayload.hours) || null,
+          isPublished: Boolean(normalizedModulePayload.published ?? normalizedModulePayload.isPublished),
           data: updatedModuleData,
         },
         create: {
-          id: nextPayload.id,
-          title: nextPayload.title || 'Untitled module',
-          description: nextPayload.description,
-          hours: Number(nextPayload.hours) || null,
-          isPublished: Boolean(nextPayload.published ?? nextPayload.isPublished),
+          id: normalizedModulePayload.id,
+          title: normalizedModulePayload.title || 'Untitled module',
+          description: normalizedModulePayload.description,
+          hours: Number(normalizedModulePayload.hours) || null,
+          isPublished: Boolean(normalizedModulePayload.published ?? normalizedModulePayload.isPublished),
           data: updatedModuleData,
         },
       });
