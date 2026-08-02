@@ -33,6 +33,7 @@ export default function FacilitatorManagement({ admin }: Props) {
   const [municipalityFilter, setMunicipalityFilter] = useState('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     const nextFacilitators = loadAccounts().filter((account) => account.role === 'facilitator');
@@ -85,11 +86,13 @@ export default function FacilitatorManagement({ admin }: Props) {
   };
 
   const startNew = () => {
+    setFormError(null);
     setEditingId('new');
     setForm(emptyFacilitator());
   };
 
   const startEdit = (facilitator: NstpAccount) => {
+    setFormError(null);
     setEditingId(facilitator.id);
     setForm({ ...facilitator });
     setSelectedId(facilitator.id);
@@ -106,10 +109,16 @@ export default function FacilitatorManagement({ admin }: Props) {
 
   const saveFacilitator = async () => {
     if (!form) return;
+    const municipalities = form.municipalities || [];
+    if (municipalities.length < 1 || municipalities.length > 3) {
+      setFormError('Select between 1 and 3 municipalities for this facilitator.');
+      return;
+    }
+    setFormError(null);
     const nextFacilitator = {
       ...form,
       role: 'facilitator' as const,
-      municipalities: form.municipalities?.length ? form.municipalities : ['Naval'],
+      municipalities,
     };
     const result = await apiPost<any>('/nstp/admin/accounts', nextFacilitator, null);
     if (result) {
@@ -370,21 +379,23 @@ export default function FacilitatorManagement({ admin }: Props) {
                 <textarea value={form.bio || ''} onChange={(event) => setForm({ ...form, bio: event.target.value })} rows={2} placeholder="Enter a short bio (optional)" className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
               </label>
               <div className="space-y-1.5 md:col-span-2">
-                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Assigned Municipalities <span className="text-rose-600 dark:text-rose-300">*</span></span>
+                <span className="flex items-center gap-1 text-sm font-bold text-slate-700 dark:text-slate-200">Assigned Municipalities (select 1–3) <span className="text-rose-600 dark:text-rose-300">*</span></span>
                 <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
                   {BILIRAN_MUNICIPALITIES.map((item) => {
                     const selected = form.municipalities?.includes(item) || false;
+                    const unavailable = !selected && (form.municipalities?.length || 0) >= 3;
                     return (
-                      <label key={item} className={`inline-flex cursor-pointer items-center gap-2 px-1 py-1 text-sm font-semibold ${selected ? 'text-blue-800 dark:text-blue-200' : 'text-slate-600 dark:text-slate-300'}`}>
+                      <label key={item} className={`inline-flex items-center gap-2 px-1 py-1 text-sm font-semibold ${unavailable ? 'cursor-not-allowed text-slate-400 dark:text-slate-600' : 'cursor-pointer'} ${selected ? 'text-blue-800 dark:text-blue-200' : 'text-slate-600 dark:text-slate-300'}`}>
                         <input type="checkbox" checked={selected} onChange={(event) => {
                           const current = form.municipalities || [];
                           setForm({ ...form, municipalities: event.target.checked ? [...current, item] : current.filter((municipality) => municipality !== item) });
-                        }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-0 focus:outline-none" />
+                        }} disabled={unavailable} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-0 focus:outline-none" />
                         {item}
                       </label>
                     );
                   })}
                 </div>
+                {formError && <p className="mt-2 text-sm font-medium text-rose-600 dark:text-rose-300">{formError}</p>}
               </div>
             </div>
             <div className="mt-6 flex flex-wrap justify-end gap-3">

@@ -29,6 +29,7 @@ export default function CoordinatorDashboard({
 
   const [facilitatorEditorOpen, setFacilitatorEditorOpen] = useState(false);
   const [editingFacilitator, setEditingFacilitator] = useState<NstpAccount | null>(null);
+  const [facilitatorError, setFacilitatorError] = useState<string | null>(null);
 
   const userComponent = user.component || 'CWTS';
 
@@ -107,6 +108,7 @@ export default function CoordinatorDashboard({
   };
 
   const handleNewFacilitator = () => {
+    setFacilitatorError(null);
     setEditingFacilitator({
       id: `facilitator-${Math.random().toString(36).slice(2, 9)}`,
       name: '', email: '', password: '', role: 'facilitator',
@@ -118,12 +120,18 @@ export default function CoordinatorDashboard({
   };
 
   const handleEditFacilitator = (f: NstpAccount) => {
+    setFacilitatorError(null);
     setEditingFacilitator({ ...f });
     setFacilitatorEditorOpen(true);
   };
 
   const handleSaveFacilitator = () => {
     if (!editingFacilitator) return;
+    const municipalities = editingFacilitator.municipalities || [];
+    if (municipalities.length < 1 || municipalities.length > 3) {
+      setFacilitatorError('Select between 1 and 3 municipalities for this facilitator.');
+      return;
+    }
     const next = { ...editingFacilitator, role: 'facilitator' as const, title: editingFacilitator.title || userComponent };
     const allAccounts = loadAccounts();
     const otherAccounts = allAccounts.filter((a) => a.role !== 'facilitator');
@@ -508,21 +516,23 @@ export default function CoordinatorDashboard({
                 <input value={editingFacilitator.title || userComponent} disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900" />
               </label>
               <div className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Assigned Municipalities</span>
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Assigned Municipalities (select 1–3)</span>
                 <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
                   {BILIRAN_MUNICIPALITIES.map((item) => {
                     const selected = editingFacilitator.municipalities?.includes(item) || false;
+                    const unavailable = !selected && (editingFacilitator.municipalities?.length || 0) >= 3;
                     return (
-                      <label key={item} className={`inline-flex cursor-pointer items-center gap-2 px-1 py-1 text-sm font-semibold ${selected ? 'text-blue-800 dark:text-blue-200' : 'text-slate-600 dark:text-slate-300'}`}>
+                      <label key={item} className={`inline-flex items-center gap-2 px-1 py-1 text-sm font-semibold ${unavailable ? 'cursor-not-allowed text-slate-400 dark:text-slate-600' : 'cursor-pointer'} ${selected ? 'text-blue-800 dark:text-blue-200' : 'text-slate-600 dark:text-slate-300'}`}>
                         <input type="checkbox" checked={selected} onChange={(e) => {
                           const current = editingFacilitator.municipalities || [];
                           setEditingFacilitator({ ...editingFacilitator, municipalities: e.target.checked ? [...current, item] : current.filter((m) => m !== item) });
-                        }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" />
+                        }} disabled={unavailable} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" />
                         {item}
                       </label>
                     );
                   })}
                 </div>
+                {facilitatorError && <p className="mt-2 text-sm font-medium text-rose-600 dark:text-rose-300">{facilitatorError}</p>}
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">

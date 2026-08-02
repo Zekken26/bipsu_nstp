@@ -1106,6 +1106,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     const nextAccounts = accounts.map((account) => {
       if (account.id !== facilitatorId || account.role !== 'facilitator') return account;
       const currentMunicipalities = account.municipalities || [];
+      if (checked && currentMunicipalities.length >= 3) return account;
       const nextMunicipalities = checked
         ? Array.from(new Set([...currentMunicipalities, municipality]))
         : currentMunicipalities.filter((item) => item !== municipality);
@@ -4210,20 +4211,21 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
       contactNumber: '',
       title: '',
       component: 'CWTS',
-      municipalities: [],
     } as NstpAccount);
     setEditorOpen(true);
   };
 
   const openEdit = (c: NstpAccount) => {
-    setEditingCoord({ ...c });
+    const { municipalities: _municipalities, ...coordinator } = c;
+    setEditingCoord(coordinator as NstpAccount);
     setEditorOpen(true);
   };
 
   const handleSave = async () => {
     if (!editingCoord) return;
     setSaveError(null);
-    const next = { ...editingCoord, role: 'coordinator' as const };
+    const { municipalities: _municipalities, ...coordinator } = editingCoord;
+    const next = { ...coordinator, role: 'coordinator' as const };
     try {
       const result = await apiPost<any>('/nstp/admin/accounts', next, null);
       if (result && !(result as any).error) {
@@ -4315,7 +4317,7 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{editingCoord.id.startsWith('coordinator-') ? 'Create' : 'Edit'} Coordinator</p>
                 <h3 className="text-xl font-semibold text-slate-950 dark:text-white">Coordinator Details</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Set up login credentials and assign an NSTP component and municipalities.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Set up login credentials and assign an NSTP component.</p>
               </div>
               <button onClick={() => { setEditorOpen(false); setEditingCoord(null); }} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
             </div>
@@ -4362,23 +4364,6 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
                   {NSTP_COMPONENTS.map((comp) => <option key={comp} value={comp}>{comp}</option>)}
                 </select>
               </label>
-              <div className="space-y-1.5 md:col-span-2">
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Assigned Municipalities</span>
-                <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {BILIRAN_MUNICIPALITIES.map((item) => {
-                    const selected = editingCoord.municipalities?.includes(item) || false;
-                    return (
-                      <label key={item} className={`inline-flex cursor-pointer items-center gap-2 px-1 py-1 text-sm font-semibold ${selected ? 'text-blue-800 dark:text-blue-200' : 'text-slate-600 dark:text-slate-300'}`}>
-                        <input type="checkbox" checked={selected} onChange={() => {
-                          const current = editingCoord.municipalities || [];
-                          setEditingCoord({ ...editingCoord, municipalities: selected ? current.filter((m) => m !== item) : [...current, item] });
-                        }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-0 focus:outline-none" />
-                        {item}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
             {saveError && <p className="text-sm text-amber-600 dark:text-amber-400">{saveError}</p>}
             <div className="mt-6 flex justify-end gap-3">

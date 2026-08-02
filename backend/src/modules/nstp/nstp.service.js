@@ -71,6 +71,22 @@ const withDatabase = async (name, operation) => {
   }
 };
 
+function normalizeFacilitatorMunicipalities(value) {
+  if (!Array.isArray(value)) {
+    const error = new Error('Facilitators must be assigned to between 1 and 3 municipalities.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const municipalities = [...new Set(value.map((municipality) => String(municipality).trim()).filter(Boolean))];
+  if (municipalities.length < 1 || municipalities.length > 3) {
+    const error = new Error('Facilitators must be assigned to between 1 and 3 municipalities.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return municipalities;
+}
+
 // These functions deliberately receive a resource name only from server-side
 // route handlers. Never pass a client-controlled collection name here.
 export async function listAdminResource(name) {
@@ -147,7 +163,7 @@ export async function upsertAdminResource(name, lookup, payload) {
   try {
     if (name === 'accounts') {
       const profileData = nextPayload.data || {};
-      const explicitFields = ['surname', 'firstName', 'middleName', 'school', 'department', 'degreeProgram', 'yearLevel', 'major', 'gender', 'birthdate', 'houseStreetPurok', 'barangay', 'municipality', 'province', 'provincialAddress', 'contactNumber', 'currentAddress', 'cityAddress', 'title', 'bio', 'generalEducationComplete', 'preferredComponent', 'examTaken', 'examScore', 'component', 'componentAccessStatus'];
+      const explicitFields = ['surname', 'firstName', 'middleName', 'school', 'department', 'degreeProgram', 'yearLevel', 'major', 'gender', 'birthdate', 'houseStreetPurok', 'barangay', 'municipality', 'municipalities', 'province', 'provincialAddress', 'contactNumber', 'currentAddress', 'cityAddress', 'title', 'bio', 'generalEducationComplete', 'preferredComponent', 'examTaken', 'examScore', 'component', 'componentAccessStatus'];
       for (const field of explicitFields) {
         if (nextPayload[field] !== undefined) profileData[field] = nextPayload[field];
       }
@@ -162,6 +178,8 @@ export async function upsertAdminResource(name, lookup, payload) {
       if (nextPayload.password !== undefined) assertPlaintextPassword(nextPayload.password);
       const passwordHash = nextPayload.password ? await bcrypt.hash(nextPayload.password, 10) : undefined;
       const userRole = toUserRole(nextPayload.role);
+      if (userRole === 'COORDINATOR') delete profileData.municipalities;
+      if (userRole === 'INSTRUCTOR') profileData.municipalities = normalizeFacilitatorMunicipalities(profileData.municipalities);
       const user = await prisma.user.upsert({
         where: { email: nextPayload.email },
         update: {

@@ -225,6 +225,20 @@ test('clients cannot submit a bcrypt hash as a plaintext provisioning password',
   );
 });
 
+test('facilitators must be assigned between one and three municipalities', async () => {
+  prisma.user.findUnique = async () => null;
+  const baseAccount = {
+    name: 'Facilitator', email: 'facilitator@example.test', password: 'valid-password', role: 'facilitator',
+  };
+
+  for (const municipalities of [[], ['Almeria', 'Biliran', 'Cabucgayan', 'Caibiran']]) {
+    await assert.rejects(
+      () => upsertAdminResource('accounts', { email: baseAccount.email }, { ...baseAccount, municipalities }),
+      { message: /between 1 and 3 municipalities/i },
+    );
+  }
+});
+
 test('registration hashes a valid plaintext password only on the backend', async () => {
   let createData;
   prisma.user.findUnique = async () => null;
