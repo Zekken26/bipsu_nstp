@@ -261,13 +261,20 @@ export default function App() {
     let syncInterval: ReturnType<typeof setInterval> | null = null;
     async function init() {
       cleanupSensitiveStorage();
-      const current = await fetchCurrentUser();
-      if (current?.success && current.data) {
-        const { id, name, email, role, ...profile } = current.data;
-        setUser({ id, name, email, role: String(role || '').toLowerCase(), ...profile });
-        await initializeFromApi();
+      try {
+        const current = await fetchCurrentUser();
+        if (current?.success && current.data) {
+          const { id, name, email, role, ...profile } = current.data;
+          setUser({ id, name, email, role: String(role || '').toLowerCase(), ...profile });
+          await initializeFromApi();
+        }
+      } catch {
+        // apiClient has already shown the appropriate error; do not strand the
+        // visitor behind the boot splash when a session has expired.
+        setUser(null);
+      } finally {
+        setDataReady(true);
       }
-      setDataReady(true);
     }
     init();
     return () => {
@@ -279,6 +286,10 @@ export default function App() {
     const handleAuthExpired = () => {
       setUser(null);
       setActiveSection('overview');
+      setDataReady(true);
+      setIsBootSplashVisible(false);
+      setAuthSplash((state) => ({ ...state, visible: false }));
+      setIsAuthTransitioning(false);
     };
     window.addEventListener('auth:expired', handleAuthExpired);
     return () => {
@@ -614,7 +625,9 @@ export default function App() {
   if (!user) {
     return (
       <>
-        <LoginPage onLogin={handleLogin} />
+        <React.Suspense fallback={<div className="min-h-screen p-8 text-center" role="status">Loading sign-in…</div>}>
+          <LoginPage onLogin={handleLogin} />
+        </React.Suspense>
         {isBootSplashVisible && <AuthSplash mode="boot" />}
         {authSplash.visible && <AuthSplash mode={authSplash.mode} userName={authSplash.userName} />}
         <Toaster />
