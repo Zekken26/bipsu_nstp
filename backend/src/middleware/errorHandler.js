@@ -9,9 +9,11 @@ export function errorHandler(err, req, res, next) {
     stack: process.env.NODE_ENV === 'production' ? undefined : err.stack,
   });
 
-  res.status(err.statusCode || 500).json({
+  const status = err.statusCode || 500;
+  res.status(status).json({
     success: false,
     error: err.statusCode ? err.message : 'Internal server error',
+    ...(status === 503 ? { problem: { type: 'DATABASE_UNAVAILABLE', title: 'Service unavailable', retryable: true } } : {}),
     ...(process.env.NODE_ENV !== 'production' && err.message ? { detail: err.message } : {}),
   });
 }

@@ -23,6 +23,7 @@ function adminResourceHandlers(resource) {
     list: async (req, res) => res.json(await listAdminResource(resource)),
     upsert: async (req, res) => {
       const payload = req.body || {};
+      if (resource === 'grades' && !payload.id) return sendError(res, 'Grade id is required.', 400);
       const lookup = payload.id ? { id: payload.id }
         : payload.studentId ? { studentId: payload.studentId }
           : payload.email ? { email: payload.email }

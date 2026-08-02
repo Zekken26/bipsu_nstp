@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiDel } from '../services/apiClient';
+import { ApiRequestError, apiGet, apiPost, apiDel } from '../services/apiClient';
 
 export type NstpRole = 'admin' | 'coordinator' | 'student' | 'facilitator';
 export type NstpComponent = 'CWTS' | 'LTS' | 'MTS (Army)' | 'MTS (Navy)' | 'CWTS (Coast Guard)';
@@ -195,6 +195,7 @@ export type NstpAttendanceSession = {
 };
 
 export type NstpGradeRecord = {
+  id: string;
   studentId: string;
   prelim: number;
   midterm: number;
@@ -209,6 +210,8 @@ type PendingSyncItem = {
   localKey: string;
   data: unknown[];
   timestamp: string;
+  retryable: boolean;
+  error?: string;
 };
 
 const ACCOUNTS_KEY = 'nstp-accounts';
@@ -263,21 +266,37 @@ function getAdminResource(localKey: string): string | null {
 export async function syncToApi<T>(localKey: string, data: T[]): Promise<boolean> {
   const collection = getAdminResource(localKey);
   if (!collection || !Array.isArray(data) || data.length === 0) return true;
-  const result = await apiPost<{ success?: boolean; data?: { upserted: number } } | null>(`/nstp/admin/${collection}/batch`, data, null);
-  return result?.success === true;
+  try {
+    const result = await apiPost<{ success?: boolean; data?: { upserted: number } }>(`/nstp/admin/${collection}/batch`, data);
+    if (result?.success === true) return true;
+    addToPendingSync(localKey, data, new ApiRequestError(409, 'The server rejected one or more records.'));
+    return false;
+  } catch (error) {
+    addToPendingSync(localKey, data, error);
+    return false;
+  }
 }
 
 async function syncSingleToApi<T>(localKey: string, data: T): Promise<boolean> {
   const collection = getAdminResource(localKey);
   if (!collection) return true;
-  const result = await apiPost<T | null>(`/nstp/admin/${collection}`, data, null);
-  return result !== null;
+  try {
+    await apiPost<T>(`/nstp/admin/${collection}`, data);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-function addToPendingSync(localKey: string, data: unknown[]) {
+function addToPendingSync(localKey: string, data: unknown[], error?: unknown) {
   const queue = safeJsonParse<PendingSyncItem[]>(readSensitive(PENDING_SYNC_KEY), []);
   const existing = queue.findIndex((item) => item.localKey === localKey);
-  const entry: PendingSyncItem = { localKey, data, timestamp: new Date().toISOString() };
+  const apiError = error instanceof ApiRequestError ? error : undefined;
+  const entry: PendingSyncItem = {
+    localKey, data, timestamp: new Date().toISOString(),
+    retryable: apiError?.retryable ?? queue[existing]?.retryable ?? true,
+    error: apiError?.message ?? queue[existing]?.error,
+  };
   if (existing >= 0) queue[existing] = entry;
   else queue.push(entry);
   writeSensitive(PENDING_SYNC_KEY, JSON.stringify(queue));
@@ -289,6 +308,10 @@ export async function retryPendingSyncs(): Promise<number> {
   let synced = 0;
   const remaining: PendingSyncItem[] = [];
   for (const item of queue) {
+    if (!item.retryable) {
+      remaining.push(item);
+      continue;
+    }
     const ok = await syncToApi(item.localKey, item.data);
     if (ok) synced++;
     else remaining.push(item);
@@ -301,6 +324,7 @@ export async function retryPendingSyncs(): Promise<number> {
 export async function syncCollectionFromApi(localKey: string): Promise<void> {
   const collection = getAdminResource(localKey);
   if (!collection) return;
+  try {
   if (collection === 'accounts') {
     const apiAccounts = await apiGet<any[]>('/nstp/admin/accounts', []);
     if (apiAccounts.length > 0) {
@@ -392,7 +416,7 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
     }
     return;
   }
-  const apiData = await apiGet<any[]>(`/nstp/admin/${collection}`, []);
+  const apiData = await apiGet<any[]>(`/nstp/admin/${collection}`);
   if (Array.isArray(apiData) && apiData.length > 0) {
     const existing = safeJsonParse<any[]>(readSensitive(localKey), []);
     const merged = [...existing];
@@ -405,6 +429,12 @@ export async function syncCollectionFromApi(localKey: string): Promise<void> {
       } else merged.unshift(item);
     }
     writeSensitive(localKey, JSON.stringify(merged));
+  }
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 503) {
+      window.dispatchEvent(new CustomEvent('nstp-service-unavailable', { detail: { localKey, error } }));
+    }
+    throw error;
   }
 }
 
@@ -795,7 +825,10 @@ export async function savePendingStudentRegistrations(registrations: PendingStud
 export function loadGradeRecords(): NstpGradeRecord[] {
   if (typeof window === 'undefined') return [];
   ensureNstpSeedData();
-  return safeJsonParse<NstpGradeRecord[]>(readSensitive(GRADES_KEY), []);
+  return safeJsonParse<Array<Partial<NstpGradeRecord>>>(readSensitive(GRADES_KEY), []).map((record, index) => ({
+    ...record,
+    id: record.id || `legacy-grade-${record.studentId || 'unknown'}-${index}`,
+  })) as NstpGradeRecord[];
 }
 
 export async function saveGradeRecords(records: NstpGradeRecord[]): Promise<boolean> {

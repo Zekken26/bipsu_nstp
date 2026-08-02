@@ -15,22 +15,15 @@ export async function getDatabaseStatus() {
   };
 }
 
-const fallback = {
-  accounts: [],
-  modules: [],
-  assessments: [],
-  students: [],
-  grades: [],
-  notices: [],
-  supportTickets: [],
-  'pending-registrations': [],
-  'training-groups': [],
-  'attendance-records': [],
-  'attendance-sessions': [],
-  'qualifying-results': [],
-  'component-state': [],
-  'audit-log': [],
-};
+class DatabaseUnavailableError extends Error {
+  constructor(resource, cause) {
+    super(`The ${resource} data service is temporarily unavailable.`);
+    this.name = 'DatabaseUnavailableError';
+    this.statusCode = 503;
+    this.code = 'DATABASE_UNAVAILABLE';
+    this.cause = cause;
+  }
+}
 
 const toUserRole = (role) => {
   const normalized = String(role || '').toLowerCase();
@@ -49,12 +42,14 @@ const toComponentType = (component) => {
   return 'CWTS';
 };
 
-const withFallback = async (name, operation) => {
+const withDatabase = async (name, operation) => {
   try {
     return await operation();
   } catch (error) {
-    console.warn(`Prisma ${name} operation failed. Using local fallback data: ${error?.message || error}`);
-    return fallback[name] || [];
+    // Never substitute empty or in-memory data for official academic records.
+    // The error handler deliberately returns a safe, structured 503 response.
+    console.warn(`Prisma ${name} operation failed: ${error?.message || error}`);
+    throw new DatabaseUnavailableError(name, error);
   }
 };
 
@@ -62,7 +57,7 @@ const withFallback = async (name, operation) => {
 // route handlers. Never pass a client-controlled collection name here.
 export async function listAdminResource(name) {
   if (name === 'accounts') {
-    const accounts = await withFallback(name, () => prisma.user.findMany({
+    const accounts = await withDatabase(name, () => prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
       select: adminAccountSelect,
     }));
@@ -70,7 +65,7 @@ export async function listAdminResource(name) {
   }
 
   if (name === 'modules') {
-    return withFallback(name, async () => {
+    return withDatabase(name, async () => {
       const modules = await prisma.module.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'desc' }] });
       return modules.map((mod) => ({
         ...mod,
@@ -81,7 +76,7 @@ export async function listAdminResource(name) {
   }
 
   if (name === 'students') {
-    const students = await withFallback(name, () => prisma.studentProfile.findMany({
+    const students = await withDatabase(name, () => prisma.studentProfile.findMany({
       orderBy: { createdAt: 'desc' },
       select: adminStudentSelect,
     }));
@@ -89,11 +84,11 @@ export async function listAdminResource(name) {
   }
 
   if (name === 'grades') {
-    return withFallback(name, async () => prisma.grade.findMany({ orderBy: { createdAt: 'desc' } }));
+    return withDatabase(name, async () => prisma.grade.findMany({ orderBy: { createdAt: 'desc' } }));
   }
 
   if (name === 'assessments') {
-    return withFallback(name, async () => {
+    return withDatabase(name, async () => {
       const quizzes = await prisma.quiz.findMany({
         orderBy: { createdAt: 'desc' },
         include: { module: true, questions: true },
@@ -106,14 +101,10 @@ export async function listAdminResource(name) {
     });
   }
 
-  if (name === 'notices' || name === 'supportTickets') {
-    return fallback[name] || [];
-  }
-
-  const simpleList = (model) => withFallback(name, () => model.findMany({ orderBy: { createdAt: 'desc' } }));
+  const simpleList = (model) => withDatabase(name, () => model.findMany({ orderBy: { createdAt: 'desc' } }));
 
   if (name === 'pending-registrations') {
-    return withFallback(name, () => prisma.pendingRegistration.findMany({
+    return withDatabase(name, () => prisma.pendingRegistration.findMany({
       orderBy: { createdAt: 'desc' }, select: pendingRegistrationSelect,
     }));
   }
@@ -121,10 +112,10 @@ export async function listAdminResource(name) {
   if (name === 'attendance-records') return simpleList(prisma.attendanceRecord);
   if (name === 'attendance-sessions') return simpleList(prisma.attendanceSession);
   if (name === 'qualifying-results') return simpleList(prisma.qualifyingExamResult);
-  if (name === 'component-state') return withFallback(name, () => prisma.componentApplicationState.findMany());
+  if (name === 'component-state') return withDatabase(name, () => prisma.componentApplicationState.findMany());
   if (name === 'audit-log') return simpleList(prisma.auditLogEntry);
 
-  return fallback[name] || [];
+  return [];
 }
 
 export async function upsertAdminResource(name, lookup, payload) {
@@ -345,11 +336,17 @@ export async function upsertAdminResource(name, lookup, payload) {
       });
     }
     if (name === 'grades') {
-      const existing = await prisma.grade.findFirst({ where: { studentId: nextPayload.studentId } });
-      if (existing) {
-        return prisma.grade.update({ where: { id: existing.id }, data: { ...nextPayload, updatedAt: undefined } });
+      if (!nextPayload.id || !nextPayload.studentId) {
+        const error = new Error('Grade id and studentId are required.');
+        error.statusCode = 400;
+        throw error;
       }
-      return prisma.grade.create({ data: { id: nextPayload.id || `grade-${nextPayload.studentId}`, ...nextPayload, updatedAt: undefined } });
+      const { id, updatedAt, ...gradeData } = nextPayload;
+      return prisma.grade.upsert({
+        where: { id },
+        update: gradeData,
+        create: { id, ...gradeData },
+      });
     }
     if (name === 'training-groups') return await upsertSimple(prisma.trainingGroup);
     if (name === 'attendance-records') return await upsertSimple(prisma.attendanceRecord);
@@ -357,16 +354,10 @@ export async function upsertAdminResource(name, lookup, payload) {
     if (name === 'qualifying-results') return await upsertSimple(prisma.qualifyingExamResult);
     if (name === 'component-state') return await upsertSimple(prisma.componentApplicationState);
     if (name === 'audit-log') return await upsertSimple(prisma.auditLogEntry);
-    if (name === 'notices' || name === 'supportTickets') {
-      const items = fallback[name] || [];
-      const index = items.findIndex((item) => Object.entries(lookup).every(([key, value]) => item[key] === value));
-      if (index >= 0) items[index] = { ...items[index], ...nextPayload };
-      else items.unshift(nextPayload);
-      return index >= 0 ? items[index] : nextPayload;
-    }
   } catch (error) {
     console.warn(`Prisma ${name} upsert failed: ${error?.message || error}`);
-    throw error;
+    if (error?.statusCode) throw error;
+    throw new DatabaseUnavailableError(name, error);
   }
 }
 
@@ -399,7 +390,7 @@ export async function deleteAdminResource(name, id) {
     return null;
   } catch (error) {
     console.warn(`Prisma ${name} delete failed: ${error?.message || error}`);
-    return null;
+    throw new DatabaseUnavailableError(name, error);
   }
 }
 
@@ -417,6 +408,7 @@ export async function batchUpsertAdminResources(name, records) {
       const result = await upsertAdminResource(name, lookup, { ...lookup, ...payload });
       results.push(result);
     } catch (err) {
+      if (err?.statusCode === 503) throw err;
       results.push({ error: err.message || 'Unknown error', email: payload.email, id: payload.id });
     }
   }

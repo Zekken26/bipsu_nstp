@@ -76,7 +76,7 @@ export function useUpsertGrade() {
 }
 
 export function useDeleteGrade() {
-  return useGenericMutation(['grades'], (studentId: string) => api.deleteGrade(studentId));
+  return useGenericMutation(['grades'], (gradeId: string) => api.deleteGrade(gradeId));
 }
 
 export function useTrainingGroups() {

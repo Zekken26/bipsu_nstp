@@ -10,7 +10,7 @@ process.env.DATABASE_URL ||= 'postgresql://test:test@localhost:5432/test';
 const { createApp } = await import('../src/app.js');
 const { default: prisma } = await import('../src/db/prisma.js');
 const { getUserById, registerUser } = await import('../src/modules/auth/auth.service.js');
-const { listAdminResource, upsertAdminResource } = await import('../src/modules/nstp/nstp.service.js');
+const { deleteAdminResource, listAdminResource, upsertAdminResource } = await import('../src/modules/nstp/nstp.service.js');
 
 let server;
 let baseUrl;
@@ -22,6 +22,8 @@ const originals = {
   studentFindUnique: prisma.studentProfile.findUnique,
   studentFindMany: prisma.studentProfile.findMany,
   gradeFindMany: prisma.grade.findMany,
+  gradeUpsert: prisma.grade.upsert,
+  gradeDelete: prisma.grade.delete,
   pendingFindFirst: prisma.pendingRegistration.findFirst,
   pendingCreate: prisma.pendingRegistration.create,
   instructorFindUnique: prisma.instructorProfile.findUnique,
@@ -53,6 +55,8 @@ afterEach(() => {
   prisma.studentProfile.findUnique = originals.studentFindUnique;
   prisma.studentProfile.findMany = originals.studentFindMany;
   prisma.grade.findMany = originals.gradeFindMany;
+  prisma.grade.upsert = originals.gradeUpsert;
+  prisma.grade.delete = originals.gradeDelete;
   prisma.pendingRegistration.findFirst = originals.pendingFindFirst;
   prisma.pendingRegistration.create = originals.pendingCreate;
   prisma.instructorProfile.findUnique = originals.instructorFindUnique;
@@ -129,6 +133,35 @@ test('administrators can use explicit administrative routes', async () => {
   const response = await request('/api/nstp/admin/accounts', { role: 'ADMIN' });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), []);
+});
+
+test('database outages return 503 rather than an empty grade collection', async () => {
+  prisma.grade.findMany = async () => { throw new Error('database connection lost'); };
+  const response = await request('/api/nstp/admin/grades', { role: 'ADMIN' });
+  assert.equal(response.status, 503);
+  const payload = await response.json();
+  assert.equal(payload.success, false);
+  assert.equal(payload.problem.type, 'DATABASE_UNAVAILABLE');
+  assert.notDeepEqual(payload, []);
+});
+
+test('grade updates and deletion target the grade record id, not the student id', async () => {
+  const writes = [];
+  prisma.grade.upsert = async (args) => { writes.push(args); return { id: args.where.id, ...args.update }; };
+  prisma.grade.delete = async ({ where }) => ({ id: where.id });
+  await upsertAdminResource('grades', { id: 'grade-a' }, { id: 'grade-a', studentId: 'student-1', prelim: 80 });
+  await upsertAdminResource('grades', { id: 'grade-b' }, { id: 'grade-b', studentId: 'student-1', prelim: 90 });
+  assert.deepEqual(writes.map((write) => write.where), [{ id: 'grade-a' }, { id: 'grade-b' }]);
+  assert.equal(writes[0].update.prelim, 80);
+  assert.equal(writes[1].update.prelim, 90);
+  assert.deepEqual(await deleteAdminResource('grades', 'grade-b'), { id: 'grade-b' });
+});
+
+test('grade records require an explicit unique grade id', async () => {
+  await assert.rejects(
+    () => upsertAdminResource('grades', { studentId: 'student-1' }, { studentId: 'student-1', prelim: 80 }),
+    { message: /grade id and studentId are required/i },
+  );
 });
 
 test('account listing uses a safe DTO and never returns password fields', async () => {

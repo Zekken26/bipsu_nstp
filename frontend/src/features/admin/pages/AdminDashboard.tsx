@@ -259,6 +259,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const updateGradeRecord = (studentId: string, patch: Partial<NstpGradeRecord>) => {
     const existing = gradeRecords.find((record) => record.studentId === studentId);
     const nextRecord: NstpGradeRecord = {
+      id: existing?.id || `grade-${crypto.randomUUID()}`,
       studentId,
       prelim: existing?.prelim || 0,
       midterm: existing?.midterm || 0,
@@ -269,7 +270,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       ...patch,
     };
     const nextRecords = existing
-      ? gradeRecords.map((record) => (record.studentId === studentId ? nextRecord : record))
+      ? gradeRecords.map((record) => (record.id === nextRecord.id ? nextRecord : record))
       : [nextRecord, ...gradeRecords];
     persistGradeRecords(nextRecords);
     logAudit('Updated grade record', `${studentId} grade portal record changed`);
@@ -505,6 +506,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     if (!gradeRecords.some((record) => record.studentId === approvedStudentId)) {
       saveGradeRecords([
         {
+          id: `grade-${crypto.randomUUID()}`,
           studentId: approvedStudentId,
           prelim: 0,
           midterm: 0,

@@ -17,7 +17,7 @@ import ReportsCenter from './pages/ReportsPage';
 import GradesPage from './pages/GradesPage';
 import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
-import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi, syncAllFromApi, syncCollectionFromApi } from './data/nstpData';
+import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi, syncAllFromApi, syncCollectionFromApi, retryPendingSyncs } from './data/nstpData';
 import { connectSocket, disconnectSocket } from './services/socketClient';
 import { fetchCurrentUser, logoutCurrentUser } from './services/api';
 import { toast, Toaster } from 'sonner';
@@ -284,6 +284,25 @@ export default function App() {
     window.addEventListener('auth:expired', handleAuthExpired);
     return () => {
       window.removeEventListener('auth:expired', handleAuthExpired);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleApiError = (event: Event) => {
+      const error = (event as CustomEvent<{ status?: number; message?: string }>).detail;
+      if (error?.status === 401) toast.error('Your session has expired. Please sign in again.');
+      else if (error?.status === 403) toast.error('You do not have permission to perform that action.');
+      else if (error?.status === 409) toast.error(error.message || 'The change conflicts with current data and was not saved.');
+      else toast.error(error?.message || 'Save failed. Your change was not confirmed by the server.');
+    };
+    const handleServiceUnavailable = () => toast.error('Service unavailable. Previously loaded data is shown as stale.', {
+      action: { label: 'Retry', onClick: () => { void Promise.all([syncAllFromApi(), retryPendingSyncs()]); } },
+    });
+    window.addEventListener('nstp-api-error', handleApiError);
+    window.addEventListener('nstp-service-unavailable', handleServiceUnavailable);
+    return () => {
+      window.removeEventListener('nstp-api-error', handleApiError);
+      window.removeEventListener('nstp-service-unavailable', handleServiceUnavailable);
     };
   }, []);
 

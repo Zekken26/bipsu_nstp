@@ -183,6 +183,7 @@ export default function FacilitatorDashboard({
     const studentKey = student.studentId || student.id;
     const existing = gradeRecords.find((record) => record.studentId === studentKey);
     const base: NstpGradeRecord = existing || {
+      id: `grade-${crypto.randomUUID()}`,
       studentId: studentKey,
       prelim: 0,
       midterm: 0,
@@ -199,7 +200,7 @@ export default function FacilitatorDashboard({
     const average = Math.round(((nextRecord.prelim || 0) + (nextRecord.midterm || 0) + (nextRecord.final || 0)) / 3);
     nextRecord.remarks = average >= 75 && nextRecord.final > 0 ? 'Passed' : nextRecord.final > 0 ? 'For Completion' : 'In Progress';
     const nextRecords = existing
-      ? gradeRecords.map((record) => record.studentId === studentKey ? nextRecord : record)
+      ? gradeRecords.map((record) => record.id === nextRecord.id ? nextRecord : record)
       : [nextRecord, ...gradeRecords];
     saveGradeRecords(nextRecords);
     setGradeRecords(nextRecords);

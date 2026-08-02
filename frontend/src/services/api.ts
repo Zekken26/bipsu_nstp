@@ -61,8 +61,8 @@ export async function upsertGrade(payload: NstpGradeRecord) {
   return apiPost<NstpGradeRecord>(`${BASE}/grades`, payload, null as unknown as NstpGradeRecord);
 }
 
-export async function deleteGrade(studentId: string) {
-  return apiDel<{ deleted: string }>(`${BASE}/grades/${studentId}`, null as unknown as { deleted: string });
+export async function deleteGrade(gradeId: string) {
+  return apiDel<{ deleted: string }>(`${BASE}/grades/${gradeId}`, null as unknown as { deleted: string });
 }
 
 export async function fetchTrainingGroups() {

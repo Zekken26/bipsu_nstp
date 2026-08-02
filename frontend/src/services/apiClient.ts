@@ -1,9 +1,20 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
-
 const REQUEST_TIMEOUT = 15000;
 
-function logApiError(method: string, path: string, error: unknown) {
-  console.warn(`[apiClient] ${method} ${path} failed:`, error instanceof Error ? error.message : error);
+export type ApiErrorPayload = { error?: string; message?: string; details?: unknown; problem?: { type?: string; title?: string } };
+
+export class ApiRequestError extends Error {
+  readonly retryable: boolean;
+
+  constructor(readonly status: number, message: string, readonly payload?: ApiErrorPayload) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.retryable = status === 0 || status === 408 || status === 429 || status >= 500;
+  }
+}
+
+function reportApiError(error: ApiRequestError) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nstp-api-error', { detail: error }));
 }
 
 async function fetchWithTimeout(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
@@ -11,7 +22,8 @@ async function fetchWithTimeout(input: RequestInfo, init: RequestInit = {}): Pro
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
   try {
     const response = await fetch(input, { ...init, credentials: 'include', signal: controller.signal });
-    if (response.status === 401) window.dispatchEvent(new Event('auth:expired'));
+    if (typeof window !== 'undefined' && response.status === 401) window.dispatchEvent(new Event('auth:expired'));
+    if (typeof window !== 'undefined' && response.status === 403) window.dispatchEvent(new Event('auth:forbidden'));
     return response;
   } finally {
     clearTimeout(timeoutId);
@@ -19,87 +31,45 @@ async function fetchWithTimeout(input: RequestInfo, init: RequestInit = {}): Pro
 }
 
 async function fetchWithRetry(input: RequestInfo, init: RequestInit = {}, retries = 3): Promise<Response> {
+  const safeToRetry = (init.method || 'GET').toUpperCase() === 'GET';
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      return await fetchWithTimeout(input, init);
+      const response = await fetchWithTimeout(input, init);
+      if (!safeToRetry || ![408, 429].includes(response.status) && response.status < 500 || attempt === retries - 1) return response;
     } catch (error) {
-      if (attempt === retries - 1) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      if (!safeToRetry || attempt === retries - 1) {
+        throw new ApiRequestError(0, error instanceof Error && error.name === 'AbortError' ? 'Request timed out.' : 'Network request failed.');
+      }
     }
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
   }
-  throw new Error('fetchWithRetry exhausted');
+  throw new ApiRequestError(0, 'Request retry limit reached.');
 }
 
-async function parseErrorResponse<T>(response: Response, fallback: T): Promise<T> {
-  try {
-    const body = await response.json();
-    return body as T;
-  } catch {
-    return fallback;
-  }
-}
-
-export async function apiPut<T>(path: string, payload: unknown, fallback: T): Promise<T> {
+async function request<T>(method: string, path: string, payload?: unknown): Promise<T> {
   try {
     const response = await fetchWithRetry(`${API_BASE}${path}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      method,
+      headers: payload === undefined ? {} : { 'Content-Type': 'application/json' },
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
     });
     if (!response.ok) {
-      return parseErrorResponse(response, fallback);
+      let body: ApiErrorPayload | undefined;
+      try { body = await response.json() as ApiErrorPayload; } catch { /* response body is optional */ }
+      throw new ApiRequestError(response.status, body?.error || body?.message || `Request failed with status ${response.status}.`, body);
     }
+    if (response.status === 204) return undefined as T;
     return await response.json() as T;
   } catch (error) {
-    logApiError('PUT', path, error);
-    return fallback;
+    const apiError = error instanceof ApiRequestError ? error : new ApiRequestError(0, 'Network request failed.');
+    reportApiError(apiError);
+    throw apiError;
   }
 }
 
-export async function apiGet<T>(path: string, fallback: T): Promise<T> {
-  try {
-    const response = await fetchWithRetry(`${API_BASE}${path}`, {
-      headers: {},
-    });
-    if (!response.ok) {
-      return parseErrorResponse(response, fallback);
-    }
-    return await response.json() as T;
-  } catch (error) {
-    logApiError('GET', path, error);
-    return fallback;
-  }
-}
-
-export async function apiDel<T>(path: string, fallback: T): Promise<T> {
-  try {
-    const response = await fetchWithRetry(`${API_BASE}${path}`, {
-      method: 'DELETE',
-      headers: {},
-    });
-    if (!response.ok) {
-      return parseErrorResponse(response, fallback);
-    }
-    return await response.json() as T;
-  } catch (error) {
-    logApiError('DELETE', path, error);
-    return fallback;
-  }
-}
-
-export async function apiPost<T>(path: string, payload: unknown, fallback: T): Promise<T> {
-  try {
-    const response = await fetchWithRetry(`${API_BASE}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      return parseErrorResponse(response, fallback);
-    }
-    return await response.json() as T;
-  } catch (error) {
-    logApiError('POST', path, error);
-    return fallback;
-  }
-}
+// The legacy fallback argument remains source-compatible but is deliberately ignored:
+// a failed response must never be interpreted as successful fallback data.
+export async function apiPut<T>(path: string, payload: unknown, _fallback?: T): Promise<T> { return request<T>('PUT', path, payload); }
+export async function apiGet<T>(path: string, _fallback?: T): Promise<T> { return request<T>('GET', path); }
+export async function apiDel<T>(path: string, _fallback?: T): Promise<T> { return request<T>('DELETE', path); }
+export async function apiPost<T>(path: string, payload: unknown, _fallback?: T): Promise<T> { return request<T>('POST', path, payload); }
