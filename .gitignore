@@ -13,3 +13,4 @@ logs/
 coverage/
 .vite/
 .vscode/
+.opencode/
