@@ -101,6 +101,10 @@ Root commands are intentionally separated: `npm run build` only builds artifacts
 `npm run migrate:deploy`, `npm run migrate:status`, `npm run migrate:recover`, and
 `npm run seed` are explicit database maintenance operations.
 
+See `backend/MIGRATION_OPERATIONS.md` before restoring PostgreSQL foreign keys or
+handling a failed migration. It requires a verified backup and an orphan-data
+report before applying the foreign-key migration.
+
 ## Backend Setup
 
 ```bash
