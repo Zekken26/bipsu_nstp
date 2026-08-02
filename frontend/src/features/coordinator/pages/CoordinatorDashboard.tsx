@@ -362,9 +362,17 @@ export default function CoordinatorDashboard({
     }
   };
 
+  const pageTitle = view === 'dashboard'
+    ? 'Dashboard'
+    : view === 'modules'
+      ? 'Module Library'
+      : view === 'facilitators'
+        ? 'Facilitator Management'
+        : 'Reports';
+
   return (
-    <div className="min-h-screen bg-[#f4f8fd] text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <div className="flex h-screen">
+    <div className={`${embedded ? 'min-h-0 bg-transparent' : 'min-h-dvh overflow-x-hidden bg-[#f4f8fd]'} text-slate-900 dark:bg-slate-950 dark:text-slate-100`}>
+      <div className={embedded ? 'min-h-0' : 'min-h-dvh'}>
         <CollapsibleRoleSidebar
           open={mobileSidebarOpen}
           onClose={() => setMobileSidebarOpen(false)}
@@ -389,38 +397,37 @@ export default function CoordinatorDashboard({
           onLogout={onLogout || (() => {})}
         />
 
-        <main className="min-h-0 min-w-0 flex-1 overflow-auto">
+        <main className={`min-w-0 overflow-auto rounded-[2rem] border border-slate-200 bg-white/90 shadow-xl shadow-slate-200/50 backdrop-blur transition-all duration-300 dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-none ${embedded ? '' : 'm-3 lg:ml-[76px]'}`}>
           {!embedded && (
-            <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-5 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setMobileSidebarOpen(true)} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white lg:hidden dark:border-slate-700 dark:bg-slate-950">
+            <div className="sticky top-0 z-20 flex flex-col gap-4 border-b border-slate-200 bg-white/90 px-5 py-5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                  <button type="button" onClick={() => setMobileSidebarOpen(true)} aria-label="Open coordinator navigation" className="mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm lg:hidden dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                     <Menu className="h-5 w-5" />
                   </button>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Coordinator Portal — {userComponent}</p>
-                    <h2 className="text-xl font-semibold text-slate-950 dark:text-white">
-                      {view === 'dashboard' ? 'Dashboard' : view === 'modules' ? 'Module Library' : view === 'facilitators' ? 'Facilitator Management' : 'Reports'}
-                    </h2>
+                    <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">{pageTitle}</h1>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+                  <label className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:min-w-[16rem] xl:w-[24rem]">
+                    <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+                    <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search modules or facilitators..." aria-label="Search modules or facilitators" className="w-full bg-transparent text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100" />
+                  </label>
                   {onNavigate && (
-                    <button onClick={() => onNavigate('announcements')} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-950">
-                      <Bell className="h-4 w-4" />
+                    <button type="button" onClick={() => onNavigate('announcements')} aria-label="View announcements" className="grid h-12 w-12 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-blue-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                      <Bell className="h-5 w-5" />
                     </button>
                   )}
-                  {onLogout && (
-                    <button onClick={onLogout} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-                      Logout
-                    </button>
-                  )}
+                  <div className="flex min-h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-950">
+                    <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-700 text-sm font-semibold text-white">{initials(user.name)}</span>
+                    <span className="hidden max-w-40 truncate text-sm font-medium text-slate-800 dark:text-slate-100 sm:block">{user.name}</span>
+                  </div>
                 </div>
-              </div>
             </div>
           )}
 
-          <div className="p-5">
+          <div className="min-w-0 p-5">
             {renderContent()}
           </div>
         </main>
