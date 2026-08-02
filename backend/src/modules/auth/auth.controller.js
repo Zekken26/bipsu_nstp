@@ -2,10 +2,13 @@ import { sendSuccess, sendCreated, sendError } from '../../utils/apiResponse.js'
 import { approvePendingRegistration, registerUser, loginUser, getUserById, rejectPendingRegistration, submitPendingRegistration, updateUserProfile } from './auth.service.js';
 
 const SESSION_COOKIE = 'nstp_auth';
+const cookieSameSite = process.env.COOKIE_SAME_SITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax');
+if (!['lax', 'strict', 'none'].includes(cookieSameSite)) throw new Error('COOKIE_SAME_SITE must be lax, strict, or none.');
 const sessionCookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  // Cross-origin Vercel -> Render requests require SameSite=None and Secure.
+  secure: process.env.NODE_ENV === 'production' || cookieSameSite === 'none',
+  sameSite: cookieSameSite,
   maxAge: 24 * 60 * 60 * 1000,
   path: '/',
 };
