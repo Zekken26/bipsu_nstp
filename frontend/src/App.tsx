@@ -1,21 +1,21 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Users, BarChart3, LogOut, CalendarDays, LayoutGrid, ClipboardList, MoonStar, SunMedium, Mic2, Bell, Maximize2, Search, ChevronDown, TrendingUp, Award, Menu, X, UserRound, Settings, ShieldCheck, SlidersHorizontal, History, CircleHelp, LockKeyhole, CheckCircle2, Download, Send, Save, Mail, RotateCcw } from 'lucide-react';
-import LoginPage from './features/auth/pages/LoginPage';
-import GeneralEducation from './features/enrollment/GeneralEducation';
-import EnrollmentPage from './pages/EnrollmentPage';
-import QualifyingExam from './features/enrollment/QualifyingExam';
-import PendingAssignment from './features/enrollment/PendingAssignment';
-import ModulesPage from './pages/ModulesPage';
-import AssessmentsPage from './pages/AssessmentsPage';
-import ProgressTracker from './features/progress/pages/ProgressTracker';
-import AdminDashboard from './features/admin/pages/AdminDashboard';
-import FacilitatorDashboard from './features/facilitator/pages/FacilitatorDashboard';
-import CoordinatorDashboard from './features/coordinator/pages/CoordinatorDashboard';
-import AnnouncementsCenter from './features/announcements/pages/AnnouncementsCenter';
-import ReportsCenter from './pages/ReportsPage';
-import GradesPage from './pages/GradesPage';
-import RoleDashboardHome from './features/dashboard/pages/RoleDashboardHome';
+const LoginPage = React.lazy(() => import('./features/auth/pages/LoginPage'));
+const GeneralEducation = React.lazy(() => import('./features/enrollment/GeneralEducation'));
+const EnrollmentPage = React.lazy(() => import('./pages/EnrollmentPage'));
+const QualifyingExam = React.lazy(() => import('./features/enrollment/QualifyingExam'));
+const PendingAssignment = React.lazy(() => import('./features/enrollment/PendingAssignment'));
+const ModulesPage = React.lazy(() => import('./pages/ModulesPage'));
+const AssessmentsPage = React.lazy(() => import('./pages/AssessmentsPage'));
+const ProgressTracker = React.lazy(() => import('./features/progress/pages/ProgressTracker'));
+const AdminDashboard = React.lazy(() => import('./features/admin/pages/AdminDashboard'));
+const FacilitatorDashboard = React.lazy(() => import('./features/facilitator/pages/FacilitatorDashboard'));
+const CoordinatorDashboard = React.lazy(() => import('./features/coordinator/pages/CoordinatorDashboard'));
+const AnnouncementsCenter = React.lazy(() => import('./features/announcements/pages/AnnouncementsCenter'));
+const ReportsCenter = React.lazy(() => import('./pages/ReportsPage'));
+const GradesPage = React.lazy(() => import('./pages/GradesPage'));
+const RoleDashboardHome = React.lazy(() => import('./features/dashboard/pages/RoleDashboardHome'));
 import CollapsibleRoleSidebar from './components/layout/CollapsibleRoleSidebar';
 import { safeJsonParse, loadModules, loadAssessments, loadAccounts, saveAccounts, loadQualifyingExamResults, loadStudents, initializeFromApi, syncAllFromApi, syncCollectionFromApi, retryPendingSyncs } from './data/nstpData';
 import { connectSocket, disconnectSocket } from './services/socketClient';
@@ -1389,7 +1389,9 @@ export default function App() {
             </div>
 
             <div className="p-3 md:p-4">
-              {renderSection()}
+              <React.Suspense fallback={<div className="p-8 text-center text-sm text-slate-600" role="status">Loading workspace…</div>}>
+                {renderSection()}
+              </React.Suspense>
             </div>
           </main>
         </div>

@@ -4,12 +4,16 @@ import { createCorsMiddleware, validateCookieRequestOrigin } from './config/cors
 import { isPostgresReady } from './db/prisma.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
+import { assertRateLimitConfiguration } from './middleware/rateLimit.js';
 import apiRouter from './routes/index.js';
 
 export function createApp() {
   const app = express();
 
-  app.set('trust proxy', 1);
+  const trustedProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? (process.env.NODE_ENV === 'production' ? '1' : '0'));
+  if (!Number.isInteger(trustedProxyHops) || trustedProxyHops < 0 || trustedProxyHops > 2) throw new Error('TRUST_PROXY_HOPS must be an integer between 0 and 2.');
+  assertRateLimitConfiguration();
+  app.set('trust proxy', trustedProxyHops);
   app.use(helmet());
   app.use(createCorsMiddleware());
   app.use(express.json({ limit: '1mb' }));

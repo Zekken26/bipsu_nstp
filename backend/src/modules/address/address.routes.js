@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { publicAddressLimiter } from '../../middleware/rateLimit.js';
 import {
   listProvinces,
   listMunicipalities,
@@ -9,6 +10,7 @@ import {
 
 const addressRouter = Router();
 
+addressRouter.use(publicAddressLimiter);
 addressRouter.get('/provinces', asyncHandler(listProvinces));
 addressRouter.get('/municipalities', asyncHandler(listMunicipalities));
 addressRouter.get('/barangays/search', asyncHandler(searchBarangays));
