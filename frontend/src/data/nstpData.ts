@@ -327,12 +327,12 @@ export async function retryPendingSyncs(): Promise<number> {
   return synced;
 }
 
-export async function syncCollectionFromApi(localKey: string): Promise<void> {
+export async function syncCollectionFromApi(localKey: string, query = ''): Promise<void> {
   const collection = getAdminResource(localKey);
   if (!collection) return;
   try {
   if (collection === 'accounts') {
-    const apiAccounts = await apiGet<any[]>('/nstp/admin/accounts', []);
+    const apiAccounts = await apiGet<any[]>(`/nstp/admin/accounts${query}`, []);
     if (apiAccounts.length > 0) {
       const mapped: NstpAccount[] = apiAccounts.map((a: any) => {
         const d = (a.data || {}) as Record<string, unknown>;

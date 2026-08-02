@@ -20,7 +20,7 @@ const ADMIN_RESOURCES = new Set([
 function adminResourceHandlers(resource) {
   if (!ADMIN_RESOURCES.has(resource)) throw new Error(`Unsupported resource: ${resource}`);
   return {
-    list: async (req, res) => res.json(await listAdminResource(resource)),
+    list: async (req, res) => res.json(await listAdminResource(resource, req.query)),
     upsert: async (req, res) => {
       const payload = req.body || {};
       if (resource === 'grades' && !payload.id) return sendError(res, 'Grade id is required.', 400);

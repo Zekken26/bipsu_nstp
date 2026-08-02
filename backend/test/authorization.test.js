@@ -180,6 +180,14 @@ test('account listing uses a safe DTO and never returns password fields', async 
   }]);
 });
 
+test('administrator account lookup can be scoped to coordinators', async () => {
+  prisma.user.findMany = async ({ where }) => {
+    assert.deepEqual(where, { role: 'COORDINATOR' });
+    return [];
+  };
+  assert.deepEqual(await listAdminResource('accounts', { role: 'coordinator' }), []);
+});
+
 test('single-account and related user responses exclude credential fields', async () => {
   prisma.user.findUnique = async () => ({
     id: 'student-user', name: 'Student', email: 'student@example.test', role: 'STUDENT',

@@ -89,9 +89,16 @@ function normalizeFacilitatorMunicipalities(value) {
 
 // These functions deliberately receive a resource name only from server-side
 // route handlers. Never pass a client-controlled collection name here.
-export async function listAdminResource(name) {
+export async function listAdminResource(name, filters = {}) {
   if (name === 'accounts') {
+    const role = filters.role ? String(filters.role).toUpperCase() : null;
+    if (role && !['ADMIN', 'COORDINATOR', 'INSTRUCTOR', 'STUDENT'].includes(role)) {
+      const error = new Error('Invalid account role filter.');
+      error.statusCode = 400;
+      throw error;
+    }
     const accounts = await withDatabase(name, () => prisma.user.findMany({
+      ...(role ? { where: { role } } : {}),
       orderBy: { createdAt: 'desc' },
       select: adminAccountSelect,
     }));

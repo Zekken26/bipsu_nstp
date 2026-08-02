@@ -194,7 +194,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     setFormTemplate({ ...DEFAULT_FORM_TEMPLATE, ...safeJsonParse<Partial<OfficialProfileTemplate>>(localStorage.getItem(FORM_TEMPLATE_KEY), {}) });
 
     // Sync with backend API on mount — backend data takes priority
-    Promise.all([syncAllFromApi(), syncCollectionFromApi('nstp-student-roster')]).then(() => {
+    Promise.all([syncAllFromApi(), syncCollectionFromApi('nstp-student-roster'), syncCollectionFromApi('nstp-accounts', '?role=COORDINATOR')]).then(() => {
       setStudents(loadStudents());
       setPendingRegistrations(loadPendingStudentRegistrations());
       setTrainingGroups(loadTrainingGroups());
