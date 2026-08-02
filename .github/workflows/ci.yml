@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma Client
+        run: npm run prisma:generate --workspace backend
+
       - name: TypeScript check (frontend)
         run: npm run frontend:typecheck
 
@@ -69,6 +72,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Generate Prisma Client
+        run: npm run prisma:generate --workspace backend
       - name: Apply migrations to a fresh database
         env:
           DATABASE_URL: postgresql://nstp:nstp_ci_password@localhost:5432/nstp_ci
