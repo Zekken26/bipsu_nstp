@@ -43,7 +43,6 @@ export default defineConfig({
           }
           if (id.includes('node_modules/recharts/')) return 'charts';
           if (id.includes('node_modules/jspdf')) return 'pdf';
-          if (id.includes('node_modules/xlsx')) return 'xlsx';
         },
       },
     },

@@ -10,6 +10,7 @@ import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPen
 import { apiPost, apiPut, apiDel } from '../../../services/apiClient';
 import { toast } from 'sonner';
 import { useCurrentUser, useUpdateCurrentUser } from '../../../hooks/index';
+import { parseStudentCsv, toCsv } from '../../../utils/spreadsheet';
 
 type AdminAuditEntry = {
   id: string;
@@ -352,8 +353,8 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       entry.actor,
       entry.action,
       entry.detail.replace(/\n/g, ' '),
-    ].map((field) => `"${field.replace(/"/g, '""')}"`).join(','));
-    const csv = [header.join(','), ...rows].join('\n');
+    ]);
+    const csv = toCsv(header, rows);
     downloadTextFile(`nstp-admin-audit-${new Date().toISOString().slice(0, 10)}.csv`, csv, 'text/csv;charset=utf-8;');
     logAudit('Exported audit log', `${auditLog.length} entries exported`);
   };
@@ -364,72 +365,43 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     persistAuditLog([]);
   };
 
-  const parseCsvLine = (line: string) => {
-    return line
-      .split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
-      .map((cell) => cell.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-  };
-
   const handleImportCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
-    const text = await file.text();
-    const lines = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    if (lines.length <= 1) return;
-
-    const headers = parseCsvLine(lines[0]);
-    const indexOf = (field: string) => headers.findIndex((header) => header.toLowerCase() === field.toLowerCase());
-
-    const idIdx = indexOf('id');
-    const nameIdx = indexOf('name');
-    const emailIdx = indexOf('email');
-    const componentIdx = indexOf('component');
-    const progressIdx = indexOf('progress');
-    const assessmentsIdx = indexOf('assessments');
-    const statusIdx = indexOf('status');
-    const notesIdx = indexOf('notes');
-
-    const componentValues: NstpStudent['component'][] = ['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)', 'CWTS (Coast Guard)'];
-    const statusValues: NstpStudent['status'][] = ['active', 'pending', 'graduated'];
-
-    const importedRows = lines.slice(1).map((line) => parseCsvLine(line));
-    const importedStudents: NstpStudent[] = importedRows.map((row, index) => {
-      const maybeComponent = (componentIdx >= 0 ? row[componentIdx] : '') as NstpStudent['component'];
-      const maybeStatus = (statusIdx >= 0 ? row[statusIdx] : '') as NstpStudent['status'];
-      const progress = Math.max(0, Math.min(100, Number(progressIdx >= 0 ? row[progressIdx] : 0) || 0));
-      const assessments = Math.max(0, Number(assessmentsIdx >= 0 ? row[assessmentsIdx] : 0) || 0);
-
-      return {
-        id: idIdx >= 0 && row[idIdx] ? row[idIdx] : `student-import-${Date.now()}-${index}`,
-        name: nameIdx >= 0 && row[nameIdx] ? row[nameIdx] : `Imported Student ${index + 1}`,
-        email: emailIdx >= 0 && row[emailIdx] ? row[emailIdx] : `imported-${index + 1}@university.edu`,
-        component: componentValues.includes(maybeComponent) ? maybeComponent : 'CWTS',
-        progress,
-        assessments,
-        status: statusValues.includes(maybeStatus) ? maybeStatus : (progress === 100 ? 'graduated' : progress >= 70 ? 'active' : 'pending'),
-        notes: notesIdx >= 0 ? (row[notesIdx] || '') : '',
+    try {
+      const importedRows = await parseStudentCsv(file);
+      const componentValues: NstpStudent['component'][] = ['CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)', 'CWTS (Coast Guard)'];
+      const statusValues: NstpStudent['status'][] = ['active', 'pending', 'graduated'];
+      const importedStudents: NstpStudent[] = importedRows.map((row, index) => ({
+        id: row.id || `student-import-${Date.now()}-${index}`,
+        name: row.name,
+        email: row.email,
+        component: componentValues.includes(row.component as NstpStudent['component']) ? row.component as NstpStudent['component'] : 'CWTS',
+        progress: row.progress,
+        assessments: row.assessments,
+        status: statusValues.includes(row.status as NstpStudent['status']) ? row.status as NstpStudent['status'] : (row.progress === 100 ? 'graduated' : row.progress >= 70 ? 'active' : 'pending'),
+        notes: row.notes,
         updatedAt: new Date().toISOString(),
-      };
-    });
+      }));
 
-    const merged = [...students];
-    importedStudents.forEach((incoming) => {
-      const existingIndex = merged.findIndex((student) => student.id === incoming.id || student.email.toLowerCase() === incoming.email.toLowerCase());
-      if (existingIndex >= 0) {
-        merged[existingIndex] = { ...merged[existingIndex], ...incoming, updatedAt: new Date().toISOString() };
-      } else {
-        merged.unshift(incoming);
-      }
-    });
+      const merged = [...students];
+      importedStudents.forEach((incoming) => {
+        const existingIndex = merged.findIndex((student) => student.id === incoming.id || student.email.toLowerCase() === incoming.email.toLowerCase());
+        if (existingIndex >= 0) {
+          merged[existingIndex] = { ...merged[existingIndex], ...incoming, updatedAt: new Date().toISOString() };
+        } else {
+          merged.unshift(incoming);
+        }
+      });
 
-    persistStudents(merged);
-    logAudit('Imported student CSV', `${importedStudents.length} rows processed`);
-    event.target.value = '';
+      persistStudents(merged);
+      logAudit('Imported student CSV', `${importedStudents.length} rows processed`);
+      toast.success(`${importedStudents.length} student records imported.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to import the CSV file.');
+    } finally {
+      event.target.value = '';
+    }
   };
 
   const approveRegistration = async (registration: PendingStudentRegistration) => {
@@ -1275,9 +1247,9 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       row.status,
       row.notes.replace(/\n/g, ' '),
       row.updatedAt,
-    ].map((field) => `"${field.replace(/"/g, '""')}"`).join(','));
+    ]);
 
-    const csv = [header.join(','), ...csvRows].join('\n');
+    const csv = toCsv(header, csvRows);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

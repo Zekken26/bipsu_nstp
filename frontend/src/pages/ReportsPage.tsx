@@ -16,6 +16,7 @@ import {
   Legend,
 } from 'recharts';
 import { loadAccounts, loadAssessments, loadGradeRecords, loadModules, loadStudents, loadTrainingGroups, NstpStudent } from '../data/nstpData';
+import { createXlsxWorkbook } from '../utils/xlsxExport';
 
 const PALETTE = ['#2563eb', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4'];
 
@@ -181,8 +182,6 @@ export default function ReportsCenter({ user }: { user: any }) {
     setExportState('working');
 
     try {
-      const XLSX = await import('xlsx');
-      const wb = XLSX.utils.book_new();
 
     const summaryAoA = [
       ['NSTP Report Summary'],
@@ -197,22 +196,22 @@ export default function ReportsCenter({ user }: { user: any }) {
       ['Total Module Hours', String(totalModuleHours)],
     ];
 
-    const studentSheet = XLSX.utils.aoa_to_sheet([
+    const studentRows = [
       ['Student ID', 'Name', 'Email', 'Program', 'Municipality', 'Facilitator', 'Component', 'Progress', 'Assessments', 'Status'],
       ...reportRows,
-    ]);
+    ];
 
-    const gradeSheet = XLSX.utils.aoa_to_sheet([
+    const gradeRowsForExport = [
       ['Student ID', 'Prelim', 'Midterm', 'Final', 'Remarks', 'Release Status', 'Updated At'],
       ...gradeRows,
-    ]);
+    ];
 
-    const moduleSheet = XLSX.utils.aoa_to_sheet([
+    const moduleRows = [
       ['Module', 'Difficulty', 'Hours', 'Updated At'],
       ...modules.map((module) => [module.title, module.difficulty, module.hours, module.updatedAt]),
-    ]);
+    ];
 
-    const assessmentSheet = XLSX.utils.aoa_to_sheet([
+    const assessmentRows = [
       ['Assessment', 'Type', 'Status', 'Owner', 'Passing Score', 'Questions'],
       ...roleScopedAssessments.map((assessment) => [
         assessment.title,
@@ -222,27 +221,35 @@ export default function ReportsCenter({ user }: { user: any }) {
         assessment.passingScore,
         assessment.questions.length,
       ]),
-    ]);
+    ];
 
-    const facilitatorSheet = XLSX.utils.aoa_to_sheet([
+    const facilitatorRowsForExport = [
       ['Facilitator', 'Email', 'Municipalities', 'Students'],
       ...facilitatorRows,
-    ]);
+    ];
 
-    const trainingGroupSheet = XLSX.utils.aoa_to_sheet([
+    const trainingGroupRowsForExport = [
       ['School Year', 'Semester', 'Component', 'Facilitator', 'Municipality', 'Program Handles', 'Students', 'Load Status'],
       ...trainingGroupRows,
-    ]);
+    ];
 
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryAoA), 'Summary');
-      XLSX.utils.book_append_sheet(wb, studentSheet, 'Students');
-      XLSX.utils.book_append_sheet(wb, gradeSheet, 'Grades');
-      XLSX.utils.book_append_sheet(wb, moduleSheet, 'Modules');
-      XLSX.utils.book_append_sheet(wb, assessmentSheet, 'Assessments');
-      XLSX.utils.book_append_sheet(wb, facilitatorSheet, 'Facilitators');
-      XLSX.utils.book_append_sheet(wb, trainingGroupSheet, 'Training Groups');
-
-      XLSX.writeFile(wb, `nstp-reports-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      const blob = new Blob([createXlsxWorkbook([
+        { name: 'Summary', rows: summaryAoA },
+        { name: 'Students', rows: studentRows },
+        { name: 'Grades', rows: gradeRowsForExport },
+        { name: 'Modules', rows: moduleRows },
+        { name: 'Assessments', rows: assessmentRows },
+        { name: 'Facilitators', rows: facilitatorRowsForExport },
+        { name: 'Training Groups', rows: trainingGroupRowsForExport },
+      ])], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `nstp-reports-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
       setExportState('idle');
     } catch {
       setExportState('error');
