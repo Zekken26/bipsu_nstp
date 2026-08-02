@@ -57,3 +57,22 @@ export const nstpBatchSchema = z.object({
   params: z.object({}).optional(),
   query: z.object({}).optional(),
 });
+
+export const createFollowSchema = z.object({
+  body: z.object({
+    targetUserId: z.string().min(1, 'Target user is required'),
+  }).strict(),
+  params: z.object({}).optional(),
+  query: z.object({}).optional(),
+});
+
+export const createPaymentSchema = z.object({
+  body: z.object({
+    amount: z.number().finite().positive().max(100000, 'Amount exceeds the allowed limit'),
+    currency: z.literal('PHP'),
+    purpose: z.literal('ENROLLMENT_FEE'),
+    targetEnrollmentId: z.string().min(1, 'Target enrollment is required'),
+  }).strict(),
+  params: z.object({}).optional(),
+  query: z.object({}).optional(),
+});

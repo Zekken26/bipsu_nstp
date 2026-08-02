@@ -8,5 +8,5 @@ export function streamEvents(req, res) {
   });
 
   res.write('event: ready\\ndata: {"ok":true}\\n\\n');
-  attachEventClient(res);
+  attachEventClient(res, req.user);
 }

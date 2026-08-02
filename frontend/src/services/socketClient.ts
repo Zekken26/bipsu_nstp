@@ -8,11 +8,11 @@ function getSocketUrl(): string {
   return apiBase.replace(/\/api\/?$/, '');
 }
 
-export function connectSocket(token?: string): Socket {
+export function connectSocket(): Socket {
   if (socket?.connected) return socket;
 
   socket = io(getSocketUrl(), {
-    auth: { token },
+    withCredentials: true,
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: Infinity,
