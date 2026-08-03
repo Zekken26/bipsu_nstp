@@ -12,6 +12,7 @@ import { apiPost, apiPut, apiDel } from '../../../services/apiClient';
 import { toast } from 'sonner';
 import { useCurrentUser, useUpdateCurrentUser } from '../../../hooks/index';
 import { parseStudentCsv, toCsv } from '../../../utils/spreadsheet';
+import { createRegistrationApprovalClient, getRegistrationApprovalErrorMessage } from '../services/registrationApproval';
 
 type AdminAuditEntry = {
   id: string;
@@ -153,7 +154,10 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const [filterPresets, setFilterPresets] = useState<StudentFilterPreset[]>([]);
   const [presetName, setPresetName] = useState('');
   const csvInputRef = useRef<HTMLInputElement | null>(null);
+  const registrationApprovalClientRef = useRef(createRegistrationApprovalClient());
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingStudentRegistration[]>([]);
+  const [approvingRegistrationIds, setApprovingRegistrationIds] = useState<string[]>([]);
+  const [registrationApprovalErrors, setRegistrationApprovalErrors] = useState<Record<string, string>>({});
   const [trainingGroups, setTrainingGroups] = useState(loadTrainingGroups());
   const [gradeRecords, setGradeRecords] = useState<NstpGradeRecord[]>([]);
   const [filter, setFilter] = useState('all');
@@ -195,7 +199,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     setFormTemplate({ ...DEFAULT_FORM_TEMPLATE, ...safeJsonParse<Partial<OfficialProfileTemplate>>(localStorage.getItem(FORM_TEMPLATE_KEY), {}) });
 
     // Sync with backend API on mount — backend data takes priority
-    Promise.all([syncAllFromApi(), syncCollectionFromApi('nstp-student-roster'), syncCollectionFromApi('nstp-accounts', '?role=COORDINATOR')]).then(() => {
+    Promise.all([syncAllFromApi(), syncCollectionFromApi('nstp-student-roster'), syncCollectionFromApi('nstp-accounts', '?role=COORDINATOR'), syncCollectionFromApi('nstp-pending-student-registrations')]).then(() => {
       setStudents(loadStudents());
       setPendingRegistrations(loadPendingStudentRegistrations());
       setTrainingGroups(loadTrainingGroups());
@@ -407,132 +411,38 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   };
 
   const approveRegistration = async (registration: PendingStudentRegistration) => {
-    const allAccounts = loadAccounts();
-    const approvedStudentId = registration.studentId || `LEGACY-${registration.id.slice(-4).toUpperCase()}`;
-    const duplicate = allAccounts.find((account) =>
-      account.email.toLowerCase() === registration.email.toLowerCase() ||
-      account.studentId?.toLowerCase() === approvedStudentId.toLowerCase()
-    );
+    if (approvingRegistrationIds.includes(registration.id)) return;
+    setApprovingRegistrationIds((current) => [...current, registration.id]);
+    setRegistrationApprovalErrors((current) => {
+      const next = { ...current };
+      delete next[registration.id];
+      return next;
+    });
 
-    if (duplicate) {
-      window.alert('This email or student ID already exists in approved accounts.');
-      persistPendingRegistrations(pendingRegistrations.filter((item) => item.id !== registration.id));
-      return;
-    }
-
-    // Save to PostgreSQL via backend API
-    let backendOk = false;
     try {
-      const backendResult = await apiPost<any>(`/auth/admin/registrations/${registration.id}/approve`, {}, null);
-      if (backendResult && backendResult.success) {
-        backendOk = true;
+      await registrationApprovalClientRef.current.approve(registration.id);
+      setPendingRegistrations((current) => current.filter((item) => item.id !== registration.id));
+      logAudit('Approved registration', `${registration.name} (${registration.studentId || registration.email})`);
+      toast.success(`${registration.name}'s registration was approved.`);
+
+      try {
+        await Promise.all([
+          syncCollectionFromApi('nstp-accounts'),
+          syncCollectionFromApi('nstp-student-roster'),
+          syncCollectionFromApi('nstp-pending-student-registrations'),
+        ]);
+        setStudents(loadStudents());
+        setPendingRegistrations(loadPendingStudentRegistrations());
+        setAccountVersion((version) => version + 1);
+      } catch {
+        toast.warning('Approval succeeded, but the updated roster could not be refreshed. Reload the page to retrieve the confirmed server data.');
       }
-    } catch (_e) {
-      // Backend unreachable — will proceed with localStorage only
-    }
-
-    const warnMsg = backendOk
-      ? null
-      : 'Backend server unreachable. Student was saved locally, but data may not persist across browsers or after storage clear.';
-
-    const nextAccount = {
-      id: `student-${Math.random().toString(36).slice(2, 10)}`,
-      studentId: approvedStudentId,
-      surname: registration.surname,
-      firstName: registration.firstName,
-      middleName: registration.middleName,
-      name: registration.name,
-      email: registration.email,
-      password: registration.password,
-      role: 'student' as const,
-      school: registration.school,
-      department: registration.department || registration.school,
-      degreeProgram: registration.degreeProgram,
-      yearLevel: registration.yearLevel,
-      major: registration.major,
-      gender: registration.gender,
-      birthdate: registration.birthdate,
-      houseStreetPurok: registration.houseStreetPurok,
-      barangay: registration.barangay,
-      province: registration.province,
-      currentAddress: registration.currentAddress || registration.cityAddress,
-      cityAddress: registration.currentAddress || registration.cityAddress,
-      provincialAddress: registration.provincialAddress,
-      contactNumber: registration.contactNumber,
-      municipality: registration.municipality || 'Naval',
-      assignedMunicipality: registration.assignedMunicipality || (registration.province && registration.province !== 'Biliran' ? 'Naval' : registration.municipality || 'Naval'),
-    };
-
-    const nextAccounts = [nextAccount, ...allAccounts];
-    saveAccounts(nextAccounts);
-
-    const studentRecord = createEmptyStudent();
-    const targetMun = registration.assignedMunicipality || registration.municipality || 'Naval';
-    const assignedFacilitator = loadAccounts().find((account) => account.role === 'facilitator' && account.municipalities?.includes(targetMun));
-    const nextStudent: NstpStudent = {
-      ...studentRecord,
-      id: nextAccount.id,
-      studentId: approvedStudentId,
-      surname: registration.surname,
-      firstName: registration.firstName,
-      middleName: registration.middleName,
-      name: nextAccount.name,
-      email: nextAccount.email,
-      school: registration.school,
-      department: registration.department || registration.school,
-      degreeProgram: registration.degreeProgram,
-      yearLevel: registration.yearLevel,
-      major: registration.major,
-      gender: registration.gender,
-      birthdate: registration.birthdate,
-      houseStreetPurok: registration.houseStreetPurok,
-      barangay: registration.barangay,
-      province: registration.province,
-      currentAddress: registration.currentAddress || registration.cityAddress,
-      cityAddress: registration.currentAddress || registration.cityAddress,
-      provincialAddress: registration.provincialAddress,
-      contactNumber: registration.contactNumber,
-      municipality: registration.municipality || 'Naval',
-      assignedMunicipality: registration.assignedMunicipality || (registration.province && registration.province !== 'Biliran' ? 'Naval' : registration.municipality || 'Naval'),
-      programSection: registration.degreeProgram,
-      facilitatorId: assignedFacilitator?.id,
-      facilitatorName: assignedFacilitator?.name,
-      status: 'pending',
-      notes: `Created from approved registration request. Municipality: ${registration.municipality || 'Naval'}${assignedFacilitator ? `; facilitator: ${assignedFacilitator.name}` : ''}.`,
-      updatedAt: new Date().toISOString(),
-    };
-    const nextStudents = [nextStudent, ...students];
-    persistStudents(nextStudents);
-    const gradeRecords = loadGradeRecords();
-    if (!gradeRecords.some((record) => record.studentId === approvedStudentId)) {
-      saveGradeRecords([
-        {
-          id: `grade-${crypto.randomUUID()}`,
-          studentId: approvedStudentId,
-          prelim: 0,
-          midterm: 0,
-          final: 0,
-          remarks: 'In Progress',
-          released: false,
-          updatedAt: new Date().toISOString(),
-        },
-        ...gradeRecords,
-      ]);
-    }
-    const nextTrainingGroups = loadTrainingGroups().map((group) => (
-      group.schoolYear === getStudentSchoolYear(nextStudent) &&
-      group.component === nextStudent.component &&
-      group.facilitatorId === assignedFacilitator?.id &&
-      group.municipality === nextStudent.municipality
-        ? { ...group, studentCount: group.studentCount + 1 }
-        : group
-    ));
-    saveTrainingGroups(nextTrainingGroups);
-    setTrainingGroups(nextTrainingGroups);
-    persistPendingRegistrations(pendingRegistrations.filter((item) => item.id !== registration.id));
-    logAudit('Approved registration', `${registration.name} (${approvedStudentId}, ${registration.email})`);
-    if (warnMsg) {
-      setTimeout(() => window.alert(warnMsg), 100);
+    } catch (error) {
+      const message = getRegistrationApprovalErrorMessage(error);
+      setRegistrationApprovalErrors((current) => ({ ...current, [registration.id]: message }));
+      toast.error(message);
+    } finally {
+      setApprovingRegistrationIds((current) => current.filter((id) => id !== registration.id));
     }
   };
 
@@ -1993,6 +1903,8 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                           {pendingRegistrations.map((registration) => {
                             const targetMun = registration.assignedMunicipality || registration.municipality || 'Naval';
                             const assignedFacilitator = facilitatorAccounts.find((account) => account.municipalities?.includes(targetMun));
+                            const isApproving = approvingRegistrationIds.includes(registration.id);
+                            const approvalError = registrationApprovalErrors[registration.id];
                             return (
                               <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
                                 <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{registration.name}</td>
@@ -2004,7 +1916,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                                 <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{assignedFacilitator?.name || 'Unassigned'}</td>
                                 <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(registration.createdAt).toLocaleDateString()}</td>
                                 <td className="px-4 py-3">
-                                  <div className="flex gap-2">
+                                  <div className="flex flex-wrap gap-2">
                                     <button onClick={() => printOfficialProfile(registration)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
                                       <Printer className="h-4 w-4" />
                                       Print
@@ -2015,9 +1927,13 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                                     <button onClick={() => exportOfficialProfileDocx(registration)} className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
                                       DOCX
                                     </button>
-                                    <button onClick={() => approveRegistration(registration)} className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">Approve</button>
-                                    <button onClick={() => rejectRegistration(registration.id)} className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">Reject</button>
+                                    <button disabled={isApproving} onClick={() => approveRegistration(registration)} className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                      {isApproving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                                      {isApproving ? 'Approving…' : 'Approve'}
+                                    </button>
+                                    <button disabled={isApproving} onClick={() => rejectRegistration(registration.id)} className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">Reject</button>
                                   </div>
+                                  {approvalError && <p role="alert" className="mt-2 max-w-sm text-xs font-medium text-rose-700 dark:text-rose-300">{approvalError}</p>}
                                 </td>
                               </tr>
                             );
@@ -3071,8 +2987,10 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                         </tr>
                       </thead>
                       <tbody>
-                        {pendingRegistrations.slice(0, 5).map((registration) => (
-                          <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
+                        {pendingRegistrations.slice(0, 5).map((registration) => {
+                          const isApproving = approvingRegistrationIds.includes(registration.id);
+                          const approvalError = registrationApprovalErrors[registration.id];
+                          return <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
                             <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{registration.name}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.municipality || 'Naval'}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{registration.degreeProgram || '—'}</td>
@@ -3080,16 +2998,17 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">Facilitator - {registration.municipality || 'Naval'}</td>
                             <td className="px-4 py-3">
                               <div className="flex gap-2">
-                                <button onClick={() => approveRegistration(registration)} className="grid h-8 w-8 place-items-center rounded-full border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500/30 dark:hover:bg-emerald-500/10">
-                                  <Check className="h-4 w-4" />
+                                <button aria-label={`Approve ${registration.name}`} disabled={isApproving} onClick={() => approveRegistration(registration)} className="grid h-8 w-8 place-items-center rounded-full border border-emerald-200 text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-500/30 dark:hover:bg-emerald-500/10">
+                                  {isApproving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
                                 </button>
-                                <button onClick={() => rejectRegistration(registration.id)} className="grid h-8 w-8 place-items-center rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10">
-                                  <X className="h-4 w-4" />
+                                <button aria-label={`Reject ${registration.name}`} disabled={isApproving} onClick={() => rejectRegistration(registration.id)} className="grid h-8 w-8 place-items-center rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-500/30 dark:hover:bg-rose-500/10">
+                                  <X className="h-4 w-4" aria-hidden="true" />
                                 </button>
                               </div>
+                              {approvalError && <p role="alert" className="mt-2 max-w-xs text-xs font-medium text-rose-700 dark:text-rose-300">{approvalError}</p>}
                             </td>
                           </tr>
-                        ))}
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -3282,8 +3201,10 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   </tr>
                 </thead>
                 <tbody>
-                  {pendingRegistrations.map((registration) => (
-                    <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
+                  {pendingRegistrations.map((registration) => {
+                    const isApproving = approvingRegistrationIds.includes(registration.id);
+                    const approvalError = registrationApprovalErrors[registration.id];
+                    return <tr key={registration.id} className="border-b border-slate-100 dark:border-slate-800">
                       <td className="py-4 px-4 font-medium text-slate-900 dark:text-slate-100">{registration.name}</td>
                       <td className="py-4 px-4 text-slate-700 dark:text-slate-200">
                         <span className="block font-semibold">{registration.studentId || 'Legacy request - assign on approval'}</span>
@@ -3293,21 +3214,25 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                       <td className="py-4 px-4">
                         <div className="flex flex-wrap gap-2">
                           <button
+                            disabled={isApproving}
                             onClick={() => approveRegistration(registration)}
-                            className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700 hover:bg-emerald-100 transition-colors dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100 dark:hover:bg-emerald-500/20"
+                            className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100 dark:hover:bg-emerald-500/20"
                           >
-                            Approve
+                            {isApproving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                            {isApproving ? 'Approving…' : 'Approve'}
                           </button>
                           <button
+                            disabled={isApproving}
                             onClick={() => rejectRegistration(registration.id)}
-                            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-rose-600 hover:bg-rose-50 transition-colors dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-200 dark:hover:bg-rose-500/10"
+                            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-rose-600 hover:bg-rose-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-200 dark:hover:bg-rose-500/10"
                           >
                             Reject
                           </button>
                         </div>
+                        {approvalError && <p role="alert" className="mt-2 max-w-sm text-xs font-medium text-rose-700 dark:text-rose-300">{approvalError}</p>}
                       </td>
                     </tr>
-                  ))}
+                  })}
                 </tbody>
               </table>
             </div>

@@ -24,7 +24,6 @@ import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis
 
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import {
-  createEmptyStudent,
   loadAccounts,
   loadAssessments,
   loadAttendanceRecords,
@@ -32,12 +31,9 @@ import {
   loadGradeRecords,
   loadPendingStudentRegistrations,
   loadStudents,
-  saveAccounts,
   saveAttendanceRecords,
   saveAttendanceSessions,
   saveGradeRecords,
-  savePendingStudentRegistrations,
-  saveStudents,
   NSTP_COMPONENTS,
   PendingStudentRegistration,
   NstpAssessment,
@@ -136,48 +132,6 @@ export default function FacilitatorDashboard({
     .slice(0, 4);
 
   const modules = (() => { try { return JSON.parse(localStorage.getItem('nstp-module-library') || '[]'); } catch { return []; } })();
-
-  const approveRegistration = (registration: PendingStudentRegistration) => {
-    if (!registration.municipality || !assignedMunicipalities.includes(registration.municipality)) return;
-    const allAccounts = loadAccounts();
-    const approvedStudentId = registration.studentId || `LEGACY-${registration.id.slice(-4).toUpperCase()}`;
-    const nextAccount = {
-      id: `student-${Math.random().toString(36).slice(2, 10)}`,
-      studentId: approvedStudentId,
-      name: registration.name,
-      email: registration.email,
-      password: registration.password,
-      role: 'student' as const,
-      municipality: registration.municipality,
-    };
-    saveAccounts([nextAccount, ...allAccounts]);
-
-    const nextStudent: NstpStudent = {
-      ...createEmptyStudent(),
-      id: nextAccount.id,
-      studentId: approvedStudentId,
-      name: nextAccount.name,
-      email: nextAccount.email,
-      municipality: registration.municipality,
-      facilitatorId: user.id,
-      facilitatorName: user.name,
-      status: 'active',
-      notes: `Approved by ${user.name} for ${registration.municipality}.`,
-      updatedAt: new Date().toISOString(),
-    };
-    const nextStudents = [nextStudent, ...students];
-    const nextPending = pendingRegistrations.filter((item) => item.id !== registration.id);
-    saveStudents(nextStudents);
-    savePendingStudentRegistrations(nextPending);
-    setStudents(nextStudents);
-    setPendingRegistrations(nextPending);
-  };
-
-  const rejectRegistration = (registration: PendingStudentRegistration) => {
-    const nextPending = pendingRegistrations.filter((item) => item.id !== registration.id);
-    savePendingStudentRegistrations(nextPending);
-    setPendingRegistrations(nextPending);
-  };
 
   const updateGrade = (student: NstpStudent, field: 'prelim' | 'midterm' | 'final', value: number) => {
     const studentKey = student.studentId || student.id;
@@ -638,14 +592,7 @@ export default function FacilitatorDashboard({
                               <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(registration.createdAt).toLocaleDateString()}</td>
                               <td className="px-4 py-3"><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">Pending</span></td>
                               <td className="px-4 py-3">
-                                <div className="flex gap-2">
-                                  <button onClick={() => approveRegistration(registration)} className="grid h-9 w-9 place-items-center rounded-full border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500/30 dark:hover:bg-emerald-500/10">
-                                    <Check className="h-4 w-4" />
-                                  </button>
-                                  <button onClick={() => rejectRegistration(registration)} className="grid h-9 w-9 place-items-center rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10">
-                                    <X className="h-4 w-4" />
-                                  </button>
-                                </div>
+                                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Administrator review required</span>
                               </td>
                             </tr>
                           ))}
@@ -789,14 +736,7 @@ export default function FacilitatorDashboard({
                           <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{new Date(registration.createdAt).toLocaleDateString()}</td>
                           <td className="px-4 py-3"><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">Pending</span></td>
                           <td className="px-4 py-3">
-                            <div className="flex gap-2">
-                              <button onClick={() => approveRegistration(registration)} className="grid h-9 w-9 place-items-center rounded-full border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500/30 dark:hover:bg-emerald-500/10">
-                                <Check className="h-4 w-4" />
-                              </button>
-                              <button onClick={() => rejectRegistration(registration)} className="grid h-9 w-9 place-items-center rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10">
-                                <X className="h-4 w-4" />
-                              </button>
-                            </div>
+                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Administrator review required</span>
                           </td>
                         </tr>
                       ))}

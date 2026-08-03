@@ -146,7 +146,7 @@ export async function listAdminResource(name, filters = {}) {
 
   if (name === 'pending-registrations') {
     return withDatabase(name, () => prisma.pendingRegistration.findMany({
-      orderBy: { createdAt: 'desc' }, select: pendingRegistrationSelect,
+      where: { status: 'PENDING' }, orderBy: { createdAt: 'desc' }, select: pendingRegistrationSelect,
     }));
   }
   if (name === 'training-groups') return simpleList(prisma.trainingGroup);

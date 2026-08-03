@@ -9,12 +9,13 @@ process.env.DATABASE_URL ||= 'postgresql://test:test@localhost:5432/test';
 
 const { createApp } = await import('../src/app.js');
 const { default: prisma } = await import('../src/db/prisma.js');
-const { getUserById, registerUser } = await import('../src/modules/auth/auth.service.js');
+const { approvePendingRegistration, getUserById, registerUser } = await import('../src/modules/auth/auth.service.js');
 const { deleteAdminResource, listAdminResource, upsertAdminResource } = await import('../src/modules/nstp/nstp.service.js');
 
 let server;
 let baseUrl;
 const originals = {
+  transaction: prisma.$transaction,
   userFindMany: prisma.user.findMany,
   userFindUnique: prisma.user.findUnique,
   userCreate: prisma.user.create,
@@ -25,6 +26,7 @@ const originals = {
   gradeUpsert: prisma.grade.upsert,
   gradeDelete: prisma.grade.delete,
   pendingFindFirst: prisma.pendingRegistration.findFirst,
+  pendingFindMany: prisma.pendingRegistration.findMany,
   pendingCreate: prisma.pendingRegistration.create,
   instructorFindUnique: prisma.instructorProfile.findUnique,
   coordinatorFindUnique: prisma.coordinatorProfile.findUnique,
@@ -48,6 +50,7 @@ before(async () => {
 });
 
 afterEach(() => {
+  prisma.$transaction = originals.transaction;
   prisma.user.findMany = originals.userFindMany;
   prisma.user.findUnique = originals.userFindUnique;
   prisma.user.create = originals.userCreate;
@@ -58,6 +61,7 @@ afterEach(() => {
   prisma.grade.upsert = originals.gradeUpsert;
   prisma.grade.delete = originals.gradeDelete;
   prisma.pendingRegistration.findFirst = originals.pendingFindFirst;
+  prisma.pendingRegistration.findMany = originals.pendingFindMany;
   prisma.pendingRegistration.create = originals.pendingCreate;
   prisma.instructorProfile.findUnique = originals.instructorFindUnique;
   prisma.coordinatorProfile.findUnique = originals.coordinatorFindUnique;
@@ -77,6 +81,12 @@ test('students cannot list, create, or delete accounts', async () => {
   assert.equal((await request('/api/nstp/admin/accounts', { role: 'STUDENT' })).status, 403);
   assert.equal((await request('/api/nstp/admin/accounts', { role: 'STUDENT', method: 'POST', body: {} })).status, 403);
   assert.equal((await request('/api/nstp/admin/accounts/another-user', { role: 'STUDENT', method: 'DELETE' })).status, 403);
+});
+
+test('only administrators can submit registration approval decisions', async () => {
+  assert.equal((await request('/api/auth/admin/registrations/pending-1/approve', { role: 'STUDENT', method: 'POST', body: {} })).status, 403);
+  assert.equal((await request('/api/auth/admin/registrations/pending-1/approve', { role: 'INSTRUCTOR', method: 'POST', body: {} })).status, 403);
+  assert.equal((await request('/api/auth/admin/registrations/pending-1/approve', { role: 'COORDINATOR', method: 'POST', body: {} })).status, 403);
 });
 
 test('students cannot create or modify modules', async () => {
@@ -133,6 +143,42 @@ test('administrators can use explicit administrative routes', async () => {
   const response = await request('/api/nstp/admin/accounts', { role: 'ADMIN' });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), []);
+});
+
+test('pending registration listing excludes decided registrations and credential fields', async () => {
+  prisma.pendingRegistration.findMany = async ({ where, select }) => {
+    assert.deepEqual(where, { status: 'PENDING' });
+    assert.equal(select.password, undefined);
+    return [{ id: 'pending-1', email: 'student@example.test' }];
+  };
+  const response = await request('/api/nstp/admin/pending-registrations', { role: 'ADMIN' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), [{ id: 'pending-1', email: 'student@example.test' }]);
+});
+
+test('registration approval is transactional and replay is rejected', async () => {
+  const calls = [];
+  const registration = {
+    id: 'pending-1', status: 'PENDING', name: 'Student One', email: 'student@example.test',
+    password: 'stored-bcrypt-hash', studentId: '2026-0001', yearLevel: '1', degreeProgram: 'BSCS',
+  };
+  const tx = {
+    pendingRegistration: {
+      findUnique: async () => registration,
+      update: async (args) => { calls.push(['registration', args]); registration.status = 'APPROVED'; return registration; },
+    },
+    user: {
+      findUnique: async () => null,
+      create: async (args) => { calls.push(['user', args]); return { id: 'user-1', email: registration.email }; },
+    },
+    studentProfile: { findUnique: async () => null },
+    auditLogEntry: { create: async (args) => { calls.push(['audit', args]); return args.data; } },
+  };
+  prisma.$transaction = async (operation) => operation(tx);
+
+  assert.deepEqual(await approvePendingRegistration('pending-1', 'admin-1'), { id: 'user-1', email: registration.email });
+  assert.deepEqual(calls.map(([name]) => name), ['user', 'registration', 'audit']);
+  await assert.rejects(() => approvePendingRegistration('pending-1', 'admin-1'), { statusCode: 409 });
 });
 
 test('database outages return 503 rather than an empty grade collection', async () => {

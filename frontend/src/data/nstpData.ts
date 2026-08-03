@@ -52,7 +52,6 @@ export type PendingStudentRegistration = {
   middleName?: string;
   name: string;
   email: string;
-  password: string;
   school?: string;
   department?: string;
   degreeProgram?: string;
@@ -423,6 +422,10 @@ export async function syncCollectionFromApi(localKey: string, query = ''): Promi
     return;
   }
   const apiData = await apiGet<any[]>(`/nstp/admin/${collection}`);
+  if (collection === 'pending-registrations') {
+    writeSensitive(localKey, JSON.stringify(Array.isArray(apiData) ? apiData : []));
+    return;
+  }
   if (Array.isArray(apiData) && apiData.length > 0) {
     const existing = safeJsonParse<any[]>(readSensitive(localKey), []);
     const merged = [...existing];
