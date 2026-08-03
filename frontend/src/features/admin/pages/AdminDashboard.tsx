@@ -19,6 +19,7 @@ import {
   type ProfileExportConfiguration, type ProfileTemplateVersion,
 } from '../../../services/profileTemplates';
 import { createCoordinator, fetchAdminCoordinators, setCoordinatorStatus, updateCoordinator, type CoordinatorRecord } from '../../../services/staff';
+import { getCurrentAcademicYear, getCurrentSchoolYear, getSchoolYearOptions } from '../../../utils/academicYear';
 
 type AdminAuditEntry = {
   id: string;
@@ -37,7 +38,8 @@ type StudentFilterPreset = {
 };
 
 const FILTER_PRESETS_KEY = 'nstp-student-filter-presets';
-const SCHOOL_YEARS = ['SY 2024-2025', 'SY 2025-2026', 'SY 2026-2027'];
+const CURRENT_SCHOOL_YEAR = getCurrentSchoolYear();
+const SCHOOL_YEARS = getSchoolYearOptions();
 
 type OfficialProfileTemplate = ProfileExportConfiguration;
 
@@ -73,7 +75,7 @@ const DEFAULT_FORM_TEMPLATE: OfficialProfileTemplate = {
   certificationLine: 'ISO 9001:2015 CERTIFIED',
   officeName: 'OFFICE OF THE NATIONAL SERVICE TRAINING PROGRAM',
   formTitle: 'STUDENT PROFILE',
-  academicPeriod: 'First Semester, Academic Year 2025-2026',
+  academicPeriod: `First Semester, Academic Year ${getCurrentAcademicYear()}`,
   fieldHeader: 'Field',
   valueHeader: 'Submitted Information',
   accentColor: '#1d4ed8',
@@ -99,8 +101,9 @@ const hexToRgb = (hex: string): [number, number, number] => {
 };
 
 const getStudentSchoolYear = (student: NstpStudent) => {
-  const year = Number((student.studentId || '').slice(0, 4));
-  if (!Number.isFinite(year) || year < 2024) return 'SY 2024-2025';
+  const match = (student.studentId || '').match(/^(20\d{2})/);
+  const year = match ? Number(match[1]) : Number.NaN;
+  if (!Number.isFinite(year)) return CURRENT_SCHOOL_YEAR;
   return `SY ${year}-${year + 1}`;
 };
 
@@ -148,7 +151,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const [studentsPerPage, setStudentsPerPage] = useState(10);
   const [accountVersion, setAccountVersion] = useState(0);
   const [adminSearch, setAdminSearch] = useState('');
-  const [schoolYear, setSchoolYear] = useState('SY 2024-2025');
+  const [schoolYear, setSchoolYear] = useState(CURRENT_SCHOOL_YEAR);
   const [adminTheme, setAdminTheme] = useState<'light' | 'dark'>(() => document.documentElement.classList.contains('dark') ? 'dark' : 'light');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);

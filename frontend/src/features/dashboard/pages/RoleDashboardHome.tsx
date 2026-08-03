@@ -29,6 +29,7 @@ import {
   loadStudents,
   NstpAccount,
 } from '../../../data/nstpData';
+import { getCurrentSchoolYear } from '../../../utils/academicYear';
 
 type RoleDashboardHomeProps = {
   user: NstpAccount & Record<string, any>;
@@ -241,7 +242,7 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
               <p className="mt-3 max-w-3xl text-sm font-medium leading-6 text-white/85 md:text-base">{copy.body}</p>
               {role === 'admin' && (
                 <div className="mt-6 flex flex-wrap gap-4 text-xs font-semibold text-white/85">
-                  <span className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4" />School Year 2024-2025</span>
+                  <span className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4" />{getCurrentSchoolYear()}</span>
                   <span className="inline-flex items-center gap-2"><Timer className="h-4 w-4" />Second Semester</span>
                   <span className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4" />Last updated: May 24, 2024 9:30 AM</span>
                 </div>
