@@ -5,9 +5,10 @@ import {
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import {
-  BILIRAN_MUNICIPALITIES, createEmptyModule, loadAccounts, loadAssessments, loadModules, loadStudents, NSTP_COMPONENTS, NstpAccount, NstpModule, NstpStudent, replaceModulesSnapshot, saveAccounts,
+  BILIRAN_MUNICIPALITIES, createEmptyModule, loadAccounts, loadModules, loadStudents, NSTP_COMPONENTS, NstpAccount, NstpModule, NstpStudent, replaceAssessmentsSnapshot, replaceModulesSnapshot, saveAccounts,
 } from '../../../data/nstpData';
 import { createManagedModule, fetchManagedModules, removeManagedModule, updateManagedModule } from '../../../services/modules';
+import { fetchManagedAssessments } from '../../../services/assessments';
 
 const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'C';
 
@@ -23,6 +24,7 @@ export default function CoordinatorDashboard({
   const [modules, setModules] = useState<NstpModule[]>([]);
   const [facilitators, setFacilitators] = useState<NstpAccount[]>([]);
   const [students, setStudents] = useState<NstpStudent[]>([]);
+  const [assessmentCount, setAssessmentCount] = useState(0);
   const [search, setSearch] = useState('');
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -47,6 +49,9 @@ export default function CoordinatorDashboard({
     fetchManagedModules('coordinator')
       .then((records) => { replaceModulesSnapshot(records); setModules(records); setModuleError(null); })
       .catch((error) => setModuleError(error instanceof Error ? error.message : 'Unable to load modules.'));
+    fetchManagedAssessments('coordinator')
+      .then((records) => { replaceAssessmentsSnapshot(records); setAssessmentCount(records.length); })
+      .catch((error) => setModuleError(error instanceof Error ? error.message : 'Unable to load assessments.'));
   }, []);
 
   const scopedModules = useMemo(
@@ -192,7 +197,7 @@ export default function CoordinatorDashboard({
           { label: 'Modules', value: scopedModules.length, detail: `For ${userComponent}`, icon: BookOpen, tone: 'bg-blue-50 text-blue-700' },
           { label: 'Facilitators', value: scopedFacilitators.length, detail: 'Active facilitators', icon: Users, tone: 'bg-emerald-50 text-emerald-700' },
           { label: 'Students', value: scopedStudents.length, detail: `Enrolled in ${userComponent}`, icon: UserCog, tone: 'bg-violet-50 text-violet-700' },
-          { label: 'Assessments', value: loadAssessments().length, detail: 'In the library', icon: ClipboardList, tone: 'bg-amber-50 text-amber-700' },
+          { label: 'Assessments', value: assessmentCount, detail: 'In the library', icon: ClipboardList, tone: 'bg-amber-50 text-amber-700' },
         ].map((stat) => {
           const Icon = stat.icon;
           return (

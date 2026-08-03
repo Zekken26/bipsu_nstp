@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { FileText, CheckCircle, Clock, Award, TrendingUp, History, AlertTriangle, ArrowLeft } from 'lucide-react';
-import { loadAssessments, NstpAssessment } from '../data/nstpData';
+import { replaceAssessmentsSnapshot, NstpAssessment } from '../data/nstpData';
 import { apiGet, apiPost } from '../services/apiClient';
+import { fetchStudentAssessments } from '../services/assessments';
 
 export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: () => void }) {
   const [library, setLibrary] = useState<NstpAssessment[]>([]);
@@ -11,6 +12,7 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [attemptHistory, setAttemptHistory] = useState<Record<string, any[]>>({});
+  const [libraryError, setLibraryError] = useState<string | null>(null);
 
   const answersRef = useRef(answers);
   const shuffledQuestionsRef = useRef(shuffledQuestions);
@@ -25,7 +27,13 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
   useEffect(() => { attemptHistoryRef.current = attemptHistory; }, [attemptHistory]);
 
   useEffect(() => {
-    setLibrary(loadAssessments().filter((assessment) => assessment.status === 'published'));
+    fetchStudentAssessments()
+      .then((items) => {
+        setLibrary(items);
+        replaceAssessmentsSnapshot(items);
+        setLibraryError(null);
+      })
+      .catch((error) => setLibraryError(error instanceof Error ? error.message : 'Unable to load assessments.'));
   }, [user.id]);
 
   useEffect(() => {
@@ -33,7 +41,7 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
       .then(({ data }) => {
         const history = data.attempts.reduce<Record<string, any[]>>((all, attempt) => {
           if (!attempt.quizId) return all;
-          const row = { score: attempt.score, date: attempt.submittedAt, passed: false };
+          const row = { score: attempt.score, date: attempt.submittedAt, passed: Boolean(attempt.passed), manualStatus: attempt.manualStatus };
           all[attempt.quizId] = [...(all[attempt.quizId] || []), row];
           return all;
         }, {});
@@ -55,7 +63,7 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
     let serverAttempt;
     try {
       serverAttempt = await apiPost<any>(`/nstp/students/me/assessments/${currentAssessment.id}/attempts`, {
-        answers: currentQuestions.map((_, index) => currentAnswers[index] ?? null),
+        answers: currentQuestions.map((question, index) => ({ questionId: question.id, optionIndex: currentAnswers[index] ?? -1 })),
       });
     } catch { return; }
 
@@ -241,6 +249,7 @@ export default function AssessmentsPage({ user, onBack }: { user: any; onBack?: 
         </div>
 
         <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)]">
+          {libraryError && <div role="alert" className="xl:col-span-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{libraryError}</div>}
           <div className="bento-panel min-h-0 p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-blue-700">Assessment Library</h3>

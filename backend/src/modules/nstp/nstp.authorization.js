@@ -14,6 +14,7 @@ export async function getCurrentStudent(req, res, next) {
 export async function getCurrentInstructor(req, res, next) {
   const instructor = await prisma.instructorProfile.findUnique({
     where: { userId: req.user.id },
+    include: { sections: { select: { componentId: true } } },
   });
 
   if (!instructor) return sendError(res, 'Instructor profile not found.', 403);

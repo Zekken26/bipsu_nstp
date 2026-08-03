@@ -85,13 +85,16 @@ export type NstpAssessment = {
   type: 'quiz' | 'exam' | 'seminar';
   description: string;
   moduleId?: string;
+  moduleTitle?: string;
+  moduleStatus?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  component?: NstpComponent | 'Common';
   timeLimit: number;
   passingScore: number;
   questionsToShow: number;
   ownerId: string;
   ownerName: string;
   ownerRole: 'admin' | 'coordinator' | 'facilitator';
-  status: 'draft' | 'published';
+  status: 'draft' | 'published' | 'archived';
   questions: NstpQuestion[];
   updatedAt: string;
   _version?: number;
@@ -111,6 +114,7 @@ export type NstpModule = {
   order?: number;
   status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   isPublished?: boolean;
+  completedStudents?: number;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   videoUrl?: string;
   meetingLink?: string;
@@ -693,6 +697,12 @@ export async function saveModules(modules: NstpModule[]): Promise<boolean> {
   return ok;
 }
 
+export function replaceAssessmentsSnapshot(assessments: NstpAssessment[]) {
+  if (typeof window === 'undefined') return;
+  writeSensitive(ASSESSMENTS_KEY, JSON.stringify(assessments));
+  window.dispatchEvent(new CustomEvent('nstp-assessments-updated'));
+}
+
 export function replaceModulesSnapshot(modules: NstpModule[]) {
   if (typeof window === 'undefined') return;
   writeSensitive(MODULES_KEY, JSON.stringify(modules));
@@ -983,7 +993,7 @@ export function createEmptyAssessment(owner: NstpAccount, overrides: Partial<Nst
     title: overrides.title || 'Untitled Assessment',
     type: overrides.type || 'quiz',
     description: overrides.description || '',
-    moduleId: overrides.moduleId || 'm1',
+    moduleId: overrides.moduleId || '',
     timeLimit: overrides.timeLimit || 15,
     passingScore: overrides.passingScore || 70,
     questionsToShow: overrides.questionsToShow || questions.length,

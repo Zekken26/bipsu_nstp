@@ -8,6 +8,7 @@ const QualifyingExam = React.lazy(() => import('./features/enrollment/Qualifying
 const PendingAssignment = React.lazy(() => import('./features/enrollment/PendingAssignment'));
 const ModulesPage = React.lazy(() => import('./pages/ModulesPage'));
 const AssessmentsPage = React.lazy(() => import('./pages/AssessmentsPage'));
+const AssessmentManager = React.lazy(() => import('./features/assessments/components/AssessmentManager'));
 const ProgressTracker = React.lazy(() => import('./features/progress/pages/ProgressTracker'));
 const AdminDashboard = React.lazy(() => import('./features/admin/pages/AdminDashboard'));
 const FacilitatorDashboard = React.lazy(() => import('./features/facilitator/pages/FacilitatorDashboard'));
@@ -1018,7 +1019,7 @@ export default function App() {
       if (activeSection === 'reports') return <SectionErrorBoundary name="Reports"><ReportsCenter user={user} /></SectionErrorBoundary>;
       if (activeSection === 'announcements') return <SectionErrorBoundary name="Announcements"><AnnouncementsCenter user={user} /></SectionErrorBoundary>;
       if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="admin" onBack={goBackToOverview} /></SectionErrorBoundary>;
-      if (activeSection === 'assessments') return <SectionErrorBoundary name="Assessments"><AssessmentsPage user={user} onBack={goBackToOverview} /></SectionErrorBoundary>;
+      if (activeSection === 'assessments') return <SectionErrorBoundary name="Assessments"><AssessmentManager user={user} role="admin" /></SectionErrorBoundary>;
       return <SectionErrorBoundary name="Admin Dashboard"><AdminDashboard embedded initialView={activeSection === 'admin' ? adminInitialView : 'overview'} onNavigateApp={(target) => setActiveSection(target as ShellSection)} onLogout={handleLogout} /></SectionErrorBoundary>;
     }
 
@@ -1026,6 +1027,7 @@ export default function App() {
       if (activeSection === 'reports') return <SectionErrorBoundary name="Reports"><ReportsCenter user={user} /></SectionErrorBoundary>;
       if (activeSection === 'announcements') return <SectionErrorBoundary name="Announcements"><AnnouncementsCenter user={user} /></SectionErrorBoundary>;
       if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="coordinator" onBack={() => setActiveSection('overview')} /></SectionErrorBoundary>;
+      if (activeSection === 'assessments') return <SectionErrorBoundary name="Assessments"><AssessmentManager user={user} role="coordinator" /></SectionErrorBoundary>;
       return <SectionErrorBoundary name="Coordinator Dashboard"><CoordinatorDashboard embedded user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} /></SectionErrorBoundary>;
     }
 
@@ -1033,6 +1035,7 @@ export default function App() {
       if (activeSection === 'reports') return <SectionErrorBoundary name="Reports"><ReportsCenter user={user} /></SectionErrorBoundary>;
       if (activeSection === 'announcements') return <SectionErrorBoundary name="Announcements"><AnnouncementsCenter user={user} /></SectionErrorBoundary>;
       if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="facilitator" onBack={() => setActiveSection('facilitator')} /></SectionErrorBoundary>;
+      if (activeSection === 'assessments') return <SectionErrorBoundary name="Assessments"><AssessmentManager user={user} role="facilitator" /></SectionErrorBoundary>;
       return <SectionErrorBoundary name="Facilitator Dashboard"><FacilitatorDashboard embedded user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} /></SectionErrorBoundary>;
     }
 

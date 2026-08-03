@@ -1,32 +1,56 @@
+import { useEffect, useState } from 'react';
 import { Award, BookOpen, CheckCircle, Clock, FileText, LockKeyhole, TrendingUp } from 'lucide-react';
-import { loadAssessments, loadGradeRecords, loadModules, loadStudents, safeJsonParse } from '../data/nstpData';
+import type { NstpAssessment, NstpModule } from '../data/nstpData';
+import { fetchManagedModules } from '../services/modules';
+import { fetchStudentAssessments } from '../services/assessments';
+import { apiGet } from '../services/apiClient';
+
+type OfficialGrade = { id: string; prelim?: number | null; midterm?: number | null; final?: number | null; remarks?: string | null; isReleased: boolean };
+type Attempt = { quizId: string | null; score: number | null };
 
 export default function GradesPage({ user }: { user: any }) {
-  const students = loadStudents();
-  const modules = loadModules();
-  const assessments = loadAssessments().filter((assessment) => assessment.status === 'published');
-  const gradeRecords = loadGradeRecords();
-  const student = students.find((item) => item.id === user.id || item.email.toLowerCase() === String(user.email || '').toLowerCase() || item.studentId === user.studentId);
-  const studentId = user.studentId || student?.studentId || 'Pending';
-  const gradeRecord = gradeRecords.find((record) => record.studentId === studentId);
-  const assessmentResults = safeJsonParse<Record<string, any>>(localStorage.getItem(`assessments-${user.id}`), {});
-  const moduleProgress = safeJsonParse<Record<string, boolean>>(localStorage.getItem(`progress-${user.id}`), {});
+  const [modules, setModules] = useState<NstpModule[]>([]);
+  const [assessments, setAssessments] = useState<NstpAssessment[]>([]);
+  const [gradeRecord, setGradeRecord] = useState<OfficialGrade | null>(null);
+  const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [moduleProgress, setModuleProgress] = useState<Record<string, boolean>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const studentId = user.studentId || 'Pending';
+
+  useEffect(() => {
+    Promise.all([
+      fetchManagedModules('student'),
+      fetchStudentAssessments(),
+      apiGet<{ success: boolean; data: OfficialGrade[] }>('/nstp/students/me/grades'),
+      apiGet<{ success: boolean; data: { progress: Array<{ moduleId: string; completedAt: string | null }>; attempts: Attempt[] } }>('/nstp/students/me/progress'),
+    ]).then(([moduleRows, assessmentRows, gradeResponse, progressResponse]) => {
+      setModules(moduleRows);
+      setAssessments(assessmentRows);
+      setGradeRecord(gradeResponse.data[0] || null);
+      setAttempts(progressResponse.data.attempts);
+      setModuleProgress(Object.fromEntries(progressResponse.data.progress.map((entry) => [entry.moduleId, Boolean(entry.completedAt)])));
+      setLoadError(null);
+    }).catch((error) => setLoadError(error instanceof Error ? error.message : 'Unable to load official grades.'));
+  }, [user.id]);
 
   const completedModules = modules.filter((module) => moduleProgress[module.id]).length;
   const completedHours = modules.length > 0
     ? Math.round((completedModules / modules.length) * modules.reduce((total, module) => total + module.hours, 0))
     : 0;
-  const completedAssessments = Object.keys(assessmentResults).length;
+  const latestAttemptByAssessment = new Map<string, Attempt>();
+  attempts.forEach((attempt) => { if (attempt.quizId && !latestAttemptByAssessment.has(attempt.quizId)) latestAttemptByAssessment.set(attempt.quizId, attempt); });
+  const completedAssessments = latestAttemptByAssessment.size;
   const averageAssessment = completedAssessments > 0
-    ? Math.round(Object.values(assessmentResults).reduce((total: number, result: any) => total + (Number(result.score) || 0), 0) / completedAssessments)
+    ? Math.round([...latestAttemptByAssessment.values()].reduce((total, attempt) => total + Number(attempt.score || 0), 0) / completedAssessments)
     : 0;
   const computedStanding = gradeRecord
-    ? Math.round(((gradeRecord.prelim || 0) + (gradeRecord.midterm || 0) + (gradeRecord.final || 0)) / (gradeRecord.final > 0 ? 3 : 2))
+    ? Math.round(((gradeRecord.prelim || 0) + (gradeRecord.midterm || 0) + (gradeRecord.final || 0)) / (Number(gradeRecord.final || 0) > 0 ? 3 : 2))
     : averageAssessment;
-  const releaseLabel = gradeRecord?.released ? 'Released by NSTP Office' : 'Pending official release';
+  const releaseLabel = gradeRecord?.isReleased ? 'Released by NSTP Office' : 'Pending official release';
 
   return (
     <div className="bento-screen space-y-4 overflow-auto pr-1">
+      {loadError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{loadError}</div>}
       <div className="grid gap-4 xl:grid-cols-6">
         <div className="bento-panel p-6 xl:col-span-4 xl:row-span-2">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">Student Grade Portal</p>
@@ -54,7 +78,7 @@ export default function GradesPage({ user }: { user: any }) {
           <Award className="mb-3 h-5 w-5 text-amber-600" />
           <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Final Remarks</p>
           <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{gradeRecord?.remarks || 'In Progress'}</p>
-          {!gradeRecord?.released && (
+          {!gradeRecord?.isReleased && (
             <p className="mt-2 inline-flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
               <LockKeyhole className="h-3.5 w-3.5" />
               Registrar/NSTP office verification required
@@ -112,7 +136,7 @@ export default function GradesPage({ user }: { user: any }) {
               {[
                 ['Approved student ID', studentId !== 'Pending'],
                 ['25 contact hours', completedHours >= 25],
-                ['Major exam record', assessments.some((assessment) => assessment.type === 'exam' && assessmentResults[assessment.id])],
+                ['Major exam record', assessments.some((assessment) => assessment.type === 'exam' && latestAttemptByAssessment.has(assessment.id))],
               ].map(([label, done]) => (
                 <span key={String(label)} className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
                   <CheckCircle className="h-3.5 w-3.5" />

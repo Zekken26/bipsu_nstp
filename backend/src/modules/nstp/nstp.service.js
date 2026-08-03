@@ -77,6 +77,7 @@ const toModuleDto = (mod) => ({
   data: undefined,
   component: mod.component?.name || mod.data?.component || 'Common',
   status: mod.status || (mod.isPublished ? 'PUBLISHED' : 'DRAFT'),
+  completedStudents: mod._count?.progress || 0,
 });
 
 const moduleExtraFields = [
@@ -126,12 +127,21 @@ function moduleWriteData(payload, componentId) {
   };
 }
 
-export async function listManagedModules(componentId = null) {
+export async function listManagedModules(componentId = null, instructorId = null, instructorComponentIds = []) {
   return withDatabase('modules', async () => {
+    const instructorScope = instructorId ? {
+      OR: [
+        { instructorId },
+        ...(instructorComponentIds.length ? [{ componentId: { in: [...new Set(instructorComponentIds)] } }] : []),
+      ],
+    } : {};
     const modules = await prisma.module.findMany({
-      ...(componentId ? { where: { componentId } } : {}),
+      ...((componentId || instructorId) ? { where: { ...(componentId ? { componentId } : {}), ...instructorScope } } : {}),
       orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
-      include: { component: { select: { id: true, name: true, type: true } } },
+      include: {
+        component: { select: { id: true, name: true, type: true } },
+        _count: { select: { progress: { where: { completedAt: { not: null } } } } },
+      },
     });
     return modules.map(toModuleDto);
   });
@@ -146,7 +156,10 @@ export async function listPublishedModules(componentIds = []) {
         OR: [{ componentId: null }, ...(allowedComponentIds.length ? [{ componentId: { in: allowedComponentIds } }] : [])],
       },
       orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
-      include: { component: { select: { id: true, name: true, type: true } } },
+      include: {
+        component: { select: { id: true, name: true, type: true } },
+        _count: { select: { progress: { where: { completedAt: { not: null } } } } },
+      },
     });
     return modules.map(toModuleDto);
   });
@@ -223,6 +236,301 @@ export async function removeManagedModule(actorId, id, forcedComponentId = null)
       data: { id: crypto.randomUUID(), actor: actorId, action: hasReferences ? 'MODULE_ARCHIVED' : 'MODULE_DELETED', detail: JSON.stringify({ moduleId: id }) },
     });
     return { id, archived: hasReferences };
+  }));
+}
+
+const assessmentInclude = {
+  module: { include: { component: { select: { id: true, name: true, type: true } } } },
+  questions: { orderBy: { order: 'asc' } },
+  _count: { select: { submissions: true, grades: true } },
+};
+
+function storedAssessmentQuestions(quiz) {
+  if (quiz.questions?.length) {
+    return quiz.questions.map((question) => ({
+      id: question.id,
+      prompt: question.prompt,
+      options: Array.isArray(question.options) ? question.options : [],
+      correctIndex: Number(question.answer?.correctIndex ?? 0),
+    }));
+  }
+  return Array.isArray(quiz.data?.questions) ? quiz.data.questions : [];
+}
+
+function toManagedAssessmentDto(quiz) {
+  const definition = quiz.data || {};
+  return {
+    id: quiz.id,
+    title: quiz.title,
+    description: quiz.instructions || '',
+    moduleId: quiz.moduleId,
+    moduleTitle: quiz.module?.title || 'Unavailable module',
+    moduleStatus: quiz.module?.status || 'ARCHIVED',
+    component: quiz.module?.component?.name || quiz.module?.data?.component || 'Common',
+    type: definition.type || 'quiz',
+    timeLimit: Number(definition.timeLimit || 15),
+    passingScore: Number(definition.passingScore ?? 70),
+    questionsToShow: Number(definition.questionsToShow || 0),
+    ownerId: definition.ownerId || '',
+    ownerName: definition.ownerName || 'Administrator',
+    ownerRole: definition.ownerRole || 'admin',
+    status: String(quiz.status || 'DRAFT').toLowerCase(),
+    questions: storedAssessmentQuestions(quiz),
+    attemptCount: quiz._count?.submissions || 0,
+    createdAt: quiz.createdAt,
+    updatedAt: quiz.updatedAt,
+  };
+}
+
+function toStudentAssessmentDto(quiz) {
+  const managed = toManagedAssessmentDto(quiz);
+  return {
+    ...managed,
+    ownerId: undefined,
+    ownerName: undefined,
+    ownerRole: undefined,
+    attemptCount: undefined,
+    questions: managed.questions.map(({ correctIndex: _correctIndex, ...question }) => question),
+  };
+}
+
+function assessmentModuleWhere(actor) {
+  if (actor.role === 'ADMIN') return {};
+  if (actor.role === 'COORDINATOR') return { componentId: actor.componentId };
+  if (actor.role === 'INSTRUCTOR') return {
+    OR: [
+      { instructorId: actor.instructorId },
+      ...(actor.componentIds?.length ? [{ componentId: { in: actor.componentIds } }] : []),
+    ],
+  };
+  return { id: '__forbidden__' };
+}
+
+async function requireManageableModule(client, actor, moduleId, publishing = false) {
+  const module = await client.module.findFirst({
+    where: { id: moduleId, ...assessmentModuleWhere(actor) },
+    include: { component: true },
+  });
+  if (!module) {
+    const error = new Error('The selected module does not exist or is not assigned to you.');
+    error.statusCode = 403;
+    throw error;
+  }
+  if (module.status === 'ARCHIVED') {
+    const error = new Error('Archived modules cannot receive assessments.');
+    error.statusCode = 409;
+    throw error;
+  }
+  if (publishing && module.status !== 'PUBLISHED') {
+    const error = new Error('Publish the connected module before publishing its assessment.');
+    error.statusCode = 409;
+    throw error;
+  }
+  return module;
+}
+
+function assertAssessmentPublishable(payload) {
+  if (payload.status !== 'PUBLISHED') return;
+  if (!payload.questions?.length) {
+    const error = new Error('At least one valid question is required before publishing.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (payload.questionsToShow > payload.questions.length) {
+    const error = new Error('Questions to show cannot exceed the number of assessment questions.');
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+async function resolveAssessmentOwner(client, actor, requestedOwnerId) {
+  if (actor.role !== 'ADMIN' || !requestedOwnerId || requestedOwnerId === actor.userId) {
+    return { ownerId: actor.userId, ownerName: actor.name, ownerRole: actor.role.toLowerCase() };
+  }
+  const owner = await client.user.findFirst({
+    where: { id: requestedOwnerId, role: 'INSTRUCTOR' },
+    select: { id: true, name: true },
+  });
+  if (!owner) {
+    const error = new Error('The selected facilitator account is invalid.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return { ownerId: owner.id, ownerName: owner.name, ownerRole: 'facilitator' };
+}
+
+function assessmentData(payload, owner) {
+  return {
+    type: payload.type,
+    timeLimit: Number(payload.timeLimit),
+    passingScore: Number(payload.passingScore),
+    questionsToShow: Number(payload.questionsToShow || 0),
+    ...owner,
+  };
+}
+
+async function replaceAssessmentQuestions(client, quizId, questions) {
+  await client.question.deleteMany({ where: { quizId } });
+  if (!questions.length) return;
+  await client.question.createMany({
+    data: questions.map((question, order) => ({
+      id: crypto.randomUUID(),
+      quizId,
+      prompt: question.prompt,
+      options: question.options,
+      answer: { correctIndex: question.correctIndex },
+      points: 1,
+      order,
+    })),
+  });
+}
+
+export async function listManagedAssessments(actor) {
+  return withDatabase('assessments', async () => {
+    const records = await prisma.quiz.findMany({
+      where: { module: assessmentModuleWhere(actor) },
+      orderBy: { createdAt: 'desc' },
+      include: assessmentInclude,
+    });
+    return records.map(toManagedAssessmentDto);
+  });
+}
+
+export async function listStudentAssessments(componentId) {
+  return withDatabase('assessments', async () => {
+    const records = await prisma.quiz.findMany({
+      where: {
+        status: 'PUBLISHED',
+        module: {
+          status: 'PUBLISHED',
+          OR: [{ componentId: null }, ...(componentId ? [{ componentId }] : [])],
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: assessmentInclude,
+    });
+    return records.map(toStudentAssessmentDto);
+  });
+}
+
+export async function createManagedAssessment(actor, payload) {
+  return withDatabase('assessments', () => prisma.$transaction(async (tx) => {
+    await requireManageableModule(tx, actor, payload.moduleId, false);
+    const owner = await resolveAssessmentOwner(tx, actor, payload.ownerId);
+    const created = await tx.quiz.create({
+      data: {
+        title: payload.title,
+        instructions: payload.description || '',
+        moduleId: payload.moduleId,
+        totalPoints: payload.questions.length,
+        status: 'DRAFT',
+        data: assessmentData(payload, owner),
+      },
+    });
+    await replaceAssessmentQuestions(tx, created.id, payload.questions);
+    await tx.auditLogEntry.create({
+      data: { id: crypto.randomUUID(), actor: actor.userId, action: 'ASSESSMENT_CREATED', detail: JSON.stringify({ assessmentId: created.id, moduleId: created.moduleId }) },
+    });
+    return toManagedAssessmentDto(await tx.quiz.findUnique({ where: { id: created.id }, include: assessmentInclude }));
+  }));
+}
+
+export async function updateManagedAssessment(actor, id, patch) {
+  return withDatabase('assessments', () => prisma.$transaction(async (tx) => {
+    const existing = await tx.quiz.findUnique({ where: { id }, include: assessmentInclude });
+    if (!existing) {
+      const error = new Error('Assessment not found.');
+      error.statusCode = 404;
+      throw error;
+    }
+    await requireManageableModule(tx, actor, existing.moduleId, false);
+    const current = toManagedAssessmentDto(existing);
+    const merged = { ...current, ...patch, status: patch.status || String(existing.status) };
+    await requireManageableModule(tx, actor, merged.moduleId, merged.status === 'PUBLISHED');
+    assertAssessmentPublishable(merged);
+    const owner = await resolveAssessmentOwner(tx, actor, patch.ownerId || current.ownerId);
+    await tx.quiz.update({
+      where: { id },
+      data: {
+        title: merged.title,
+        instructions: merged.description || '',
+        moduleId: merged.moduleId,
+        totalPoints: merged.questions.length,
+        status: merged.status,
+        data: assessmentData(merged, owner),
+      },
+    });
+    if (patch.questions) await replaceAssessmentQuestions(tx, id, merged.questions);
+    await tx.auditLogEntry.create({
+      data: { id: crypto.randomUUID(), actor: actor.userId, action: 'ASSESSMENT_UPDATED', detail: JSON.stringify({ assessmentId: id, previousStatus: existing.status, status: merged.status }) },
+    });
+    return toManagedAssessmentDto(await tx.quiz.findUnique({ where: { id }, include: assessmentInclude }));
+  }));
+}
+
+export async function removeManagedAssessment(actor, id) {
+  return withDatabase('assessments', () => prisma.$transaction(async (tx) => {
+    const existing = await tx.quiz.findUnique({ where: { id }, include: assessmentInclude });
+    if (!existing) {
+      const error = new Error('Assessment not found.');
+      error.statusCode = 404;
+      throw error;
+    }
+    await requireManageableModule(tx, actor, existing.moduleId, false);
+    const hasResults = (existing._count?.submissions || 0) > 0 || (existing._count?.grades || 0) > 0;
+    if (hasResults) await tx.quiz.update({ where: { id }, data: { status: 'ARCHIVED' } });
+    else await tx.quiz.delete({ where: { id } });
+    await tx.auditLogEntry.create({
+      data: { id: crypto.randomUUID(), actor: actor.userId, action: hasResults ? 'ASSESSMENT_ARCHIVED' : 'ASSESSMENT_DELETED', detail: JSON.stringify({ assessmentId: id }) },
+    });
+    return { id, archived: hasResults };
+  }));
+}
+
+export async function listAssessmentAttempts() {
+  return withDatabase('assessment attempts', async () => {
+    const attempts = await prisma.submission.findMany({
+      where: { quizId: { not: null } },
+      orderBy: { submittedAt: 'desc' },
+      take: 500,
+      include: {
+        student: { include: { user: { select: { id: true, name: true, email: true } } } },
+        quiz: { select: { id: true, title: true, data: true } },
+      },
+    });
+    return attempts.map((attempt) => ({
+      id: attempt.id,
+      studentId: attempt.student.user.id,
+      studentName: attempt.student.user.name,
+      studentEmail: attempt.student.user.email,
+      assessmentId: attempt.quiz.id,
+      assessmentTitle: attempt.quiz.title,
+      score: attempt.score,
+      passed: Number(attempt.score || 0) >= Number(attempt.quiz.data?.passingScore ?? 70),
+      manualStatus: attempt.content?.override?.status,
+      submittedAt: attempt.submittedAt,
+    }));
+  });
+}
+
+export async function overrideAssessmentAttempt(actor, id, status, reason) {
+  return withDatabase('assessment attempts', () => prisma.$transaction(async (tx) => {
+    const existing = await tx.submission.findUnique({ where: { id }, include: { quiz: true } });
+    if (!existing?.quizId) {
+      const error = new Error('Assessment attempt not found.');
+      error.statusCode = 404;
+      throw error;
+    }
+    const previous = existing.content?.override?.status || (Number(existing.score || 0) >= Number(existing.quiz.data?.passingScore ?? 70) ? 'passed' : 'failed');
+    const changedAt = new Date().toISOString();
+    const updated = await tx.submission.update({
+      where: { id },
+      data: { content: { ...(existing.content || {}), override: { previous, status, reason, actorId: actor.userId, changedAt } } },
+    });
+    await tx.auditLogEntry.create({
+      data: { id: crypto.randomUUID(), actor: actor.userId, action: 'ASSESSMENT_ATTEMPT_OVERRIDDEN', detail: JSON.stringify({ attemptId: id, previous, status, reason }) },
+    });
+    return { id: updated.id, previous, status, reason, changedAt };
   }));
 }
 
@@ -427,6 +735,11 @@ export async function upsertAdminResource(name, lookup, payload) {
     }
 
     if (name === 'assessments') {
+      if (!nextPayload.moduleId) {
+        const error = new Error('A valid module is required for every assessment.');
+        error.statusCode = 400;
+        throw error;
+      }
       const knownFields = ['id', 'title', 'description', 'moduleId', 'questions', 'updatedAt', 'createdAt'];
       const extras = {};
       for (const key of Object.keys(nextPayload)) {
@@ -438,12 +751,14 @@ export async function upsertAdminResource(name, lookup, payload) {
         update: {
           title: nextPayload.title,
           ...(nextPayload.description !== undefined ? { instructions: nextPayload.description } : {}),
+          ...(nextPayload.status ? { status: String(nextPayload.status).toUpperCase() } : {}),
           data: updatedQuizData,
         },
         create: {
           id: nextPayload.id,
           title: nextPayload.title || 'Untitled assessment',
-          moduleId: nextPayload.moduleId || 'unknown',
+          moduleId: nextPayload.moduleId,
+          status: String(nextPayload.status || 'DRAFT').toUpperCase(),
           ...(nextPayload.description !== undefined ? { instructions: nextPayload.description } : {}),
           data: updatedQuizData,
         },

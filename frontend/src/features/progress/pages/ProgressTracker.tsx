@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, Award, Clock, Target, CheckCircle, BookOpen, Flame, Activity, ArrowLeft } from 'lucide-react';
-import { loadAssessments, loadModules } from '../../../data/nstpData';
+import { NstpAssessment, NstpModule, replaceAssessmentsSnapshot, replaceModulesSnapshot } from '../../../data/nstpData';
 import { PortalStatCard } from '../../../components/ui/portal';
+import { fetchManagedModules } from '../../../services/modules';
+import { fetchStudentAssessments } from '../../../services/assessments';
+import { apiGet } from '../../../services/apiClient';
 
 type AssessmentResult = {
   score: number;
@@ -12,17 +15,30 @@ type AssessmentResult = {
 export default function ProgressTracker({ user, onBack }: { user: any; onBack?: () => void }) {
   const [progress, setProgress] = useState<Record<string, boolean>>({});
   const [assessments, setAssessments] = useState<Record<string, AssessmentResult>>({});
+  const [modules, setModules] = useState<NstpModule[]>([]);
+  const [publishedAssessments, setPublishedAssessments] = useState<NstpAssessment[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    const savedProgress = localStorage.getItem(`progress-${user.id}`);
-    const savedAssessments = localStorage.getItem(`assessments-${user.id}`);
-
-    if (savedProgress) setProgress(JSON.parse(savedProgress));
-    if (savedAssessments) setAssessments(JSON.parse(savedAssessments));
+    Promise.all([
+      fetchManagedModules('student'),
+      fetchStudentAssessments(),
+      apiGet<{ success: boolean; data: { progress: Array<{ moduleId: string; completedAt: string | null }>; attempts: Array<{ quizId: string | null; score: number; submittedAt: string; passed: boolean }> } }>('/nstp/students/me/progress'),
+    ]).then(([moduleRows, assessmentRows, response]) => {
+      setModules(moduleRows);
+      setPublishedAssessments(assessmentRows);
+      replaceModulesSnapshot(moduleRows);
+      replaceAssessmentsSnapshot(assessmentRows);
+      setProgress(Object.fromEntries(response.data.progress.map((entry) => [entry.moduleId, Boolean(entry.completedAt)])));
+      const latest = new Map<string, AssessmentResult>();
+      response.data.attempts.forEach((attempt) => {
+        if (!attempt.quizId || latest.has(attempt.quizId)) return;
+        latest.set(attempt.quizId, { score: Number(attempt.score || 0), date: attempt.submittedAt, passed: Boolean(attempt.passed) });
+      });
+      setAssessments(Object.fromEntries(latest));
+      setLoadError(null);
+    }).catch((error) => setLoadError(error instanceof Error ? error.message : 'Unable to load official progress.'));
   }, [user.id]);
-
-  const modules = loadModules();
-  const publishedAssessments = loadAssessments().filter((assessment) => assessment.status === 'published');
   const totalModules = modules.length;
   const totalContactHours = modules.reduce((total, module) => total + module.hours, 0);
   const completedModules = modules.filter((module) => progress[module.id]).length;
@@ -60,6 +76,7 @@ export default function ProgressTracker({ user, onBack }: { user: any; onBack?: 
           </button>
         )}
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Your Progress</h2>
+        {loadError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{loadError}</div>}
 
         <div className="grid gap-3 lg:grid-cols-3">
           <div className="bento-panel p-5 lg:col-span-2">

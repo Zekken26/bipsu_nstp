@@ -42,7 +42,9 @@ import {
   NstpGradeRecord,
   NstpStudent,
   AttendanceStatus,
+  replaceAssessmentsSnapshot,
 } from '../../../data/nstpData';
+import { fetchManagedAssessments } from '../../../services/assessments';
 
 const componentColors = ['#10b981', '#2563eb', '#f59e0b', '#8b5cf6', '#06b6d4'];
 const gradeColors = ['#10b981', '#2563eb', '#f59e0b', '#8b5cf6', '#ef4444'];
@@ -84,6 +86,10 @@ export default function FacilitatorDashboard({
     setAssessments(loadAssessments());
     setAttendanceRecords(loadAttendanceRecords());
     setAttendanceSessions(loadAttendanceSessions());
+    fetchManagedAssessments('facilitator').then((records) => {
+      setAssessments(records);
+      replaceAssessmentsSnapshot(records);
+    }).catch(() => { /* dashboard keeps the last display cache and never treats it as writable authority */ });
   }, []);
 
   const assignedMunicipalities = user.municipalities || [];

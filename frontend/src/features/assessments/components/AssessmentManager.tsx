@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Save, Eye, EyeOff, UserPlus, BookOpen, Clock3, MessageSquareText, ChevronUp, ChevronDown, LayoutPanelLeft, Sparkles } from 'lucide-react';
-import { createEmptyAssessment, createEmptyStudent, loadAssessments, loadAccounts, loadStudents, saveAssessments, saveStudents, NstpAccount, NstpAssessment, NstpQuestion, NstpStudent } from '../../../data/nstpData';
+import { createEmptyAssessment, loadAccounts, replaceAssessmentsSnapshot, NstpAccount, NstpAssessment, NstpModule, NstpQuestion } from '../../../data/nstpData';
+import { fetchManagedModules } from '../../../services/modules';
+import {
+  createManagedAssessment, fetchAssessmentAttempts, fetchManagedAssessments,
+  overrideAssessmentAttempt, removeManagedAssessment, updateManagedAssessment,
+  type AssessmentAttemptRow,
+} from '../../../services/assessments';
 
 type Props = {
   user: NstpAccount;
-  role: 'admin' | 'facilitator';
+  role: 'admin' | 'coordinator' | 'facilitator';
 };
 
 const emptyQuestion = (): NstpQuestion => ({
@@ -19,6 +25,7 @@ const emptyForm = (user: NstpAccount): NstpAssessment => createEmptyAssessment(u
 type AttemptStatus = 'passed' | 'failed' | 'review';
 
 type AttemptRow = {
+  id: string;
   studentId: string;
   studentName: string;
   studentEmail: string;
@@ -27,6 +34,7 @@ type AttemptRow = {
   score: number;
   passed: boolean;
   manualStatus?: AttemptStatus;
+  submittedAt: string;
 };
 
 export default function AssessmentManager({ user, role }: Props) {
@@ -34,33 +42,50 @@ export default function AssessmentManager({ user, role }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<NstpAssessment | null>(null);
   const [accounts, setAccounts] = useState<NstpAccount[]>([]);
+  const [modules, setModules] = useState<NstpModule[]>([]);
+  const [attempts, setAttempts] = useState<AssessmentAttemptRow[]>([]);
   const [globalPassingScore, setGlobalPassingScore] = useState(70);
   const [selectedAttemptStudent, setSelectedAttemptStudent] = useState('all');
-  const [attemptRefreshKey, setAttemptRefreshKey] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const items = loadAssessments();
-    setAssessments(items);
     setAccounts(loadAccounts());
-    if (items.length > 0) {
-      setGlobalPassingScore(items[0].passingScore);
+    Promise.all([fetchManagedAssessments(role), fetchManagedModules(role)])
+      .then(([items, moduleRows]) => {
+        setAssessments(items);
+        replaceAssessmentsSnapshot(items);
+        setModules(moduleRows.filter((module) => module.status !== 'ARCHIVED'));
+        if (items.length > 0) setGlobalPassingScore(items[0].passingScore);
+        setError(null);
+      })
+      .catch((requestError) => setError(requestError instanceof Error ? requestError.message : 'Unable to load assessment data.'));
+    if (role === 'admin') {
+      fetchAssessmentAttempts().then(setAttempts).catch((requestError) => setError(requestError instanceof Error ? requestError.message : 'Unable to load assessment attempts.'));
     }
-  }, []);
+  }, [role]);
 
-  const ownedAssessments = useMemo(() => {
-    if (role === 'admin') return assessments;
-    return assessments.filter((assessment) => assessment.ownerId === user.id);
-  }, [assessments, role, user.id]);
+  const ownedAssessments = useMemo(() => assessments, [assessments]);
 
-  const upsertAssessment = (nextAssessment: NstpAssessment) => {
-    const nextList = assessments.some((item) => item.id === nextAssessment.id)
-      ? assessments.map((item) => (item.id === nextAssessment.id ? nextAssessment : item))
-      : [nextAssessment, ...assessments];
-
-    setAssessments(nextList);
-    saveAssessments(nextList);
-    setEditingId(null);
-    setForm(null);
+  const upsertAssessment = async (nextAssessment: NstpAssessment) => {
+    setSaving(true);
+    try {
+      const saved = editingId === 'new'
+        ? await createManagedAssessment(role, nextAssessment)
+        : await updateManagedAssessment(role, nextAssessment);
+      const nextList = assessments.some((item) => item.id === saved.id)
+        ? assessments.map((item) => (item.id === saved.id ? saved : item))
+        : [saved, ...assessments];
+      setAssessments(nextList);
+      replaceAssessmentsSnapshot(nextList);
+      setEditingId(null);
+      setForm(null);
+      setError(null);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to save assessment.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const startNew = () => {
@@ -73,13 +98,21 @@ export default function AssessmentManager({ user, role }: Props) {
     setForm(JSON.parse(JSON.stringify(assessment)));
   };
 
-  const removeAssessment = (assessmentId: string) => {
-    const nextList = assessments.filter((item) => item.id !== assessmentId);
-    setAssessments(nextList);
-    saveAssessments(nextList);
-    if (editingId === assessmentId) {
-      setEditingId(null);
-      setForm(null);
+  const removeAssessment = async (assessmentId: string) => {
+    setSaving(true);
+    try {
+      const result = await removeManagedAssessment(role, assessmentId);
+      const nextList = result.archived
+        ? assessments.map((item) => item.id === assessmentId ? { ...item, status: 'archived' as const } : item)
+        : assessments.filter((item) => item.id !== assessmentId);
+      setAssessments(nextList);
+      replaceAssessmentsSnapshot(nextList);
+      if (editingId === assessmentId) { setEditingId(null); setForm(null); }
+      setError(null);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to remove assessment.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -113,112 +146,53 @@ export default function AssessmentManager({ user, role }: Props) {
     setForm({ ...form, questions: nextQuestions.length > 0 ? nextQuestions : [emptyQuestion()] });
   };
 
-  const togglePublished = (assessment: NstpAssessment) => {
-    const nextList: NstpAssessment[] = assessments.map((item) => item.id === assessment.id ? { ...item, status: item.status === 'published' ? 'draft' : 'published', updatedAt: new Date().toISOString() } : item);
-    setAssessments(nextList);
-    saveAssessments(nextList);
+  const togglePublished = async (assessment: NstpAssessment) => {
+    const nextStatus = assessment.status === 'published' ? 'draft' : 'published';
+    await upsertAssessment({ ...assessment, status: nextStatus });
   };
 
   const facilitatorOptions = accounts.filter((account) => account.role === 'facilitator');
-  const studentAccounts = accounts.filter((account) => account.role === 'student');
 
-  const attemptRows = useMemo<AttemptRow[]>(() => {
-    if (typeof window === 'undefined') return [];
+  const attemptRows = useMemo<AttemptRow[]>(() => attempts
+    .filter((attempt) => selectedAttemptStudent === 'all' || attempt.studentId === selectedAttemptStudent)
+    .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()), [attempts, selectedAttemptStudent]);
 
-    const sourceStudents = selectedAttemptStudent === 'all'
-      ? studentAccounts
-      : studentAccounts.filter((account) => account.id === selectedAttemptStudent);
-
-    return sourceStudents.flatMap((student) => {
-      const raw = localStorage.getItem(`assessments-${student.id}`);
-      if (!raw) return [];
-
-      const parsed = JSON.parse(raw) as Record<string, any>;
-      return Object.entries(parsed).map(([assessmentId, result]) => {
-        const assessment = assessments.find((item) => item.id === assessmentId);
-        return {
-          studentId: student.id,
-          studentName: student.name,
-          studentEmail: student.email,
-          assessmentId,
-          assessmentTitle: assessment?.title || assessmentId,
-          score: Number(result?.score || 0),
-          passed: Boolean(result?.passed),
-          manualStatus: result?.manualStatus,
-        };
-      });
-    }).sort((a, b) => b.score - a.score);
-  }, [assessments, selectedAttemptStudent, studentAccounts, attemptRefreshKey]);
-
-  const upsertStudentFromAccount = (account: NstpAccount) => {
-    const students = loadStudents();
-    const existing = students.find((student) => student.id === account.id);
-    const nextStudents: NstpStudent[] = existing
-      ? students.map((student) => student.id === account.id ? { ...student, name: account.name, email: account.email, updatedAt: new Date().toISOString() } : student)
-      : [{ ...createEmptyStudent(), id: account.id, name: account.name, email: account.email, status: 'active' }, ...students];
-    saveStudents(nextStudents);
-  };
-
-  const removeStudentFromAccount = (accountId: string) => {
-    const students = loadStudents();
-    const nextStudents = students.filter((student) => student.id !== accountId);
-    saveStudents(nextStudents);
-  };
-
-  const applyPassingScoreToAllAssessments = () => {
+  const applyPassingScoreToAllAssessments = async () => {
     const nextAssessments = assessments.map((assessment) => ({
       ...assessment,
       passingScore: globalPassingScore,
       updatedAt: new Date().toISOString(),
     }));
 
-    setAssessments(nextAssessments);
-    saveAssessments(nextAssessments);
-
-    studentAccounts.forEach((student) => {
-      const raw = localStorage.getItem(`assessments-${student.id}`);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Record<string, any>;
-
-      const nextResults = Object.fromEntries(
-        Object.entries(parsed).map(([assessmentId, result]) => {
-          const matchedAssessment = nextAssessments.find((assessment) => assessment.id === assessmentId);
-          if (!matchedAssessment) return [assessmentId, result];
-
-          const score = Number(result?.score || 0);
-          const manualStatus = result?.manualStatus as AttemptStatus | undefined;
-          const passed = manualStatus === 'passed'
-            ? true
-            : manualStatus === 'failed'
-            ? false
-            : score >= matchedAssessment.passingScore;
-
-          return [assessmentId, { ...result, passed }];
-        }),
-      );
-
-      localStorage.setItem(`assessments-${student.id}`, JSON.stringify(nextResults));
-    });
-
-    setAttemptRefreshKey((value) => value + 1);
+    setSaving(true);
+    try {
+      const editableAssessments = nextAssessments.filter((assessment) => assessment.status !== 'archived');
+      const savedEditable = await Promise.all(editableAssessments.map((assessment) => updateManagedAssessment(role, assessment)));
+      const saved = nextAssessments.map((assessment) => savedEditable.find((item) => item.id === assessment.id) || assessment);
+      setAssessments(saved);
+      replaceAssessmentsSnapshot(saved);
+      setAttempts((current) => current.map((attempt) => {
+        const assessment = saved.find((item) => item.id === attempt.assessmentId);
+        return assessment && !attempt.manualStatus ? { ...attempt, passed: attempt.score >= assessment.passingScore } : attempt;
+      }));
+      setError(null);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to apply the passing score.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const overrideAttemptStatus = (row: AttemptRow, status: AttemptStatus) => {
-    const raw = localStorage.getItem(`assessments-${row.studentId}`);
-    if (!raw) return;
-
-    const parsed = JSON.parse(raw) as Record<string, any>;
-    const previous = parsed[row.assessmentId] || {};
-    const nextPassed = status === 'passed' ? true : status === 'failed' ? false : previous.passed;
-
-    parsed[row.assessmentId] = {
-      ...previous,
-      passed: nextPassed,
-      manualStatus: status,
-    };
-
-    localStorage.setItem(`assessments-${row.studentId}`, JSON.stringify(parsed));
-    setAttemptRefreshKey((value) => value + 1);
+  const overrideAttemptStatus = async (row: AttemptRow, status: AttemptStatus) => {
+    const reason = window.prompt('Enter the required reason for this result override:')?.trim();
+    if (!reason) return;
+    try {
+      await overrideAssessmentAttempt(row.id, status, reason);
+      setAttempts((current) => current.map((attempt) => attempt.id === row.id ? { ...attempt, manualStatus: status } : attempt));
+      setError(null);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to override this attempt.');
+    }
   };
 
   return (
@@ -253,6 +227,8 @@ export default function AssessmentManager({ user, role }: Props) {
             New Assessment
           </button>
         </div>
+
+        {error && <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
         {editingId && form && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/55 p-3 backdrop-blur-sm md:p-8">
@@ -303,12 +279,21 @@ export default function AssessmentManager({ user, role }: Props) {
                     />
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>Module ID</span>
-                    <input
+                    <span>Connected Module</span>
+                    <select
                       value={form.moduleId || ''}
                       onChange={(e) => setForm({ ...form, moduleId: e.target.value })}
                       className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                    />
+                      required
+                    >
+                      <option value="">Select a module</option>
+                      {modules.map((module) => (
+                        <option key={module.id} value={module.id} disabled={module.status === 'ARCHIVED'}>
+                          {module.title} — {module.component || 'Common'} — {module.status || 'DRAFT'}
+                        </option>
+                      ))}
+                    </select>
+                    {modules.length === 0 && <span className="block text-xs text-amber-700">No assigned modules are available. Create or assign a module first.</span>}
                   </label>
                   <label className="space-y-2 text-sm font-medium text-slate-700">
                     <span>Passing Score</span>
@@ -480,10 +465,11 @@ export default function AssessmentManager({ user, role }: Props) {
                   if (!form) return;
                   upsertAssessment({ ...form, updatedAt: new Date().toISOString() });
                 }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 hover:bg-blue-800 px-5 py-3 text-white transition-opacity hover:opacity-95"
+                disabled={saving || !form.moduleId}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 hover:bg-blue-800 px-5 py-3 text-white transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                Save Assessment
+                {saving ? 'Saving…' : 'Save Assessment'}
               </button>
             </div>
             </div>
@@ -492,7 +478,7 @@ export default function AssessmentManager({ user, role }: Props) {
 
         <div className="grid gap-4">
           {ownedAssessments.map((assessment) => {
-            const editable = role === 'admin' || assessment.ownerId === user.id;
+            const editable = true;
             return (
               <div key={assessment.id} className="min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:p-6">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
@@ -517,13 +503,13 @@ export default function AssessmentManager({ user, role }: Props) {
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-                    <button
+                    {assessment.status !== 'archived' && <button
                       onClick={() => togglePublished(assessment)}
                       className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       {assessment.status === 'published' ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       {assessment.status === 'published' ? 'Unpublish' : 'Publish'}
-                    </button>
+                    </button>}
                     {editable && (
                       <button
                         onClick={() => startEdit(assessment)}
@@ -533,7 +519,7 @@ export default function AssessmentManager({ user, role }: Props) {
                         Edit
                       </button>
                     )}
-                    {role === 'admin' && (
+                    {editable && (
                       <button
                         onClick={() => removeAssessment(assessment.id)}
                         className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 px-4 py-2 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200 dark:hover:bg-rose-500/10"
@@ -584,8 +570,8 @@ export default function AssessmentManager({ user, role }: Props) {
                   className="px-4 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                 >
                   <option value="all">All Student Accounts</option>
-                  {studentAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>{account.name}</option>
+                  {[...new Map(attempts.map((attempt) => [attempt.studentId, attempt])).values()].map((attempt) => (
+                    <option key={attempt.studentId} value={attempt.studentId}>{attempt.studentName}</option>
                   ))}
                 </select>
               </div>

@@ -11,6 +11,13 @@ import {
   createManagedModule,
   updateManagedModule,
   removeManagedModule,
+  listManagedAssessments,
+  listStudentAssessments,
+  createManagedAssessment,
+  updateManagedAssessment,
+  removeManagedAssessment,
+  listAssessmentAttempts,
+  overrideAssessmentAttempt,
   upsertAdminResource,
 } from './nstp.service.js';
 import { emitCollectionChange } from '../../websocket.js';
@@ -60,7 +67,6 @@ function adminResourceHandlers(resource) {
 }
 
 export const adminAccounts = adminResourceHandlers('accounts');
-export const adminAssessments = adminResourceHandlers('assessments');
 export const adminStudents = adminResourceHandlers('students');
 export const adminGrades = adminResourceHandlers('grades');
 export const adminPendingRegistrations = adminResourceHandlers('pending-registrations');
@@ -120,11 +126,83 @@ export async function listStudentModules(req, res) {
 }
 
 export async function listInstructorModules(req, res) {
-  const sections = await prisma.section.findMany({
-    where: { instructorId: req.instructor.id },
-    select: { componentId: true },
-  });
-  return res.json(await listPublishedModules(sections.map((section) => section.componentId)));
+  return res.json(await listManagedModules(null, req.instructor.id, (req.instructor.sections || []).map((section) => section.componentId)));
+}
+
+const adminActor = (req) => ({ userId: req.user.id, name: req.user.name || 'Administrator', role: 'ADMIN' });
+const coordinatorActor = (req) => ({ userId: req.user.id, name: req.user.name || 'Coordinator', role: 'COORDINATOR', componentId: req.coordinator.componentId });
+const instructorActor = (req) => ({
+  userId: req.user.id,
+  name: req.user.name || 'Facilitator',
+  role: 'INSTRUCTOR',
+  instructorId: req.instructor.id,
+  componentIds: [...new Set((req.instructor.sections || []).map((section) => section.componentId))],
+});
+
+export async function listAdminAssessments(req, res) {
+  return res.json(await listManagedAssessments(adminActor(req)));
+}
+
+export async function createAdminAssessment(req, res) {
+  const assessment = await createManagedAssessment(adminActor(req), req.validated.body);
+  emitCollectionChange('assessments', 'created');
+  return sendSuccess(res, assessment, 201);
+}
+
+export async function updateAdminAssessment(req, res) {
+  const assessment = await updateManagedAssessment(adminActor(req), req.params.id, req.validated.body);
+  emitCollectionChange('assessments', 'updated');
+  return sendSuccess(res, assessment);
+}
+
+export async function removeAdminAssessment(req, res) {
+  const result = await removeManagedAssessment(adminActor(req), req.params.id);
+  emitCollectionChange('assessments', result.archived ? 'archived' : 'deleted');
+  return sendSuccess(res, result);
+}
+
+export async function listCoordinatorAssessments(req, res) {
+  return res.json(await listManagedAssessments(coordinatorActor(req)));
+}
+
+export async function createCoordinatorAssessment(req, res) {
+  return sendSuccess(res, await createManagedAssessment(coordinatorActor(req), req.validated.body), 201);
+}
+
+export async function updateCoordinatorAssessment(req, res) {
+  return sendSuccess(res, await updateManagedAssessment(coordinatorActor(req), req.params.id, req.validated.body));
+}
+
+export async function removeCoordinatorAssessment(req, res) {
+  return sendSuccess(res, await removeManagedAssessment(coordinatorActor(req), req.params.id));
+}
+
+export async function listInstructorAssessments(req, res) {
+  return res.json(await listManagedAssessments(instructorActor(req)));
+}
+
+export async function createInstructorAssessment(req, res) {
+  return sendSuccess(res, await createManagedAssessment(instructorActor(req), req.validated.body), 201);
+}
+
+export async function updateInstructorAssessment(req, res) {
+  return sendSuccess(res, await updateManagedAssessment(instructorActor(req), req.params.id, req.validated.body));
+}
+
+export async function removeInstructorAssessment(req, res) {
+  return sendSuccess(res, await removeManagedAssessment(instructorActor(req), req.params.id));
+}
+
+export async function listMyAssessments(req, res) {
+  return res.json(await listStudentAssessments(req.student.componentId));
+}
+
+export async function listAdminAssessmentAttempts(req, res) {
+  return res.json(await listAssessmentAttempts());
+}
+
+export async function overrideAdminAssessmentAttempt(req, res) {
+  return sendSuccess(res, await overrideAssessmentAttempt(adminActor(req), req.params.id, req.validated.body.status, req.validated.body.reason));
 }
 
 export async function getDbTest(req, res) {
@@ -152,16 +230,56 @@ export async function getMyGrades(req, res) {
 }
 
 export async function getMyProgress(req, res) {
-  const [progress, attempts] = await Promise.all([
+  const [progress, storedAttempts] = await Promise.all([
     prisma.moduleProgress.findMany({ where: { studentId: req.student.id }, orderBy: { updatedAt: 'desc' } }),
-    prisma.submission.findMany({ where: { studentId: req.student.id, quizId: { not: null } }, orderBy: { submittedAt: 'desc' }, take: 100 }),
+    prisma.submission.findMany({
+      where: { studentId: req.student.id, quizId: { not: null } },
+      orderBy: { submittedAt: 'desc' },
+      take: 100,
+      select: { id: true, quizId: true, score: true, submittedAt: true, content: true, quiz: { select: { data: true } } },
+    }),
   ]);
+  const attempts = storedAttempts.map((attempt) => {
+    const computedPassed = Number(attempt.score || 0) >= Number(attempt.quiz?.data?.passingScore ?? 70);
+    const manualStatus = attempt.content?.override?.status;
+    return {
+      id: attempt.id,
+      quizId: attempt.quizId,
+      score: attempt.score,
+      submittedAt: attempt.submittedAt,
+      passed: manualStatus === 'passed' ? true : manualStatus === 'failed' ? false : computedPassed,
+      ...(manualStatus ? { manualStatus } : {}),
+    };
+  });
   return sendSuccess(res, { progress, attempts });
 }
 
 export async function completeMyModule(req, res) {
-  const module = await prisma.module.findUnique({ where: { id: req.params.moduleId } });
-  if (!module || !module.isPublished) return sendError(res, 'Module is not available for completion.', 404);
+  const module = await prisma.module.findFirst({
+    where: {
+      id: req.params.moduleId,
+      status: 'PUBLISHED',
+      OR: [{ componentId: null }, ...(req.student.componentId ? [{ componentId: req.student.componentId }] : [])],
+    },
+    include: {
+      quizzes: {
+        where: { status: 'PUBLISHED' },
+        include: { submissions: { where: { studentId: req.student.id }, select: { score: true, content: true } } },
+      },
+    },
+  });
+  if (!module) return sendError(res, 'Module is not available for completion.', 404);
+  const requiredAssessments = module.quizzes.filter((quiz) => quiz.data?.type !== 'exam');
+  const incompleteAssessment = requiredAssessments.find((quiz) => {
+    const passingScore = Number(quiz.data?.passingScore ?? 70);
+    return !quiz.submissions.some((submission) => {
+      const manualStatus = submission.content?.override?.status;
+      if (manualStatus === 'passed') return true;
+      if (manualStatus === 'failed' || manualStatus === 'review') return false;
+      return Number(submission.score || 0) >= passingScore;
+    });
+  });
+  if (incompleteAssessment) return sendError(res, 'Pass the published module assessment before marking this module complete.', 409);
   const progress = await prisma.moduleProgress.upsert({
     where: { studentId_moduleId: { studentId: req.student.id, moduleId: module.id } },
     update: { completedAt: new Date() },
@@ -171,18 +289,35 @@ export async function completeMyModule(req, res) {
 }
 
 export async function submitMyAssessment(req, res) {
-  const quiz = await prisma.quiz.findUnique({ where: { id: req.params.assessmentId } });
-  const definition = quiz?.data || {};
-  if (!quiz || definition.status !== 'published') return sendError(res, 'Assessment is not available.', 404);
-  const questions = Array.isArray(definition.questions) ? definition.questions : [];
-  const answers = req.body?.answers;
-  if (!Array.isArray(answers) || questions.length === 0 || answers.length !== questions.length) return sendError(res, 'Invalid assessment answers.', 400);
-  const correct = questions.reduce((total, question, index) => total + (Number(answers[index]) === Number(question.correctIndex) ? 1 : 0), 0);
-  const score = Math.round((correct / questions.length) * 100);
-  const attempt = await prisma.submission.create({
-    data: { studentId: req.student.id, quizId: quiz.id, content: { answers }, score, status: 'GRADED', gradedAt: new Date() },
+  const quiz = await prisma.quiz.findFirst({
+    where: {
+      id: req.params.assessmentId,
+      status: 'PUBLISHED',
+      module: { status: 'PUBLISHED', OR: [{ componentId: null }, ...(req.student.componentId ? [{ componentId: req.student.componentId }] : [])] },
+    },
+    include: { questions: { orderBy: { order: 'asc' } } },
   });
-  return sendSuccess(res, { id: attempt.id, assessmentId: quiz.id, score, correct, total: questions.length, passed: score >= Number(definition.passingScore || 0), submittedAt: attempt.submittedAt }, 201);
+  if (!quiz) return sendError(res, 'Assessment is not available.', 404);
+  const definition = quiz.data || {};
+  const legacyQuestions = Array.isArray(definition.questions) ? definition.questions : [];
+  const questions = quiz.questions.length ? quiz.questions.map((question) => ({ id: question.id, options: question.options, correctIndex: question.answer?.correctIndex })) : legacyQuestions;
+  const answers = req.validated.body.answers;
+  const expectedCount = Number(definition.questionsToShow || 0) || questions.length;
+  const uniqueQuestionIds = new Set(answers.map((answer) => answer.questionId));
+  if (!questions.length || answers.length !== expectedCount || uniqueQuestionIds.size !== answers.length) return sendError(res, 'Invalid assessment answers.', 400);
+  const questionMap = new Map(questions.map((question) => [question.id, question]));
+  let correct = 0;
+  for (const answer of answers) {
+    const question = questionMap.get(answer.questionId);
+    if (!question || answer.optionIndex >= question.options.length) return sendError(res, 'Invalid assessment answers.', 400);
+    if (Number(answer.optionIndex) === Number(question.correctIndex)) correct += 1;
+  }
+  const score = Math.round((correct / answers.length) * 100);
+  const attemptNumber = await prisma.submission.count({ where: { studentId: req.student.id, quizId: quiz.id } }) + 1;
+  const attempt = await prisma.submission.create({
+    data: { studentId: req.student.id, quizId: quiz.id, content: { answers, attemptNumber }, score, status: 'GRADED', gradedAt: new Date() },
+  });
+  return sendSuccess(res, { id: attempt.id, assessmentId: quiz.id, attemptNumber, score, correct, total: answers.length, passed: score >= Number(definition.passingScore || 0), submittedAt: attempt.submittedAt }, 201);
 }
 
 export async function getMyAttendance(req, res) {

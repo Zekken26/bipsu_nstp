@@ -98,6 +98,75 @@ export const updateModuleSchema = z.object({
   query: z.object({}).optional(),
 });
 
+const assessmentQuestionSchema = z.object({
+  id: z.string().trim().min(1).max(200).optional(),
+  prompt: z.string().trim().min(1, 'Question prompt is required').max(2000),
+  options: z.array(z.string().trim().min(1).max(1000)).min(2).max(10),
+  correctIndex: z.number().int().min(0),
+}).strict().refine(
+  (question) => question.correctIndex < question.options.length,
+  { message: 'Correct answer must reference one of the supplied options', path: ['correctIndex'] },
+);
+
+const assessmentFields = {
+  title: z.string().trim().min(1, 'Assessment title is required').max(200),
+  description: z.string().trim().max(5000).default(''),
+  moduleId: z.string().trim().min(1, 'A module is required').max(200),
+  type: z.enum(['quiz', 'exam', 'seminar']).default('quiz'),
+  timeLimit: z.number().int().min(1).max(480).default(15),
+  passingScore: z.number().int().min(0).max(100).default(70),
+  questionsToShow: z.number().int().min(0).max(500).default(0),
+  questions: z.array(assessmentQuestionSchema).max(500).default([]),
+  status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).default('DRAFT'),
+};
+
+export const createAssessmentSchema = z.object({
+  body: z.object({
+    ...assessmentFields,
+    ownerId: z.string().trim().min(1).max(200).optional(),
+    status: z.literal('DRAFT').optional(),
+  }).strict(),
+  params: z.object({}).optional(),
+  query: z.object({}).optional(),
+});
+
+export const updateAssessmentSchema = z.object({
+  body: z.object({
+    title: assessmentFields.title.optional(),
+    description: z.string().trim().max(5000).optional(),
+    moduleId: assessmentFields.moduleId.optional(),
+    type: z.enum(['quiz', 'exam', 'seminar']).optional(),
+    timeLimit: z.number().int().min(1).max(480).optional(),
+    passingScore: z.number().int().min(0).max(100).optional(),
+    questionsToShow: z.number().int().min(0).max(500).optional(),
+    questions: z.array(assessmentQuestionSchema).max(500).optional(),
+    status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).optional(),
+    ownerId: z.string().trim().min(1).max(200).optional(),
+  }).strict().refine((value) => Object.keys(value).length > 0, 'At least one assessment field is required'),
+  params: z.object({ id: z.string().min(1).max(200) }),
+  query: z.object({}).optional(),
+});
+
+export const submitAssessmentSchema = z.object({
+  body: z.object({
+    answers: z.array(z.object({
+      questionId: z.string().min(1).max(200),
+      optionIndex: z.number().int().min(0).max(9),
+    }).strict()).min(1).max(500),
+  }).strict(),
+  params: z.object({ assessmentId: z.string().min(1).max(200) }),
+  query: z.object({}).optional(),
+});
+
+export const overrideAssessmentAttemptSchema = z.object({
+  body: z.object({
+    status: z.enum(['passed', 'failed', 'review']),
+    reason: z.string().trim().min(3, 'An override reason is required').max(1000),
+  }).strict(),
+  params: z.object({ id: z.string().min(1).max(200) }),
+  query: z.object({}).optional(),
+});
+
 export const createFollowSchema = z.object({
   body: z.object({
     targetUserId: z.string().min(1, 'Target user is required'),

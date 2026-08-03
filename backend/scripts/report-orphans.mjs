@@ -9,11 +9,24 @@ try {
   const tables = await prisma.$queryRaw`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`;
   const available = new Set(tables.map(({ tablename }) => tablename));
   const findings = [];
+  const warnings = [];
   for (const [child, column, parent] of checks) {
     if (!available.has(child) || !available.has(parent)) continue;
     const sample = await prisma.$queryRawUnsafe(`SELECT c."id", c."${column}" FROM "${child}" c LEFT JOIN "${parent}" p ON p."id" = c."${column}" WHERE c."${column}" IS NOT NULL AND p."id" IS NULL ORDER BY c."id" LIMIT 100`);
     if (sample.length) findings.push({ relation: `${child}.${column} -> ${parent}.id`, count: sample.length, sample });
   }
-  console.log(JSON.stringify({ checkedAt: new Date().toISOString(), findings }, null, 2));
+  if (available.has('quiz')) {
+    const legacyAssessmentLinks = await prisma.$queryRawUnsafe(`SELECT "id", "moduleId", "title" FROM "quiz" WHERE "moduleId" IN ('m1', 'unknown') ORDER BY "id" LIMIT 100`);
+    if (legacyAssessmentLinks.length) warnings.push({
+      issue: 'Assessments using legacy placeholder module IDs require administrator review.',
+      sample: legacyAssessmentLinks,
+    });
+    const embeddedQuestionDefinitions = await prisma.$queryRawUnsafe(`SELECT q."id", q."title" FROM "quiz" q WHERE jsonb_array_length(CASE WHEN jsonb_typeof(q."data"->'questions') = 'array' THEN q."data"->'questions' ELSE '[]'::jsonb END) > 0 AND NOT EXISTS (SELECT 1 FROM "question" question_row WHERE question_row."quizId" = q."id") ORDER BY q."id" LIMIT 100`);
+    if (embeddedQuestionDefinitions.length) warnings.push({
+      issue: 'Legacy assessments still use embedded question definitions; editing them will migrate questions into relational rows.',
+      sample: embeddedQuestionDefinitions,
+    });
+  }
+  console.log(JSON.stringify({ checkedAt: new Date().toISOString(), findings, warnings }, null, 2));
   if (findings.length) process.exitCode = 1;
 } finally { await prisma.$disconnect(); }

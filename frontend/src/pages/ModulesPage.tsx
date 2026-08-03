@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Clock, CheckCircle, Search, Sparkles, Gauge, ChevronRight, Plus, Trash2, Save, ArrowLeft, ArrowUp, ArrowDown, Copy, Wrench, Video, ExternalLink } from 'lucide-react';
-import { createEmptyModule, loadAssessments, loadModules, loadStudents, replaceModulesSnapshot, safeJsonParse, type NstpModule, type NstpRole } from '../data/nstpData';
+import { createEmptyModule, loadModules, replaceAssessmentsSnapshot, replaceModulesSnapshot, type NstpAssessment, type NstpModule, type NstpRole } from '../data/nstpData';
 import { toSafeEmbedUrl, toSafeExternalUrl } from '../utils/moduleUrls';
 import { apiGet, apiPost } from '../services/apiClient';
 import { createManagedModule, fetchManagedModules, removeManagedModule, updateManagedModule } from '../services/modules';
+import { fetchManagedAssessments, fetchStudentAssessments } from '../services/assessments';
 
 export default function ModulesPage({ user, role = 'student', onBack }: { user: any; role?: NstpRole; onBack?: () => void }) {
   const [modules, setModules] = useState<NstpModule[]>([]);
+  const [assessments, setAssessments] = useState<NstpAssessment[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState('all');
@@ -53,6 +55,16 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   }, [effectiveRole]);
 
   useEffect(() => {
+    const request = effectiveRole === 'student'
+      ? fetchStudentAssessments()
+      : fetchManagedAssessments(effectiveRole as 'admin' | 'coordinator' | 'facilitator');
+    request.then((records) => {
+      setAssessments(records);
+      replaceAssessmentsSnapshot(records);
+    }).catch((error) => setModuleError(error instanceof Error ? error.message : 'Unable to load linked assessments.'));
+  }, [effectiveRole]);
+
+  useEffect(() => {
     if (effectiveRole !== 'student') return;
     apiGet<{ success: boolean; data: { progress: Array<{ moduleId: string; completedAt: string | null }> } }>('/nstp/students/me/progress')
       .then(({ data }) => setProgress(Object.fromEntries(data.progress.map((entry) => [entry.moduleId, Boolean(entry.completedAt)]))))
@@ -62,7 +74,6 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   const selectedModule = useMemo(() => modules.find((module) => module.id === selectedModuleId) || null, [modules, selectedModuleId]);
   const isAdmin = role === 'admin' || role === 'coordinator';
   const editorRole = role === 'coordinator' ? 'coordinator' : 'admin';
-  const students = useMemo(() => loadStudents(), []);
 
   useEffect(() => {
     if (selectedModule) {
@@ -93,7 +104,6 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   const commonModules = modules.filter((module) => (module.component || 'Common') === 'Common');
   const totalHours = commonModules.reduce((accumulator, module) => accumulator + (getModuleProgress(module) === 100 ? module.hours : 0), 0);
   const plannedCommonHours = commonModules.reduce((accumulator, module) => accumulator + module.hours, 0);
-  const assessments = loadAssessments();
   const publishedAssessments = assessments.filter((assessment) => assessment.status === 'published');
   const modulesWithPublishedTests = commonModules.filter((module) =>
     publishedAssessments.some((assessment) => assessment.moduleId === module.id && assessment.type !== 'exam')
@@ -105,16 +115,6 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   const publishedModules = modules.filter((module) => module.status === 'PUBLISHED');
   const draftModules = modules.filter((module) => (module.status || 'DRAFT') === 'DRAFT');
   const archivedModules = modules.filter((module) => module.status === 'ARCHIVED');
-  const moduleCompletionRate = useMemo(() => {
-    if (!selectedModule || students.length === 0) return 0;
-    const completed = students.reduce((count, student) => {
-      const raw = localStorage.getItem(`progress-${student.id}`);
-      if (!raw) return count;
-      const savedProgress = safeJsonParse<Record<string, boolean>>(raw, {});
-      return count + (savedProgress[selectedModule.id] ? 1 : 0);
-    }, 0);
-    return Math.round((completed / students.length) * 100);
-  }, [selectedModule, students]);
 
   const studentComponent = user.component || user.preferredComponent || 'Common';
   const studentVisibleModules = isAdmin
@@ -500,8 +500,8 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                     <p className="text-xl font-bold text-slate-900">{draftModules.length}</p>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs text-slate-500">Learner completion</p>
-                    <p className="text-xl font-bold text-slate-900">{moduleCompletionRate}%</p>
+                    <p className="text-xs text-slate-500">Confirmed completions</p>
+                    <p className="text-xl font-bold text-slate-900">{selectedModule?.completedStudents || 0}</p>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
                     <p className="text-xs text-slate-500">Archived</p>

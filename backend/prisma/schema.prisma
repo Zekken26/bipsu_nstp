@@ -60,6 +60,12 @@ enum ModuleStatus {
   ARCHIVED
 }
 
+enum AssessmentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 model User {
   id                 String              @id @default(cuid())
   name               String
@@ -81,23 +87,23 @@ model User {
 }
 
 model StudentProfile {
-  id            String         @id @default(cuid())
-  userId        String         @unique
-  studentNumber String         @unique
-  yearLevel     String?
-  course        String?
-  sectionId     String?
-  componentId   String?
-  data          Json?          @default("{}")
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  section       Section?       @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  component     NSTPComponent? @relation(fields: [componentId], references: [id], onDelete: SetNull)
-  enrollments   Enrollment[]
-  submissions   Submission[]
-  grades        Grade[]
+  id             String           @id @default(cuid())
+  userId         String           @unique
+  studentNumber  String           @unique
+  yearLevel      String?
+  course         String?
+  sectionId      String?
+  componentId    String?
+  data           Json?            @default("{}")
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  section        Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  component      NSTPComponent?   @relation(fields: [componentId], references: [id], onDelete: SetNull)
+  enrollments    Enrollment[]
+  submissions    Submission[]
+  grades         Grade[]
   moduleProgress ModuleProgress[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([sectionId])
   @@index([componentId])
@@ -213,20 +219,22 @@ model Lesson {
 }
 
 model Quiz {
-  id           String       @id @default(cuid())
+  id           String           @id @default(cuid())
   moduleId     String
   title        String
   instructions String?
-  totalPoints  Int          @default(0)
-  data         Json?        @default("{}")
-  module       Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  totalPoints  Int              @default(0)
+  status       AssessmentStatus @default(DRAFT)
+  data         Json?            @default("{}")
+  module       Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   questions    Question[]
   submissions  Submission[]
   grades       Grade[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   @@index([moduleId])
+  @@index([moduleId, status])
   @@map("quiz")
 }
 
@@ -238,6 +246,7 @@ model Question {
   options   Json?
   answer    Json?
   points    Int      @default(1)
+  order     Int      @default(0)
   quiz      Quiz?    @relation(fields: [quizId], references: [id], onDelete: Cascade)
   exam      Exam?    @relation(fields: [examId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
