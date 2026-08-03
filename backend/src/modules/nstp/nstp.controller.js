@@ -68,7 +68,6 @@ function adminResourceHandlers(resource) {
 
 export const adminAccounts = adminResourceHandlers('accounts');
 export const adminStudents = adminResourceHandlers('students');
-export const adminGrades = adminResourceHandlers('grades');
 export const adminPendingRegistrations = adminResourceHandlers('pending-registrations');
 export const adminTrainingGroups = adminResourceHandlers('training-groups');
 export const adminAttendanceRecords = adminResourceHandlers('attendance-records');
@@ -222,13 +221,6 @@ export async function getMyStudentProfile(req, res) {
   return sendSuccess(res, toStudentSelfProfileDto(user));
 }
 
-export async function getMyGrades(req, res) {
-  const grades = await prisma.grade.findMany({
-    where: { studentId: req.student.id }, orderBy: { createdAt: 'desc' },
-  });
-  return sendSuccess(res, grades);
-}
-
 export async function getMyProgress(req, res) {
   const [progress, storedAttempts] = await Promise.all([
     prisma.moduleProgress.findMany({ where: { studentId: req.student.id }, orderBy: { updatedAt: 'desc' } }),
@@ -345,12 +337,6 @@ export async function listInstructorClassStudents(req, res) {
     include: { user: { select: { id: true, name: true, email: true, data: true } } },
   });
   return sendSuccess(res, students);
-}
-
-export async function createInstructorGrade(req, res) {
-  const { studentId, ...gradeData } = req.body;
-  const grade = await prisma.grade.create({ data: { ...gradeData, studentId } });
-  return res.status(201).json({ success: true, data: grade });
 }
 
 export async function listCoordinatorStudents(req, res) {

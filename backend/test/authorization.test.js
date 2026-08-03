@@ -94,6 +94,13 @@ test('students cannot create or modify modules', async () => {
   assert.equal((await request('/api/nstp/admin/modules/module-1', { role: 'STUDENT', method: 'DELETE' })).status, 403);
 });
 
+test('only administrators can release or hold official semester grades', async () => {
+  for (const role of ['STUDENT', 'INSTRUCTOR', 'COORDINATOR']) {
+    assert.equal((await request('/api/nstp/admin/grades/grade-1/release', { role, method: 'POST', body: {} })).status, 403);
+    assert.equal((await request('/api/nstp/admin/grades/grade-1/hold', { role, method: 'POST', body: {} })).status, 403);
+  }
+});
+
 test('only administrators can manage student profile layouts', async () => {
   const body = { name: 'Blocked layout', configuration: {} };
   assert.equal((await request('/api/nstp/admin/profile-templates', { role: 'STUDENT', method: 'POST', body })).status, 403);
@@ -122,7 +129,10 @@ test('student record identifiers cannot bypass ownership checks', async () => {
     role: 'STUDENT', id: 'student-user',
   });
   assert.equal(response.status, 200);
-  assert.deepEqual(observedWhere, { studentId: 'owned-student-profile' });
+  assert.deepEqual(observedWhere, {
+    studentId: 'owned-student-profile', isReleased: true,
+    schoolYear: { not: null }, semester: { not: null },
+  });
 });
 
 test('instructors cannot access or modify an unassigned class', async () => {

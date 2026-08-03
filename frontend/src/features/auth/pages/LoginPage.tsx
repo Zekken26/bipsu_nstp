@@ -1512,7 +1512,7 @@ function PortalSections({ onLogin }: { onLogin: () => void }) {
       <Panel className="lg:col-span-2">
         <FileText className="mb-4 h-7 w-7 text-amber-600" />
         <p className="text-xl font-semibold">Grade center</p>
-        <p className="section-copy">Students can view released prelim, midterm, final standing, and clearance requirements.</p>
+        <p className="section-copy">Students can view released First and Second Semester standing and clearance requirements.</p>
       </Panel>
       <Panel className="lg:col-span-6">
         <button onClick={onLogin} className="inline-flex items-center gap-2 rounded-full bg-[#f2b705] px-6 py-3 font-semibold text-[#09285f]">

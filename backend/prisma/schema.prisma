@@ -82,6 +82,22 @@ enum TemplateStatus {
   PUBLISHED
 }
 
+enum AcademicSemester {
+  FIRST
+  SECOND
+}
+
+enum GradeClassification {
+  EXCELLENT
+  OUTSTANDING
+  VERY_GOOD
+  GOOD
+  FAIR
+  POOR
+  CONDITIONAL
+  FAILED
+}
+
 model User {
   id                 String              @id @default(cuid())
   name               String
@@ -196,6 +212,7 @@ model NSTPComponent {
   enrollments  Enrollment[]
   coordinators CoordinatorProfile[]
   facilitators InstructorProfile[]
+  grades       Grade[]
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
 
@@ -390,17 +407,28 @@ model Grade {
   quizId       String?
   assignmentId String?
   examId       String?
+  componentId  String?
+  schoolYear   String?
+  semester     AcademicSemester?
+  percentGrade Float?
+  numericalGrade Decimal?             @db.Decimal(2, 1)
+  classification GradeClassification?
   score        Float?
   prelim       Float?
   midterm      Float?
   final        Float?
   remarks      String?
   isReleased   Boolean        @default(false)
+  releasedAt   DateTime?
+  releasedById String?
+  createdById  String?
+  updatedById  String?
   student      StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
   module       Module?        @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   quiz         Quiz?          @relation(fields: [quizId], references: [id], onDelete: SetNull)
   assignment   Assignment?    @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
   exam         Exam?          @relation(fields: [examId], references: [id], onDelete: SetNull)
+  component    NSTPComponent? @relation(fields: [componentId], references: [id], onDelete: SetNull)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -409,6 +437,9 @@ model Grade {
   @@index([quizId])
   @@index([assignmentId])
   @@index([examId])
+  @@index([componentId])
+  @@index([schoolYear, semester, isReleased])
+  @@unique([studentId, componentId, schoolYear, semester])
   @@map("grade")
 }
 

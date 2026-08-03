@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import profileTemplatesRouter from '../profileTemplates/profileTemplates.routes.js';
 import staffRouter from '../staff/staff.routes.js';
+import gradesRouter from '../grades/grades.routes.js';
 import { authenticate, requireRole } from '../../middleware/authenticate.js';
 import { strictWriteLimiter } from '../../middleware/rateLimit.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -16,9 +17,9 @@ import {
 } from './nstp.authorization.js';
 import {
   adminAccounts, adminAttendanceRecords, adminAttendanceSessions,
-  adminAuditLog, adminComponentState, adminGrades,
+  adminAuditLog, adminComponentState,
   adminPendingRegistrations, adminQualifyingResults, adminStudents, adminTrainingGroups,
-  createInstructorGrade, getAdminSummaryController, getMyAttendance, getMyGrades, getMyProgress,
+  getAdminSummaryController, getMyAttendance, getMyProgress,
   getMyQualifyingResults, getMyStudentProfile, listCoordinatorClasses,
   listCoordinatorStudents, listInstructorClasses, listInstructorClassStudents,
   completeMyModule, submitMyAssessment,
@@ -33,6 +34,7 @@ import {
 
 const router = Router();
 router.use('/', staffRouter);
+router.use('/', gradesRouter);
 router.use('/admin/profile-templates', profileTemplatesRouter);
 const admin = [authenticate, requireRole('ADMIN')];
 
@@ -57,7 +59,6 @@ router.patch('/admin/assessments/:id', ...admin, strictWriteLimiter, validateReq
 router.delete('/admin/assessments/:id', ...admin, strictWriteLimiter, asyncHandler(removeAdminAssessment));
 router.get('/admin/assessment-attempts', ...admin, asyncHandler(listAdminAssessmentAttempts));
 router.post('/admin/assessment-attempts/:id/override', ...admin, strictWriteLimiter, validateRequest(overrideAssessmentAttemptSchema), asyncHandler(overrideAdminAssessmentAttempt));
-adminResource('grades', adminGrades);
 adminResource('pending-registrations', adminPendingRegistrations);
 adminResource('training-groups', adminTrainingGroups);
 adminResource('attendance-records', adminAttendanceRecords);
@@ -69,7 +70,6 @@ router.get('/admin/summary', ...admin, asyncHandler(getAdminSummaryController));
 
 router.get('/students/me', authenticate, requireRole('STUDENT'), asyncHandler(getCurrentStudent), asyncHandler(getMyStudentProfile));
 router.get('/students/me/modules', authenticate, requireRole('STUDENT'), asyncHandler(getCurrentStudent), asyncHandler(listStudentModules));
-router.get('/students/me/grades', authenticate, requireRole('STUDENT'), asyncHandler(getCurrentStudent), asyncHandler(getMyGrades));
 router.get('/students/me/progress', authenticate, requireRole('STUDENT'), asyncHandler(getCurrentStudent), asyncHandler(getMyProgress));
 router.get('/students/me/assessments', authenticate, requireRole('STUDENT'), asyncHandler(getCurrentStudent), asyncHandler(listMyAssessments));
 router.post('/students/me/modules/:moduleId/complete', authenticate, requireRole('STUDENT'), strictWriteLimiter, asyncHandler(getCurrentStudent), asyncHandler(completeMyModule));
@@ -84,7 +84,6 @@ router.post('/instructors/assessments', authenticate, requireRole('INSTRUCTOR'),
 router.patch('/instructors/assessments/:id', authenticate, requireRole('INSTRUCTOR'), strictWriteLimiter, asyncHandler(getCurrentInstructor), validateRequest(updateAssessmentSchema), asyncHandler(updateInstructorAssessment));
 router.delete('/instructors/assessments/:id', authenticate, requireRole('INSTRUCTOR'), strictWriteLimiter, asyncHandler(getCurrentInstructor), asyncHandler(removeInstructorAssessment));
 router.get('/instructors/classes/:classId/students', authenticate, requireRole('INSTRUCTOR'), asyncHandler(getCurrentInstructor), asyncHandler(requireAssignedSection), asyncHandler(listInstructorClassStudents));
-router.post('/instructors/classes/:classId/grades', authenticate, requireRole('INSTRUCTOR'), strictWriteLimiter, asyncHandler(getCurrentInstructor), asyncHandler(requireAssignedSection), asyncHandler(requireStudentInAssignedSection), asyncHandler(createInstructorGrade));
 
 router.get('/coordinators/component/students', authenticate, requireRole('COORDINATOR'), asyncHandler(getCurrentCoordinator), asyncHandler(listCoordinatorStudents));
 router.get('/coordinators/component/classes', authenticate, requireRole('COORDINATOR'), asyncHandler(getCurrentCoordinator), asyncHandler(listCoordinatorClasses));

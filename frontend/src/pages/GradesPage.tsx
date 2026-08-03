@@ -4,14 +4,18 @@ import type { NstpAssessment, NstpModule } from '../data/nstpData';
 import { fetchManagedModules } from '../services/modules';
 import { fetchStudentAssessments } from '../services/assessments';
 import { apiGet } from '../services/apiClient';
+import { getCurrentAcademicYear } from '../utils/academicYear';
 
-type OfficialGrade = { id: string; prelim?: number | null; midterm?: number | null; final?: number | null; remarks?: string | null; isReleased: boolean };
+type OfficialGrade = {
+  id: string; schoolYear: string; semester: 'FIRST' | 'SECOND'; percentGrade: number;
+  numericalGrade: number; classification: string; remarks?: string | null; isReleased: boolean; releasedAt?: string | null;
+};
 type Attempt = { quizId: string | null; score: number | null };
 
 export default function GradesPage({ user }: { user: any }) {
   const [modules, setModules] = useState<NstpModule[]>([]);
   const [assessments, setAssessments] = useState<NstpAssessment[]>([]);
-  const [gradeRecord, setGradeRecord] = useState<OfficialGrade | null>(null);
+  const [gradeRecords, setGradeRecords] = useState<OfficialGrade[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [moduleProgress, setModuleProgress] = useState<Record<string, boolean>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -26,12 +30,17 @@ export default function GradesPage({ user }: { user: any }) {
     ]).then(([moduleRows, assessmentRows, gradeResponse, progressResponse]) => {
       setModules(moduleRows);
       setAssessments(assessmentRows);
-      setGradeRecord(gradeResponse.data[0] || null);
+      setGradeRecords(gradeResponse.data);
       setAttempts(progressResponse.data.attempts);
       setModuleProgress(Object.fromEntries(progressResponse.data.progress.map((entry) => [entry.moduleId, Boolean(entry.completedAt)])));
       setLoadError(null);
     }).catch((error) => setLoadError(error instanceof Error ? error.message : 'Unable to load official grades.'));
   }, [user.id]);
+
+  const currentSchoolYear = getCurrentAcademicYear();
+  const firstSemesterGrade = gradeRecords.find((grade) => grade.schoolYear === currentSchoolYear && grade.semester === 'FIRST') || null;
+  const secondSemesterGrade = gradeRecords.find((grade) => grade.schoolYear === currentSchoolYear && grade.semester === 'SECOND') || null;
+  const gradeRecord = secondSemesterGrade || firstSemesterGrade;
 
   const completedModules = modules.filter((module) => moduleProgress[module.id]).length;
   const completedHours = modules.length > 0
@@ -43,10 +52,8 @@ export default function GradesPage({ user }: { user: any }) {
   const averageAssessment = completedAssessments > 0
     ? Math.round([...latestAttemptByAssessment.values()].reduce((total, attempt) => total + Number(attempt.score || 0), 0) / completedAssessments)
     : 0;
-  const computedStanding = gradeRecord
-    ? Math.round(((gradeRecord.prelim || 0) + (gradeRecord.midterm || 0) + (gradeRecord.final || 0)) / (Number(gradeRecord.final || 0) > 0 ? 3 : 2))
-    : averageAssessment;
-  const releaseLabel = gradeRecord?.isReleased ? 'Released by NSTP Office' : 'Pending official release';
+  const computedStanding = gradeRecord?.percentGrade ?? averageAssessment;
+  const releaseLabel = gradeRecord ? 'Released by NSTP Office' : 'No released semester grade';
 
   return (
     <div className="bento-screen space-y-4 overflow-auto pr-1">
@@ -77,8 +84,8 @@ export default function GradesPage({ user }: { user: any }) {
         <div className="bento-panel p-5 xl:col-span-2">
           <Award className="mb-3 h-5 w-5 text-amber-600" />
           <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Final Remarks</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{gradeRecord?.remarks || 'In Progress'}</p>
-          {!gradeRecord?.isReleased && (
+          <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{gradeRecord?.classification?.replace(/_/g, ' ') || 'In Progress'}</p>
+          {!gradeRecord && (
             <p className="mt-2 inline-flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
               <LockKeyhole className="h-3.5 w-3.5" />
               Registrar/NSTP office verification required
@@ -93,18 +100,23 @@ export default function GradesPage({ user }: { user: any }) {
         </div>
 
         <div className="bento-panel p-5 xl:col-span-3">
-          <p className="mb-4 text-sm font-bold text-slate-900 dark:text-slate-100">Grade Breakdown</p>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <p className="mb-1 text-sm font-bold text-slate-900 dark:text-slate-100">Official Semester Grades</p>
+          <p className="mb-4 text-xs text-slate-500">Academic Year {currentSchoolYear}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
             {[
-              ['Prelim', gradeRecord?.prelim ?? 0],
-              ['Midterm', gradeRecord?.midterm ?? 0],
-              ['Final', gradeRecord?.final ?? 0],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-slate-200 bg-white/75 p-4 dark:border-slate-700 dark:bg-slate-900/70">
-                <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{label}</p>
-                <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{value}%</p>
-              </div>
-            ))}
+              ['First Semester', firstSemesterGrade],
+              ['Second Semester', secondSemesterGrade],
+            ].map(([label, value]) => {
+              const semesterGrade = value as OfficialGrade | null;
+              return <div key={String(label)} className="rounded-xl border border-slate-200 bg-white/75 p-4 dark:border-slate-700 dark:bg-slate-900/70">
+                <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{String(label)}</p>
+                {semesterGrade ? <>
+                  <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{semesterGrade.percentGrade}% <span className="text-base font-semibold text-blue-700">({semesterGrade.numericalGrade.toFixed(1)})</span></p>
+                  <p className="mt-1 text-xs font-semibold text-emerald-700">{semesterGrade.classification.replace(/_/g, ' ')}</p>
+                  {semesterGrade.remarks && <p className="mt-1 text-xs text-slate-500">{semesterGrade.remarks}</p>}
+                </> : <p className="mt-2 text-sm font-semibold text-amber-700">Pending official release</p>}
+              </div>;
+            })}
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Activity, BookOpen, CheckCircle2, ClipboardCheck, Clock3, FileDown, FileSpreadsheet, Filter, Gauge, Layers, TrendingUp } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -15,8 +15,11 @@ import {
   Line,
   Legend,
 } from 'recharts';
-import { loadAccounts, loadAssessments, loadGradeRecords, loadModules, loadStudents, loadTrainingGroups, NstpStudent } from '../data/nstpData';
+import { loadAccounts, loadAssessments, loadModules, loadStudents, loadTrainingGroups, NstpStudent } from '../data/nstpData';
 import { createXlsxWorkbook } from '../utils/xlsxExport';
+import { apiGet } from '../services/apiClient';
+import { fetchAdminGrades, type SemesterGrade } from '../services/grades';
+import { getCurrentAcademicYear } from '../utils/academicYear';
 
 const PALETTE = ['#2563eb', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4'];
 
@@ -31,10 +34,22 @@ export default function ReportsCenter({ user }: { user: any }) {
   const students = loadStudents();
   const modules = loadModules();
   const assessments = loadAssessments();
-  const grades = loadGradeRecords();
+  const [grades, setGrades] = useState<SemesterGrade[]>([]);
   const accounts = loadAccounts();
   const trainingGroups = loadTrainingGroups();
   const facilitators = accounts.filter((account) => account.role === 'facilitator');
+
+  useEffect(() => {
+    const schoolYear = getCurrentAcademicYear();
+    if (user.role === 'student') {
+      apiGet<{ success: boolean; data: SemesterGrade[] }>('/nstp/students/me/grades').then((response) => setGrades(response.data)).catch(() => setGrades([]));
+    } else if (user.role === 'admin') {
+      Promise.all([
+        fetchAdminGrades({ schoolYear, semester: 'FIRST', pageSize: 100 }),
+        fetchAdminGrades({ schoolYear, semester: 'SECOND', pageSize: 100 }),
+      ]).then(([first, second]) => setGrades([...first.data, ...second.data])).catch(() => setGrades([]));
+    } else setGrades([]);
+  }, [user.id, user.role]);
 
   const roleScopedAssessments = useMemo(() => {
     if (user.role === 'facilitator') {
@@ -146,16 +161,18 @@ export default function ReportsCenter({ user }: { user: any }) {
   }, [students, user.role, visibleStudents]);
 
   const gradeRows = useMemo(() => {
-    const sourceIds = new Set((user.role === 'student' ? visibleStudents : students).map((student) => student.studentId || student.id));
+    const sourceIds = new Set((user.role === 'student' ? visibleStudents : students).flatMap((student) => [student.studentId, student.id].filter(Boolean)));
     return grades
-      .filter((grade) => sourceIds.has(grade.studentId))
+      .filter((grade) => user.role === 'student' || sourceIds.has(grade.student?.studentNumber || grade.studentId))
       .map((grade) => [
-        grade.studentId,
-        String(grade.prelim),
-        String(grade.midterm),
-        String(grade.final),
-        grade.remarks,
-        grade.released ? 'Released' : 'Held',
+        grade.student?.studentNumber || grade.studentId,
+        grade.schoolYear,
+        grade.semester === 'FIRST' ? 'First Semester' : 'Second Semester',
+        String(grade.percentGrade),
+        grade.numericalGrade.toFixed(1),
+        grade.classification.replace(/_/g, ' '),
+        grade.remarks || '',
+        grade.isReleased ? 'Released' : 'Held',
         new Date(grade.updatedAt).toLocaleString(),
       ]);
   }, [grades, students, user.role, visibleStudents]);
@@ -202,7 +219,7 @@ export default function ReportsCenter({ user }: { user: any }) {
     ];
 
     const gradeRowsForExport = [
-      ['Student ID', 'Prelim', 'Midterm', 'Final', 'Remarks', 'Release Status', 'Updated At'],
+      ['Student ID', 'School Year', 'Semester', 'Percent Grade', 'Numerical Grade', 'Classification', 'Remarks', 'Release Status', 'Updated At'],
       ...gradeRows,
     ];
 
@@ -307,7 +324,7 @@ export default function ReportsCenter({ user }: { user: any }) {
       });
 
       addReportTable('Student Roster', ['Student ID', 'Name', 'Email', 'Program', 'Municipality', 'Facilitator', 'Component', 'Progress', 'Assessments', 'Status'], reportRows, [15, 118, 110]);
-      addReportTable('Grade Records', ['Student ID', 'Prelim', 'Midterm', 'Final', 'Remarks', 'Release', 'Updated'], gradeRows, [37, 99, 235]);
+      addReportTable('Grade Records', ['Student ID', 'School Year', 'Semester', 'Percent', 'Numerical', 'Classification', 'Remarks', 'Release', 'Updated'], gradeRows, [37, 99, 235]);
       addReportTable('Module Library', ['Module', 'Component', 'Difficulty', 'Hours', 'Source'], modules.map((module) => [
         module.title,
         module.component || 'Common',
@@ -355,12 +372,12 @@ export default function ReportsCenter({ user }: { user: any }) {
     const modulesCompleted = Math.min(moduleTarget, Math.max(0, Math.round((student.progress / 100) * moduleTarget)));
     const assessmentTarget = Math.max(1, publishedAssessments || 9);
     const assessmentsCompleted = Math.min(assessmentTarget, Math.max(student.assessments || 0, Math.round((student.progress / 100) * assessmentTarget)));
-    const studentGrade = grades.find((grade) => grade.studentId === student.studentId || grade.studentId === student.id);
-    const scoreSource = studentGrade?.final || studentGrade?.midterm || studentGrade?.prelim || Math.max(70, Math.min(98, student.progress));
+    const studentGrade = grades.find((grade) => grade.student?.studentNumber === student.studentId || grade.studentId === student.id) || (user.role === 'student' ? grades[0] : undefined);
+    const scoreSource = studentGrade?.percentGrade || Math.max(70, Math.min(98, student.progress));
     const overallAverage = Math.round(scoreSource);
     const requiredHours = 25;
     const completedHours = Math.max(requiredHours, Math.round((totalModuleHours || requiredHours) * Math.max(student.progress, 1) / 100));
-    const programCompletion = Math.round(((modulesCompleted / moduleTarget) * 55) + ((assessmentsCompleted / assessmentTarget) * 30) + (studentGrade?.released ? 15 : 3));
+    const programCompletion = Math.round(((modulesCompleted / moduleTarget) * 55) + ((assessmentsCompleted / assessmentTarget) * 30) + (studentGrade?.isReleased ? 15 : 3));
     const monthTrend = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'].map((month, index, rows) => {
       const start = Math.max(45, overallAverage - 22);
       const value = Math.min(overallAverage, Math.round(start + ((overallAverage - start) / Math.max(1, rows.length - 1)) * index + (index % 2 === 0 ? 0 : 2)));
@@ -383,7 +400,7 @@ export default function ReportsCenter({ user }: { user: any }) {
       ['Component placement', `${student.component} component assigned`],
       ['Module progress', `${modulesCompleted} of ${moduleTarget} modules completed`],
       ['Assessment status', `${assessmentsCompleted} of ${assessmentTarget} assessments completed`],
-      ['Grade release', studentGrade?.released ? 'Final grade released' : 'Final assessment pending'],
+      ['Grade release', studentGrade?.isReleased ? `${studentGrade.semester === 'FIRST' ? 'First' : 'Second'} Semester grade released` : 'Semester grade pending'],
     ];
 
     return (
@@ -559,7 +576,7 @@ export default function ReportsCenter({ user }: { user: any }) {
               {[
                 ['NSTP Hours Requirement', `${completedHours} / ${requiredHours} hours`, completedHours >= requiredHours],
                 ['Modules Completed', `${modulesCompleted} / ${moduleTarget} modules`, modulesCompleted >= moduleTarget],
-                ['Final Assessment', studentGrade?.released ? 'Released' : 'Pending', Boolean(studentGrade?.released)],
+                ['Semester Grade', studentGrade?.isReleased ? 'Released' : 'Pending', Boolean(studentGrade?.isReleased)],
               ].map(([label, detail, done]) => (
                 <div key={label as string} className="flex items-center justify-between gap-3 text-sm">
                   <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">{done ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Clock3 className="h-4 w-4 text-slate-400" />}{label as string}</span>

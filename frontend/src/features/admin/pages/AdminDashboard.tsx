@@ -7,7 +7,8 @@ import ModulesPage from '../../../pages/ModulesPage';
 
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import StudentProfileModal from '../components/StudentProfileModal';
-import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncCollectionFromApi, syncToApi, AUDIT_LOG_KEY, type CoordinatorScope } from '../../../data/nstpData';
+import AdminGradesView from '../components/AdminGradesView';
+import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncCollectionFromApi, syncToApi, AUDIT_LOG_KEY, type CoordinatorScope } from '../../../data/nstpData';
 import { apiPost, apiPut, apiDel } from '../../../services/apiClient';
 import { toast } from 'sonner';
 import { useCurrentUser, useUpdateCurrentUser } from '../../../hooks/index';
@@ -143,7 +144,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const [approvingRegistrationIds, setApprovingRegistrationIds] = useState<string[]>([]);
   const [registrationApprovalErrors, setRegistrationApprovalErrors] = useState<Record<string, string>>({});
   const [trainingGroups, setTrainingGroups] = useState(loadTrainingGroups());
-  const [gradeRecords, setGradeRecords] = useState<NstpGradeRecord[]>([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('risk');
@@ -181,7 +181,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     setStudents(loadStudents());
     setPendingRegistrations(loadPendingStudentRegistrations());
     setTrainingGroups(loadTrainingGroups());
-    setGradeRecords(loadGradeRecords());
     setAuditLog(safeJsonParse<AdminAuditEntry[]>(localStorage.getItem(AUDIT_LOG_KEY), []));
     setFilterPresets(safeJsonParse<StudentFilterPreset[]>(localStorage.getItem(FILTER_PRESETS_KEY), []));
     setFormTemplate(DEFAULT_FORM_TEMPLATE);
@@ -191,7 +190,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       setStudents(loadStudents());
       setPendingRegistrations(loadPendingStudentRegistrations());
       setTrainingGroups(loadTrainingGroups());
-      setGradeRecords(loadGradeRecords());
       setAccountVersion((v) => v + 1);
     });
     fetchProfileTemplates().then((collection) => {
@@ -250,31 +248,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const persistPendingRegistrations = (nextRegistrations: PendingStudentRegistration[]) => {
     savePendingStudentRegistrations(nextRegistrations);
     setPendingRegistrations(nextRegistrations);
-  };
-
-  const persistGradeRecords = (nextRecords: NstpGradeRecord[]) => {
-    saveGradeRecords(nextRecords);
-    setGradeRecords(nextRecords);
-  };
-
-  const updateGradeRecord = (studentId: string, patch: Partial<NstpGradeRecord>) => {
-    const existing = gradeRecords.find((record) => record.studentId === studentId);
-    const nextRecord: NstpGradeRecord = {
-      id: existing?.id || `grade-${crypto.randomUUID()}`,
-      studentId,
-      prelim: existing?.prelim || 0,
-      midterm: existing?.midterm || 0,
-      final: existing?.final || 0,
-      remarks: existing?.remarks || 'In Progress',
-      released: existing?.released || false,
-      updatedAt: new Date().toISOString(),
-      ...patch,
-    };
-    const nextRecords = existing
-      ? gradeRecords.map((record) => (record.id === nextRecord.id ? nextRecord : record))
-      : [nextRecord, ...gradeRecords];
-    persistGradeRecords(nextRecords);
-    logAudit('Updated grade record', `${studentId} grade portal record changed`);
   };
 
   const persistAuditLog = (nextLog: AdminAuditEntry[]) => {
@@ -1055,16 +1028,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       { name: 'Unassigned', value: unassigned, color: '#f59e0b', percent: total ? Math.round((unassigned / total) * 100) : 0 },
     ];
   }, [municipalityAssignmentRows]);
-
-  const gradeReleaseData = useMemo(() => {
-    const ids = new Set(schoolYearStudents.map((student) => student.studentId || student.id));
-    const visibleRecords = gradeRecords.filter((record) => ids.has(record.studentId));
-    return [
-      { name: 'Released', value: visibleRecords.filter((record) => record.released).length },
-      { name: 'Held', value: visibleRecords.filter((record) => !record.released).length },
-      { name: 'Missing', value: Math.max(0, schoolYearStudents.length - visibleRecords.length) },
-    ];
-  }, [gradeRecords, schoolYearStudents]);
 
   const facilitatorOverviewData = useMemo(() => {
     const rows = [
@@ -1947,7 +1910,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-300">Administration</p>
                   <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
-                    {view === 'exports' ? 'Export Layout' : view === 'settings' ? 'System Settings' : view === 'account' ? 'Account Settings' : 'Dashboard'}
+                    {view === 'assignments' ? 'Semester Grades' : view === 'exports' ? 'Export Layout' : view === 'settings' ? 'System Settings' : view === 'account' ? 'Account Settings' : 'Dashboard'}
                   </h1>
                 </div>
               </div>
@@ -2560,13 +2523,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   </section>
                 ) : view === 'assignments' ? (
                   <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                    <div className="border-b border-slate-200 p-5 dark:border-slate-800">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Grades and Classification</p>
-                      <h2 className="text-2xl font-semibold text-slate-950 dark:text-white">Component Assignment</h2>
-                    </div>
-                    <div className="overflow-visible">
-                      <ComponentAssignment />
-                    </div>
+                    <AdminGradesView />
                   </section>
                 ) : view === 'tools' ? (
                   <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -2740,22 +2697,14 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
 
                       <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div className="mb-3 flex items-center justify-between">
-                          <h3 className="font-semibold text-slate-950 dark:text-white">Grade Release Readiness</h3>
+                          <h3 className="font-semibold text-slate-950 dark:text-white">Official Semester Grades</h3>
                           <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{schoolYear}</span>
                         </div>
-                        <div className="h-64 min-w-0">
-                          <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                            <PieChart>
-                              <Pie data={gradeReleaseData} dataKey="value" nameKey="name" innerRadius={54} outerRadius={88} paddingAngle={3}>
-                                {gradeReleaseData.map((entry, index) => {
-                                  const palette = ['#10b981', '#2563eb', '#94a3b8'];
-                                  return <Cell key={`grade-release-${entry.name}`} fill={palette[index % palette.length]} />;
-                                })}
-                              </Pie>
-                              <Tooltip />
-                              <Legend />
-                            </PieChart>
-                          </ResponsiveContainer>
+                        <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-blue-200 bg-blue-50/60 p-6 text-center dark:border-blue-500/20 dark:bg-blue-500/10">
+                          <Award className="h-9 w-9 text-blue-700 dark:text-blue-300" />
+                          <p className="mt-3 font-semibold text-slate-900 dark:text-white">First and Second Semester records</p>
+                          <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">Open the server-backed grade center to review drafts and release official results.</p>
+                          <button type="button" onClick={() => setView('assignments')} className="mt-4 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">Open Grade Center</button>
                         </div>
                       </article>
                     </div>
@@ -3359,60 +3308,6 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
           )}
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-8 shadow-sm transition-all hover:shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-semibold text-slate-900 dark:text-slate-100 inline-flex items-center gap-2">
-              <Award className="w-4 h-4 text-amber-600" />
-              Grade Release Center
-            </h3>
-            <span className="inline-flex rounded-lg bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800 dark:bg-blue-500/20 dark:text-blue-100">
-              {gradeRecords.filter((record) => record.released).length}/{gradeRecords.length} released
-            </span>
-          </div>
-          <div className="grid gap-3 xl:grid-cols-2">
-            {students.slice(0, 6).map((student) => {
-              const record = gradeRecords.find((item) => item.studentId === student.studentId);
-              const average = record ? Math.round(((record.prelim || 0) + (record.midterm || 0) + (record.final || 0)) / (record.final > 0 ? 3 : 2)) : 0;
-              return (
-                <div key={student.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950">
-                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-slate-100">{student.name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{student.studentId || 'No student ID'} - {student.component}</p>
-                    </div>
-                    <button
-                      onClick={() => student.studentId && updateGradeRecord(student.studentId, { released: !record?.released })}
-                      disabled={!student.studentId}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-bold ${record?.released ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'} disabled:opacity-50`}
-                    >
-                      {record?.released ? 'Released' : 'Hold'}
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2 text-sm">
-                    {(['prelim', 'midterm', 'final'] as const).map((field) => (
-                      <label key={field} className="space-y-1">
-                        <span className="block text-[11px] uppercase tracking-[0.12em] text-slate-500">{field}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={record?.[field] || 0}
-                          onChange={(event) => student.studentId && updateGradeRecord(student.studentId, { [field]: Math.max(0, Math.min(100, Number(event.target.value) || 0)) })}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                        />
-                      </label>
-                    ))}
-                    <div className="rounded-lg border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-900">
-                      <span className="block text-[11px] uppercase tracking-[0.12em] text-slate-500">Avg</span>
-                      <span className="font-bold text-slate-900 dark:text-slate-100">{average}%</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-3">
           <div>
             <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Admin Dashboard</h2>
@@ -3423,7 +3318,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
             className="bg-gradient-to-r from-blue-700 to-yellow-500 text-white px-6 py-3 rounded-xl hover:opacity-95 hover:-translate-y-0.5 transition-all font-medium flex items-center gap-2 shadow-sm cursor-pointer"
           >
             <ClipboardList className="w-5 h-5" />
-            Component Assignments
+            Open Grade Center
           </button>
         </div>
 

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   Award,
   Bell,
@@ -23,13 +24,15 @@ import {
 import { Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   loadAssessments,
-  loadGradeRecords,
   loadModules,
   loadPendingStudentRegistrations,
   loadStudents,
   NstpAccount,
 } from '../../../data/nstpData';
 import { getCurrentSchoolYear } from '../../../utils/academicYear';
+import { getCurrentAcademicYear } from '../../../utils/academicYear';
+import { apiGet } from '../../../services/apiClient';
+import type { SemesterGrade } from '../../../services/grades';
 
 type RoleDashboardHomeProps = {
   user: NstpAccount & Record<string, any>;
@@ -79,16 +82,21 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
   const students = loadStudents();
   const modules = loadModules();
   const assessments = loadAssessments();
-  const grades = loadGradeRecords();
+  const [grades, setGrades] = useState<SemesterGrade[]>([]);
   const pending = loadPendingStudentRegistrations();
   const copy = roleCopy[role];
 
   const publishedAssessments = assessments.filter((assessment) => assessment.status === 'published');
   const facilitatorOwned = assessments.filter((assessment) => assessment.ownerId === user.id);
-  const studentGrade = grades.find((grade) => grade.studentId === user.studentId);
-  const studentAverage = studentGrade
-    ? Math.round(((studentGrade.prelim || 0) + (studentGrade.midterm || 0) + (studentGrade.final || 0)) / (studentGrade.final > 0 ? 3 : 2))
-    : 0;
+  useEffect(() => {
+    if (role !== 'student') return;
+    apiGet<{ success: boolean; data: SemesterGrade[] }>('/nstp/students/me/grades')
+      .then((response) => setGrades(response.data)).catch(() => setGrades([]));
+  }, [role, user.id]);
+  const activeAcademicYear = getCurrentAcademicYear();
+  const activeGrades = grades.filter((grade) => grade.schoolYear === activeAcademicYear);
+  const studentGrade = activeGrades.find((grade) => grade.semester === 'SECOND') || activeGrades.find((grade) => grade.semester === 'FIRST');
+  const studentAverage = studentGrade?.percentGrade || 0;
 
   const componentData = Object.entries(componentColors).map(([name, fill]) => ({
     name,
@@ -114,15 +122,14 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
     tests: assessments.filter((assessment) => assessment.moduleId === module.id).length,
   }));
   const releaseTrend = [
-    { name: 'Prelim', released: grades.filter((grade) => grade.prelim > 0).length, pending: Math.max(0, students.length - grades.filter((grade) => grade.prelim > 0).length) },
-    { name: 'Midterm', released: grades.filter((grade) => grade.midterm > 0).length, pending: Math.max(0, students.length - grades.filter((grade) => grade.midterm > 0).length) },
-    { name: 'Final', released: grades.filter((grade) => grade.final > 0 && grade.released).length, pending: Math.max(0, students.length - grades.filter((grade) => grade.final > 0 && grade.released).length) },
+    { name: 'First Semester', released: activeGrades.filter((grade) => grade.semester === 'FIRST').length, pending: activeGrades.some((grade) => grade.semester === 'FIRST') ? 0 : 1 },
+    { name: 'Second Semester', released: activeGrades.filter((grade) => grade.semester === 'SECOND').length, pending: activeGrades.some((grade) => grade.semester === 'SECOND') ? 0 : 1 },
   ];
   const studentMilestones = [
     { label: 'General Education', value: user.generalEducationComplete ? 100 : 35 },
     { label: 'Component Exam', value: user.examTaken ? 100 : 20 },
     { label: 'Classification', value: user.component ? 100 : 50 },
-    { label: 'Grade Release', value: studentGrade?.released ? 100 : 35 },
+    { label: 'Grade Release', value: studentGrade ? 100 : 35 },
   ];
   const primaryBarData = role === 'facilitator'
     ? facilitatorChartData
@@ -143,7 +150,7 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
       { title: 'Students', value: String(students.length), detail: `${pending.length} pending approvals`, icon: Users, target: 'students' },
       { title: 'Learning Hours', value: String(modules.reduce((sum, module) => sum + module.hours, 0)), detail: `${modules.length} active modules`, icon: BookOpen, target: 'modules' },
       { title: 'Assessments', value: String(publishedAssessments.length), detail: `${assessments.length} total records`, icon: ClipboardList, target: 'assessments' },
-      { title: 'Released Grades', value: `${grades.filter((grade) => grade.released).length}/${grades.length}`, detail: 'Official records', icon: Award, target: 'students' },
+      { title: 'Grade Terms', value: '2', detail: getCurrentSchoolYear(), icon: Award, target: 'students' },
       { title: 'Reports Generated', value: '12', detail: 'This month', icon: TrendingUp, target: 'reports' },
     ]
     : role === 'facilitator'
@@ -157,7 +164,7 @@ export default function RoleDashboardHome({ user, role, onNavigate }: RoleDashbo
         { title: 'Common Module', value: 'In Progress', detail: `${modules.length} modules available`, icon: BookOpen, target: 'modules' },
         { title: 'Assessments', value: publishedAssessments.length ? 'Open' : 'Pending', detail: `${publishedAssessments.length} published`, icon: ClipboardList, target: 'assessments' },
         { title: 'Component', value: user.component || 'Pending', detail: 'Official assignment', icon: ShieldCheck, target: 'progress' },
-        { title: 'NSTP Grade', value: studentGrade?.released ? String(studentAverage || 'Released') : 'Pending', detail: studentGrade?.remarks || 'For release', icon: Award, target: 'grades' },
+        { title: 'NSTP Grade', value: studentGrade ? String(studentAverage || 'Released') : 'Pending', detail: studentGrade?.remarks || 'For release', icon: Award, target: 'grades' },
       ];
 
   const workflow = role === 'admin'

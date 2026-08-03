@@ -133,6 +133,7 @@ export type NstpModule = {
 
 export type NstpStudent = {
   id: string;
+  componentId?: string;
   studentId?: string;
   surname?: string;
   firstName?: string;
@@ -411,6 +412,7 @@ export async function syncCollectionFromApi(localKey: string, query = ''): Promi
           cityAddress: (data.cityAddress as string) || '',
           provincialAddress: (data.provincialAddress as string) || '',
           contactNumber: (data.contactNumber as string) || '',
+          componentId: bs.componentId || bs.component?.id,
           component: (bs.component?.name || 'CWTS') as NstpComponent,
           municipality: (data.municipality as BiliranMunicipality) || 'Naval',
           programSection: (data.degreeProgram as string) || '',

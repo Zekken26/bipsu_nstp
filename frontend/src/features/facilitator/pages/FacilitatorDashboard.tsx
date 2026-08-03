@@ -23,23 +23,21 @@ import {
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
+import FacilitatorGradesView from '../components/FacilitatorGradesView';
 import {
   loadAccounts,
   loadAssessments,
   loadAttendanceRecords,
   loadAttendanceSessions,
-  loadGradeRecords,
   loadPendingStudentRegistrations,
   loadStudents,
   saveAttendanceRecords,
   saveAttendanceSessions,
-  saveGradeRecords,
   NSTP_COMPONENTS,
   PendingStudentRegistration,
   NstpAssessment,
   NstpAttendanceRecord,
   NstpAttendanceSession,
-  NstpGradeRecord,
   NstpStudent,
   AttendanceStatus,
   replaceAssessmentsSnapshot,
@@ -68,7 +66,6 @@ export default function FacilitatorDashboard({
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [students, setStudents] = useState<NstpStudent[]>([]);
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingStudentRegistration[]>([]);
-  const [gradeRecords, setGradeRecords] = useState<NstpGradeRecord[]>([]);
   const [assessments, setAssessments] = useState<NstpAssessment[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<NstpAttendanceRecord[]>([]);
   const [attendanceSessions, setAttendanceSessions] = useState<NstpAttendanceSession[]>([]);
@@ -82,7 +79,6 @@ export default function FacilitatorDashboard({
   useEffect(() => {
     setStudents(loadStudents());
     setPendingRegistrations(loadPendingStudentRegistrations());
-    setGradeRecords(loadGradeRecords());
     setAssessments(loadAssessments());
     setAttendanceRecords(loadAttendanceRecords());
     setAttendanceSessions(loadAttendanceSessions());
@@ -108,15 +104,9 @@ export default function FacilitatorDashboard({
     return [registration.name, registration.email, registration.studentId, registration.municipality].some((value) => value?.toLowerCase().includes(query));
   });
 
-  const getGradeRecord = (student: NstpStudent) => gradeRecords.find((record) => record.studentId === (student.studentId || student.id));
-  const getAverageGrade = (student: NstpStudent) => {
-    const record = getGradeRecord(student);
-    if (!record) return 0;
-    const grades = [record.prelim, record.midterm, record.final].filter((grade) => grade > 0);
-    return grades.length ? grades.reduce((sum, grade) => sum + grade, 0) / grades.length : 0;
-  };
-
-  const gradeValues = scopedStudents.map(getAverageGrade).filter((grade) => grade > 0);
+  // Grade editing and release state are loaded by the server-backed semester
+  // grade book. Legacy browser grade snapshots are not treated as analytics.
+  const gradeValues: number[] = [];
   const averageGrade = gradeValues.length ? gradeValues.reduce((sum, grade) => sum + grade, 0) / gradeValues.length : 0;
   const attendanceToday = scopedStudents.length ? Math.round((scopedStudents.filter((student) => student.status === 'active' || student.status === 'graduated').length / scopedStudents.length) * 100) : 0;
 
@@ -138,33 +128,6 @@ export default function FacilitatorDashboard({
     .slice(0, 4);
 
   const modules = (() => { try { return JSON.parse(localStorage.getItem('nstp-module-library') || '[]'); } catch { return []; } })();
-
-  const updateGrade = (student: NstpStudent, field: 'prelim' | 'midterm' | 'final', value: number) => {
-    const studentKey = student.studentId || student.id;
-    const existing = gradeRecords.find((record) => record.studentId === studentKey);
-    const base: NstpGradeRecord = existing || {
-      id: `grade-${crypto.randomUUID()}`,
-      studentId: studentKey,
-      prelim: 0,
-      midterm: 0,
-      final: 0,
-      remarks: 'In Progress',
-      released: false,
-      updatedAt: new Date().toISOString(),
-    };
-    const nextRecord = {
-      ...base,
-      [field]: Math.max(0, Math.min(100, value || 0)),
-      updatedAt: new Date().toISOString(),
-    };
-    const average = Math.round(((nextRecord.prelim || 0) + (nextRecord.midterm || 0) + (nextRecord.final || 0)) / 3);
-    nextRecord.remarks = average >= 75 && nextRecord.final > 0 ? 'Passed' : nextRecord.final > 0 ? 'For Completion' : 'In Progress';
-    const nextRecords = existing
-      ? gradeRecords.map((record) => record.id === nextRecord.id ? nextRecord : record)
-      : [nextRecord, ...gradeRecords];
-    saveGradeRecords(nextRecords);
-    setGradeRecords(nextRecords);
-  };
 
   const getRecentSaturdays = (count: number): string[] => {
     const dates: string[] = [];
@@ -363,27 +326,6 @@ export default function FacilitatorDashboard({
       yPos = (doc as any).lastAutoTable.finalY + 24;
     } else {
       yPos += 14;
-    }
-
-    doc.setFontSize(14);
-    doc.text('Student Grade Book', margin, yPos);
-    yPos += 18;
-
-    const gradeBookData = scopedStudents.map((st) => {
-      const r = getGradeRecord(st);
-      const avg = r ? Math.round(([r.prelim, r.midterm, r.final].filter((g) => g > 0).reduce((s, g) => s + g, 0) / Math.max(1, [r.prelim, r.midterm, r.final].filter((g) => g > 0).length))) : 0;
-      return [st.name, st.component, `${st.progress}%`, `${r?.prelim || '-'}`, `${r?.midterm || '-'}`, `${r?.final || '-'}`, avg ? `${avg}` : '-', r?.remarks || st.status];
-    });
-
-    if (gradeBookData.length) {
-      autoTable(doc, {
-        startY: yPos,
-        head: [['Student', 'Component', 'Progress', 'Prelim', 'Midterm', 'Final', 'Avg', 'Remarks']],
-        body: gradeBookData,
-        styles: { fontSize: 7 },
-        headStyles: { fillColor: [37, 99, 235] },
-        margin: { left: margin, right: margin },
-      });
     }
 
     doc.save(`nstp-report-${new Date().toISOString().split('T')[0]}.pdf`);
@@ -758,64 +700,7 @@ export default function FacilitatorDashboard({
             )}
 
             {view === 'grade-book' && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setView('dashboard')} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300">
-                      <ChevronDown className="h-4 w-4 rotate-90" />
-                    </button>
-                    <div>
-                      <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Grade Book</h2>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Manage student grades - Prelim, Midterm, and Final.</p>
-                    </div>
-                  </div>
-                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">{scopedStudents.length} students</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[850px] text-sm">
-                    <thead>
-                      <tr className="border-y border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                        <th className="px-4 py-3">Student</th>
-                        <th className="px-4 py-3">Component</th>
-                        <th className="px-4 py-3">Progress</th>
-                        <th className="px-4 py-3">Prelim</th>
-                        <th className="px-4 py-3">Midterm</th>
-                        <th className="px-4 py-3">Final</th>
-                        <th className="px-4 py-3">Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {scopedStudents.map((student) => {
-                        const record = getGradeRecord(student);
-                        return (
-                          <tr key={student.id} className="border-b border-slate-100 dark:border-slate-800">
-                            <td className="px-4 py-3">
-                              <p className="font-medium text-slate-900 dark:text-slate-100">{student.name}</p>
-                              <p className="text-xs text-slate-500">{student.studentId || student.email}</p>
-                            </td>
-                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{student.component}</td>
-                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{student.progress}%</td>
-                            {(['prelim', 'midterm', 'final'] as const).map((field) => (
-                              <td key={field} className="px-4 py-3">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={100}
-                                  value={record?.[field] || 0}
-                                  onChange={(event) => updateGrade(student, field, Number(event.target.value))}
-                                  className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900"
-                                />
-                              </td>
-                            ))}
-                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{record?.remarks || student.status}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {scopedStudents.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700">No approved students assigned yet.</p> : null}
-                </div>
-              </section>
+              <FacilitatorGradesView />
             )}
 
             {view === 'modules' && (
