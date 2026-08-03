@@ -6,6 +6,7 @@ import AssessmentManager from '../../assessments/components/AssessmentManager';
 import ModulesPage from '../../../pages/ModulesPage';
 
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
+import StudentProfileModal from '../components/StudentProfileModal';
 import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncCollectionFromApi, syncToApi, AUDIT_LOG_KEY } from '../../../data/nstpData';
 import { apiPost, apiPut, apiDel } from '../../../services/apiClient';
 import { toast } from 'sonner';
@@ -2178,42 +2179,13 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     </div>
 
                     {studentDetail && (
-                      <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={() => setStudentDetailId(null)}>
-                        <section onMouseDown={(event) => event.stopPropagation()} className="max-h-[90dvh] w-full max-w-3xl overflow-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
-                          <div className="mb-5 flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Student Profile</p>
-                              <h3 className="text-2xl font-semibold text-slate-950 dark:text-white">{studentDetail.name}</h3>
-                              <p className="text-sm text-slate-500 dark:text-slate-400">{studentDetail.studentId || studentDetail.email}</p>
-                            </div>
-                            <button type="button" onClick={() => setStudentDetailId(null)} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            {[
-                              ['Email', studentDetail.email],
-                              ['Municipality', studentDetail.municipality || 'Unassigned'],
-                              ['Facilitator', studentDetail.facilitatorName || 'Unassigned'],
-                              ['Component', studentDetail.component],
-                              ['Status', studentDetail.status],
-                              ['Progress', `${studentDetail.progress}%`],
-                              ['Degree Program', studentDetail.degreeProgram || 'Not set'],
-                              ['Year Level', studentDetail.yearLevel || 'Not set'],
-                              ['Major', studentDetail.major || 'Not set'],
-                              ['Contact Number', studentDetail.contactNumber || 'Not set'],
-                            ].map(([label, value]) => (
-                              <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{label}</p>
-                                <p className="mt-1 font-semibold text-slate-950 dark:text-white">{value}</p>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="mt-5 flex flex-wrap justify-end gap-2">
-                            <button type="button" onClick={() => { setStudentDetailId(null); startEditStudent(studentDetail); }} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800"><Pencil className="h-4 w-4" />Edit</button>
-                            <button type="button" onClick={() => void exportOfficialProfilePdf(studentDetail)} className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200"><FileDown className="h-4 w-4" />PDF</button>
-                            <button type="button" onClick={() => exportOfficialProfileDocx(studentDetail)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-500/30 dark:text-blue-200"><FileDown className="h-4 w-4" />DOCX</button>
-                          </div>
-                        </section>
-                      </div>
+                      <StudentProfileModal
+                        student={studentDetail}
+                        onClose={() => setStudentDetailId(null)}
+                        onEdit={() => { setStudentDetailId(null); startEditStudent(studentDetail); }}
+                        onExportPdf={() => exportOfficialProfilePdf(studentDetail)}
+                        onExportDocx={() => exportOfficialProfileDocx(studentDetail)}
+                      />
                     )}
 
                     {studentForm && (
