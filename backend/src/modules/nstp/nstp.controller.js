@@ -6,6 +6,11 @@ import {
   getAdminSummary,
   getDatabaseStatus,
   listAdminResource,
+  listManagedModules,
+  listPublishedModules,
+  createManagedModule,
+  updateManagedModule,
+  removeManagedModule,
   upsertAdminResource,
 } from './nstp.service.js';
 import { emitCollectionChange } from '../../websocket.js';
@@ -55,7 +60,6 @@ function adminResourceHandlers(resource) {
 }
 
 export const adminAccounts = adminResourceHandlers('accounts');
-export const adminModules = adminResourceHandlers('modules');
 export const adminAssessments = adminResourceHandlers('assessments');
 export const adminStudents = adminResourceHandlers('students');
 export const adminGrades = adminResourceHandlers('grades');
@@ -66,6 +70,62 @@ export const adminAttendanceSessions = adminResourceHandlers('attendance-session
 export const adminQualifyingResults = adminResourceHandlers('qualifying-results');
 export const adminComponentState = adminResourceHandlers('component-state');
 export const adminAuditLog = adminResourceHandlers('audit-log');
+
+export async function listAdminModules(req, res) {
+  return res.json(await listManagedModules());
+}
+
+export async function createAdminModule(req, res) {
+  const module = await createManagedModule(req.user.id, req.validated.body);
+  emitCollectionChange('modules', 'created');
+  return sendSuccess(res, module, 201);
+}
+
+export async function updateAdminModule(req, res) {
+  const module = await updateManagedModule(req.user.id, req.params.id, req.validated.body);
+  emitCollectionChange('modules', 'updated');
+  return sendSuccess(res, module);
+}
+
+export async function removeAdminModule(req, res) {
+  const result = await removeManagedModule(req.user.id, req.params.id);
+  emitCollectionChange('modules', result.archived ? 'archived' : 'deleted');
+  return sendSuccess(res, result);
+}
+
+export async function listCoordinatorModules(req, res) {
+  return res.json(await listManagedModules(req.coordinator.componentId));
+}
+
+export async function createCoordinatorModule(req, res) {
+  const module = await createManagedModule(req.user.id, req.validated.body, req.coordinator.componentId);
+  emitCollectionChange('modules', 'created');
+  return sendSuccess(res, module, 201);
+}
+
+export async function updateCoordinatorModule(req, res) {
+  const module = await updateManagedModule(req.user.id, req.params.id, req.validated.body, req.coordinator.componentId);
+  emitCollectionChange('modules', 'updated');
+  return sendSuccess(res, module);
+}
+
+export async function removeCoordinatorModule(req, res) {
+  const result = await removeManagedModule(req.user.id, req.params.id, req.coordinator.componentId);
+  emitCollectionChange('modules', result.archived ? 'archived' : 'deleted');
+  return sendSuccess(res, result);
+}
+
+export async function listStudentModules(req, res) {
+  return res.json(await listPublishedModules([req.student.componentId]));
+}
+
+export async function listInstructorModules(req, res) {
+  const sections = await prisma.section.findMany({
+    where: { instructorId: req.instructor.id },
+    select: { componentId: true },
+  });
+  return res.json(await listPublishedModules(sections.map((section) => section.componentId)));
+}
 
 export async function getDbTest(req, res) {
   const status = await getDatabaseStatus();

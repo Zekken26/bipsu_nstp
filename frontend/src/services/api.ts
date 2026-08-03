@@ -1,4 +1,5 @@
-import { apiGet, apiPost, apiPut, apiDel } from './apiClient';
+import { apiGet, apiPost, apiPut, apiPatch, apiDel } from './apiClient';
+import { modulePayload } from './modules';
 import type { NstpAccount, NstpStudent, NstpModule, NstpAssessment, NstpGradeRecord, NstpTrainingGroup, NstpAttendanceRecord, NstpAttendanceSession, QualifyingExamResult, ComponentApplicationState, PendingStudentRegistration } from '../data/nstpData';
 
 type AuditLogEntry = { id: string; actor: string; action: string; detail?: string; at: string };
@@ -34,11 +35,13 @@ export async function fetchModules() {
 }
 
 export async function upsertModule(payload: NstpModule) {
-  return apiPost<NstpModule>(`${BASE}/modules`, payload, null as unknown as NstpModule);
+  const response = await apiPatch<{ success: boolean; data: NstpModule }>(`${BASE}/modules/${encodeURIComponent(payload.id)}`, modulePayload(payload));
+  return response.data;
 }
 
 export async function deleteModule(id: string) {
-  return apiDel<{ deleted: string }>(`${BASE}/modules/${id}`, null as unknown as { deleted: string });
+  const response = await apiDel<{ success: boolean; data: { id: string; archived: boolean } }>(`${BASE}/modules/${encodeURIComponent(id)}`);
+  return response.data;
 }
 
 export async function fetchAssessments() {

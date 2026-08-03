@@ -54,6 +54,12 @@ enum PaymentPurpose {
   ENROLLMENT_FEE
 }
 
+enum ModuleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 model User {
   id                 String              @id @default(cuid())
   name               String
@@ -170,6 +176,7 @@ model Module {
   order        Int                @default(0)
   hours        Int?
   isPublished  Boolean            @default(false)
+  status       ModuleStatus       @default(DRAFT)
   data         Json?              @default("{}")
   componentId  String?
   instructorId String?
@@ -186,6 +193,7 @@ model Module {
 
   @@index([componentId])
   @@index([instructorId])
+  @@index([status])
   @@map("module")
 }
 

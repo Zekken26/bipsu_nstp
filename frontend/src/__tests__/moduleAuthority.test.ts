@@ -6,6 +6,7 @@ import {
   syncCollectionFromApi,
   type NstpModule,
 } from '../data/nstpData';
+import { createManagedModule, modulePayload, updateManagedModule } from '../services/modules';
 
 const moduleRecord: NstpModule = {
   id: 'client-only-module',
@@ -53,5 +54,30 @@ describe('server-authoritative module collection', () => {
     await syncCollectionFromApi('nstp-module-library');
     await expect(saveModules([moduleRecord])).resolves.toBe(false);
     expect(loadModules()).toEqual([]);
+  });
+
+  it('does not send a client-generated id when creating a module', async () => {
+    expect(modulePayload(moduleRecord)).not.toHaveProperty('id');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: { ...moduleRecord, id: 'server-generated-id', status: 'DRAFT' },
+    }), { status: 201 })));
+
+    await expect(createManagedModule('admin', moduleRecord)).resolves.toMatchObject({ id: 'server-generated-id' });
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty('id');
+  });
+
+  it('uses PATCH for updates and keeps publication state server-backed', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: { ...moduleRecord, status: 'PUBLISHED', isPublished: true },
+    }), { status: 200 })));
+
+    await updateManagedModule('admin', { ...moduleRecord, status: 'PUBLISHED' });
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toContain('/nstp/admin/modules/client-only-module');
+    expect(init?.method).toBe('PATCH');
+    expect(JSON.parse(String(init?.body))).toMatchObject({ status: 'PUBLISHED' });
   });
 });

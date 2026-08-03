@@ -1025,14 +1025,14 @@ export default function App() {
     if (user.role === 'coordinator') {
       if (activeSection === 'reports') return <SectionErrorBoundary name="Reports"><ReportsCenter user={user} /></SectionErrorBoundary>;
       if (activeSection === 'announcements') return <SectionErrorBoundary name="Announcements"><AnnouncementsCenter user={user} /></SectionErrorBoundary>;
-      if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="admin" onBack={() => setActiveSection('overview')} /></SectionErrorBoundary>;
+      if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="coordinator" onBack={() => setActiveSection('overview')} /></SectionErrorBoundary>;
       return <SectionErrorBoundary name="Coordinator Dashboard"><CoordinatorDashboard embedded user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} /></SectionErrorBoundary>;
     }
 
     if (user.role === 'facilitator') {
       if (activeSection === 'reports') return <SectionErrorBoundary name="Reports"><ReportsCenter user={user} /></SectionErrorBoundary>;
       if (activeSection === 'announcements') return <SectionErrorBoundary name="Announcements"><AnnouncementsCenter user={user} /></SectionErrorBoundary>;
-      if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="student" onBack={() => setActiveSection('facilitator')} /></SectionErrorBoundary>;
+      if (activeSection === 'modules') return <SectionErrorBoundary name="Modules"><ModulesPage user={user} role="facilitator" onBack={() => setActiveSection('facilitator')} /></SectionErrorBoundary>;
       return <SectionErrorBoundary name="Facilitator Dashboard"><FacilitatorDashboard embedded user={user} onLogout={handleLogout} onNavigate={(target) => setActiveSection(target as ShellSection)} /></SectionErrorBoundary>;
     }
 

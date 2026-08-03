@@ -71,6 +71,161 @@ const withDatabase = async (name, operation) => {
   }
 };
 
+const toModuleDto = (mod) => ({
+  ...mod,
+  ...(mod.data || {}),
+  data: undefined,
+  component: mod.component?.name || mod.data?.component || 'Common',
+  status: mod.status || (mod.isPublished ? 'PUBLISHED' : 'DRAFT'),
+});
+
+const moduleExtraFields = [
+  'component', 'courseCode', 'semester', 'schoolYear', 'sourceDocument', 'outcomes',
+  'difficulty', 'videoUrl', 'meetingLink', 'documentLink', 'speaker',
+  'speakerPosition', 'scheduledDate', 'scheduledTime',
+];
+
+function moduleData(payload) {
+  return Object.fromEntries(moduleExtraFields
+    .filter((field) => payload[field] !== undefined)
+    .map((field) => [field, payload[field]]));
+}
+
+async function resolveModuleComponent(client, component, forcedComponentId = null) {
+  if (forcedComponentId) return forcedComponentId;
+  if (!component || component === 'Common') return null;
+  const record = await client.nSTPComponent.findUnique({ where: { type: toComponentType(component) }, select: { id: true } });
+  if (!record) {
+    const error = new Error('The selected NSTP component is not configured.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return record.id;
+}
+
+function assertModulePublishable(payload) {
+  if (payload.status !== 'PUBLISHED') return;
+  if (!String(payload.title || '').trim() || !String(payload.description || '').trim() || !Number(payload.hours)) {
+    const error = new Error('A title, description, and valid duration are required before publishing.');
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function moduleWriteData(payload, componentId) {
+  const status = payload.status || 'DRAFT';
+  return {
+    title: payload.title,
+    description: payload.description || '',
+    hours: Number(payload.hours),
+    order: Number(payload.order) || 0,
+    status,
+    isPublished: status === 'PUBLISHED',
+    componentId,
+    data: moduleData(payload),
+  };
+}
+
+export async function listManagedModules(componentId = null) {
+  return withDatabase('modules', async () => {
+    const modules = await prisma.module.findMany({
+      ...(componentId ? { where: { componentId } } : {}),
+      orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+      include: { component: { select: { id: true, name: true, type: true } } },
+    });
+    return modules.map(toModuleDto);
+  });
+}
+
+export async function listPublishedModules(componentIds = []) {
+  const allowedComponentIds = [...new Set(componentIds.filter(Boolean))];
+  return withDatabase('modules', async () => {
+    const modules = await prisma.module.findMany({
+      where: {
+        status: 'PUBLISHED',
+        OR: [{ componentId: null }, ...(allowedComponentIds.length ? [{ componentId: { in: allowedComponentIds } }] : [])],
+      },
+      orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+      include: { component: { select: { id: true, name: true, type: true } } },
+    });
+    return modules.map(toModuleDto);
+  });
+}
+
+export async function createManagedModule(actorId, payload, forcedComponentId = null) {
+  const normalized = normalizeModuleUrls(payload);
+  return withDatabase('modules', () => prisma.$transaction(async (tx) => {
+    const componentId = await resolveModuleComponent(tx, normalized.component, forcedComponentId);
+    const created = await tx.module.create({
+      data: moduleWriteData({ ...normalized, status: 'DRAFT' }, componentId),
+      include: { component: { select: { id: true, name: true, type: true } } },
+    });
+    await tx.auditLogEntry.create({
+      data: { id: crypto.randomUUID(), actor: actorId, action: 'MODULE_CREATED', detail: JSON.stringify({ moduleId: created.id, status: created.status }) },
+    });
+    return toModuleDto(created);
+  }));
+}
+
+export async function updateManagedModule(actorId, id, patch, forcedComponentId = null) {
+  const normalized = normalizeModuleUrls(patch);
+  return withDatabase('modules', () => prisma.$transaction(async (tx) => {
+    const existing = await tx.module.findUnique({ where: { id }, include: { component: true } });
+    if (!existing) {
+      const error = new Error('Module not found.');
+      error.statusCode = 404;
+      throw error;
+    }
+    if (forcedComponentId && existing.componentId !== forcedComponentId) {
+      const error = new Error('You cannot modify a module outside your assigned component.');
+      error.statusCode = 403;
+      throw error;
+    }
+    const existingDto = toModuleDto(existing);
+    const merged = { ...existingDto, ...normalized };
+    assertModulePublishable(merged);
+    const componentId = await resolveModuleComponent(tx, merged.component, forcedComponentId);
+    const updated = await tx.module.update({
+      where: { id },
+      data: moduleWriteData(merged, componentId),
+      include: { component: { select: { id: true, name: true, type: true } } },
+    });
+    await tx.auditLogEntry.create({
+      data: { id: crypto.randomUUID(), actor: actorId, action: 'MODULE_UPDATED', detail: JSON.stringify({ moduleId: id, previousStatus: existing.status, status: updated.status }) },
+    });
+    return toModuleDto(updated);
+  }));
+}
+
+export async function removeManagedModule(actorId, id, forcedComponentId = null) {
+  return withDatabase('modules', () => prisma.$transaction(async (tx) => {
+    const existing = await tx.module.findUnique({
+      where: { id },
+      include: { _count: { select: { lessons: true, quizzes: true, assignments: true, exams: true, grades: true, progress: true } } },
+    });
+    if (!existing) {
+      const error = new Error('Module not found.');
+      error.statusCode = 404;
+      throw error;
+    }
+    if (forcedComponentId && existing.componentId !== forcedComponentId) {
+      const error = new Error('You cannot delete a module outside your assigned component.');
+      error.statusCode = 403;
+      throw error;
+    }
+    const hasReferences = Object.values(existing._count).some((count) => count > 0);
+    if (hasReferences) {
+      await tx.module.update({ where: { id }, data: { status: 'ARCHIVED', isPublished: false } });
+    } else {
+      await tx.module.delete({ where: { id } });
+    }
+    await tx.auditLogEntry.create({
+      data: { id: crypto.randomUUID(), actor: actorId, action: hasReferences ? 'MODULE_ARCHIVED' : 'MODULE_DELETED', detail: JSON.stringify({ moduleId: id }) },
+    });
+    return { id, archived: hasReferences };
+  }));
+}
+
 function normalizeFacilitatorMunicipalities(value) {
   if (!Array.isArray(value)) {
     const error = new Error('Facilitators must be assigned to between 1 and 3 municipalities.');
@@ -106,14 +261,7 @@ export async function listAdminResource(name, filters = {}) {
   }
 
   if (name === 'modules') {
-    return withDatabase(name, async () => {
-      const modules = await prisma.module.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'desc' }] });
-      return modules.map((mod) => ({
-        ...mod,
-        ...(mod.data || {}),
-        data: undefined,
-      }));
-    });
+    return listManagedModules();
   }
 
   if (name === 'students') {
@@ -249,19 +397,21 @@ export async function upsertAdminResource(name, lookup, payload) {
 
     if (name === 'modules') {
       const normalizedModulePayload = normalizeModuleUrls(nextPayload);
-      const moduleKnownFields = ['id', 'title', 'description', 'hours', 'published', 'isPublished', 'updatedAt', 'createdAt', 'data'];
+      const moduleKnownFields = ['id', 'title', 'description', 'hours', 'published', 'isPublished', 'status', 'order', 'componentId', 'updatedAt', 'createdAt', 'data'];
       const moduleExtras = {};
       for (const key of Object.keys(normalizedModulePayload)) {
         if (!moduleKnownFields.includes(key)) moduleExtras[key] = normalizedModulePayload[key];
       }
       const updatedModuleData = { ...(normalizedModulePayload.data || {}), ...moduleExtras };
+      const moduleStatus = normalizedModulePayload.status || (normalizedModulePayload.published ?? normalizedModulePayload.isPublished ? 'PUBLISHED' : 'DRAFT');
       return await prisma.module.upsert({
         where: { id: normalizedModulePayload.id },
         update: {
           title: normalizedModulePayload.title,
           description: normalizedModulePayload.description,
           hours: Number(normalizedModulePayload.hours) || null,
-          isPublished: Boolean(normalizedModulePayload.published ?? normalizedModulePayload.isPublished),
+          status: moduleStatus,
+          isPublished: moduleStatus === 'PUBLISHED',
           data: updatedModuleData,
         },
         create: {
@@ -269,7 +419,8 @@ export async function upsertAdminResource(name, lookup, payload) {
           title: normalizedModulePayload.title || 'Untitled module',
           description: normalizedModulePayload.description,
           hours: Number(normalizedModulePayload.hours) || null,
-          isPublished: Boolean(normalizedModulePayload.published ?? normalizedModulePayload.isPublished),
+          status: moduleStatus,
+          isPublished: moduleStatus === 'PUBLISHED',
           data: updatedModuleData,
         },
       });

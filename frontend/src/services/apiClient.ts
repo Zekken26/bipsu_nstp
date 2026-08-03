@@ -70,6 +70,7 @@ async function request<T>(method: string, path: string, payload?: unknown): Prom
 // The legacy fallback argument remains source-compatible but is deliberately ignored:
 // a failed response must never be interpreted as successful fallback data.
 export async function apiPut<T>(path: string, payload: unknown, _fallback?: T): Promise<T> { return request<T>('PUT', path, payload); }
+export async function apiPatch<T>(path: string, payload: unknown, _fallback?: T): Promise<T> { return request<T>('PATCH', path, payload); }
 export async function apiGet<T>(path: string, _fallback?: T): Promise<T> { return request<T>('GET', path); }
 export async function apiDel<T>(path: string, _fallback?: T): Promise<T> { return request<T>('DELETE', path); }
 export async function apiPost<T>(path: string, payload: unknown, _fallback?: T): Promise<T> { return request<T>('POST', path, payload); }

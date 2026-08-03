@@ -1,31 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Clock, CheckCircle, Search, Sparkles, Gauge, ChevronRight, Plus, Trash2, Save, ArrowLeft, ArrowUp, ArrowDown, Copy, Wrench, Video, ExternalLink } from 'lucide-react';
-import { createEmptyModule, loadAssessments, loadModules, loadStudents, safeJsonParse, saveModules, type NstpModule } from '../data/nstpData';
+import { createEmptyModule, loadAssessments, loadModules, loadStudents, replaceModulesSnapshot, safeJsonParse, type NstpModule, type NstpRole } from '../data/nstpData';
 import { toSafeEmbedUrl, toSafeExternalUrl } from '../utils/moduleUrls';
 import { apiGet, apiPost } from '../services/apiClient';
+import { createManagedModule, fetchManagedModules, removeManagedModule, updateManagedModule } from '../services/modules';
 
-const MODULE_VISIBILITY_KEY = 'nstp-module-visibility';
-
-export default function ModulesPage({ user, role = 'student', onBack }: { user: any; role?: 'student' | 'admin' | 'coordinator'; onBack?: () => void }) {
+export default function ModulesPage({ user, role = 'student', onBack }: { user: any; role?: NstpRole; onBack?: () => void }) {
   const [modules, setModules] = useState<NstpModule[]>([]);
-  const [moduleVisibility, setModuleVisibility] = useState<Record<string, boolean>>({});
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState('all');
   const [progress, setProgress] = useState<Record<string, boolean>>({});
   const [editorDraft, setEditorDraft] = useState<NstpModule | null>(null);
+  const [moduleError, setModuleError] = useState<string | null>(null);
+  const [modulesLoading, setModulesLoading] = useState(true);
+  const [moduleSaving, setModuleSaving] = useState(false);
+  const effectiveRole = (role === 'student' && user.role === 'facilitator' ? 'facilitator' : role) as NstpRole;
 
   useEffect(() => {
     const reloadModules = () => {
       const storedModules = loadModules();
       setModules(storedModules);
-      const savedVisibility = safeJsonParse<Record<string, boolean>>(localStorage.getItem(MODULE_VISIBILITY_KEY), {});
-      const visibilityDefaults = storedModules.reduce<Record<string, boolean>>((acc, module) => {
-        acc[module.id] = savedVisibility[module.id] ?? true;
-        return acc;
-      }, {});
-      setModuleVisibility(visibilityDefaults);
-      localStorage.setItem(MODULE_VISIBILITY_KEY, JSON.stringify(visibilityDefaults));
       setSelectedModuleId((current) => current && storedModules.some((module) => module.id === current)
         ? current
         : storedModules[0]?.id || null);
@@ -40,13 +35,33 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   }, []);
 
   useEffect(() => {
+    let active = true;
+    setModulesLoading(true);
+    fetchManagedModules(effectiveRole)
+      .then((records) => {
+        if (!active) return;
+        replaceModulesSnapshot(records);
+        setModuleError(null);
+      })
+      .catch((error) => {
+        if (active) setModuleError(error instanceof Error ? error.message : 'Unable to load modules.');
+      })
+      .finally(() => {
+        if (active) setModulesLoading(false);
+      });
+    return () => { active = false; };
+  }, [effectiveRole]);
+
+  useEffect(() => {
+    if (effectiveRole !== 'student') return;
     apiGet<{ success: boolean; data: { progress: Array<{ moduleId: string; completedAt: string | null }> } }>('/nstp/students/me/progress')
       .then(({ data }) => setProgress(Object.fromEntries(data.progress.map((entry) => [entry.moduleId, Boolean(entry.completedAt)]))))
       .catch(() => { /* displayed state remains unconfirmed; local storage is never used as completion evidence */ });
-  }, [user.id]);
+  }, [user.id, effectiveRole]);
 
   const selectedModule = useMemo(() => modules.find((module) => module.id === selectedModuleId) || null, [modules, selectedModuleId]);
   const isAdmin = role === 'admin' || role === 'coordinator';
+  const editorRole = role === 'coordinator' ? 'coordinator' : 'admin';
   const students = useMemo(() => loadStudents(), []);
 
   useEffect(() => {
@@ -55,26 +70,7 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
     }
   }, [selectedModule]);
 
-  const persistModules = (nextModules: NstpModule[]) => {
-    setModules(nextModules);
-    saveModules(nextModules);
-    setModuleVisibility((current) => {
-      const nextVisibility = nextModules.reduce<Record<string, boolean>>((acc, module) => {
-        acc[module.id] = current[module.id] ?? true;
-        return acc;
-      }, {});
-      localStorage.setItem(MODULE_VISIBILITY_KEY, JSON.stringify(nextVisibility));
-      return nextVisibility;
-    });
-    if (selectedModuleId && !nextModules.some((module) => module.id === selectedModuleId)) {
-      setSelectedModuleId(nextModules[0]?.id || null);
-    }
-  };
-
-  const persistModuleVisibility = (nextVisibility: Record<string, boolean>) => {
-    setModuleVisibility(nextVisibility);
-    localStorage.setItem(MODULE_VISIBILITY_KEY, JSON.stringify(nextVisibility));
-  };
+  const applyModules = (nextModules: NstpModule[]) => replaceModulesSnapshot(nextModules);
 
   const toggleModuleComplete = async (moduleId: string) => {
     if (progress[moduleId]) return;
@@ -106,8 +102,9 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   const complianceReady = plannedCommonHours >= 25 && modulesWithPublishedTests >= commonModules.length && hasMajorExam;
   const completedModulesCount = commonModules.filter((module) => getModuleProgress(module) === 100).length;
   const overallProgress = commonModules.length > 0 ? Math.round((totalHours / Math.max(1, plannedCommonHours)) * 100) : 0;
-  const publishedModules = modules.filter((module) => moduleVisibility[module.id] ?? true);
-  const draftModules = modules.filter((module) => !(moduleVisibility[module.id] ?? true));
+  const publishedModules = modules.filter((module) => module.status === 'PUBLISHED');
+  const draftModules = modules.filter((module) => (module.status || 'DRAFT') === 'DRAFT');
+  const archivedModules = modules.filter((module) => module.status === 'ARCHIVED');
   const moduleCompletionRate = useMemo(() => {
     if (!selectedModule || students.length === 0) return 0;
     const completed = students.reduce((count, student) => {
@@ -123,7 +120,7 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   const studentVisibleModules = isAdmin
     ? modules
     : modules.filter((module) => {
-      const published = moduleVisibility[module.id] ?? true;
+      const published = module.status === 'PUBLISHED';
       const moduleComponent = module.component || 'Common';
       return published && (moduleComponent === 'Common' || moduleComponent === studentComponent);
     });
@@ -148,6 +145,8 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   });
 
   useEffect(() => {
+    const hasUnsavedDraft = Boolean(editorDraft && !modules.some((module) => module.id === editorDraft.id));
+    if (isAdmin && hasUnsavedDraft) return;
     if (visibleModules.length === 0) {
       setSelectedModuleId(null);
       if (isAdmin) setEditorDraft(null);
@@ -160,7 +159,7 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
         setEditorDraft(visibleModules[0]);
       }
     }
-  }, [visibleModules, selectedModuleId, isAdmin]);
+  }, [visibleModules, selectedModuleId, isAdmin, editorDraft, modules]);
 
   const getDifficultyClass = (difficulty: string) => {
     if (difficulty === 'Beginner') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
@@ -173,55 +172,103 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
     setEditorDraft({ ...editorDraft, ...patch, updatedAt: new Date().toISOString() });
   };
 
-  const saveDraft = () => {
+  const saveDraft = async () => {
     if (!editorDraft) return;
-    const nextModule = { ...editorDraft, updatedAt: new Date().toISOString() };
-    const existingIndex = modules.findIndex((module) => module.id === nextModule.id);
-    const nextModules = existingIndex >= 0
-      ? modules.map((module) => (module.id === nextModule.id ? nextModule : module))
-      : [nextModule, ...modules];
-    persistModules(nextModules);
-    setSelectedModuleId(nextModule.id);
+    if (!editorDraft.title.trim() || !editorDraft.description.trim() || editorDraft.hours < 1) {
+      setModuleError('Enter a title, description, and valid duration before saving.');
+      return;
+    }
+    setModuleSaving(true);
+    setModuleError(null);
+    try {
+      const exists = modules.some((module) => module.id === editorDraft.id);
+      const saved = exists
+        ? await updateManagedModule(editorRole, editorDraft)
+        : await createManagedModule(editorRole, { ...editorDraft, status: 'DRAFT' });
+      const nextModules = exists
+        ? modules.map((module) => (module.id === saved.id ? saved : module))
+        : [saved, ...modules];
+      applyModules(nextModules);
+      setSelectedModuleId(saved.id);
+      setEditorDraft(saved);
+    } catch (error) {
+      setModuleError(error instanceof Error ? error.message : 'Unable to save the module.');
+    } finally {
+      setModuleSaving(false);
+    }
   };
 
-  const deleteModule = () => {
+  const deleteModule = async () => {
     if (!editorDraft) return;
-    const nextModules = modules.filter((module) => module.id !== editorDraft.id);
-    persistModules(nextModules);
-    if (nextModules[0]) {
-      setSelectedModuleId(nextModules[0].id);
-      setEditorDraft(nextModules[0]);
-    } else {
+    const exists = modules.some((module) => module.id === editorDraft.id);
+    if (!exists) {
       setSelectedModuleId(null);
       setEditorDraft(null);
+      return;
+    }
+    if (!window.confirm(`Delete "${editorDraft.title}"? Modules with academic records will be archived instead.`)) return;
+    setModuleSaving(true);
+    setModuleError(null);
+    try {
+      const result = await removeManagedModule(editorRole, editorDraft.id);
+      const refreshed = await fetchManagedModules(effectiveRole);
+      applyModules(refreshed);
+      const next = refreshed.find((module) => module.id === editorDraft.id) || refreshed[0] || null;
+      setSelectedModuleId(next?.id || null);
+      setEditorDraft(next);
+      if (result.archived) setModuleError('This module has academic records, so it was archived instead of permanently deleted.');
+    } catch (error) {
+      setModuleError(error instanceof Error ? error.message : 'Unable to remove the module.');
+    } finally {
+      setModuleSaving(false);
     }
   };
 
   const createModule = () => {
     const nextModule = createEmptyModule();
-    const nextModules = [nextModule, ...modules];
-    persistModules(nextModules);
     setSelectedModuleId(nextModule.id);
     setEditorDraft(nextModule);
+    setModuleError(null);
   };
 
-  const togglePublishModule = (moduleId: string) => {
-    const nextVisibility = {
-      ...moduleVisibility,
-      [moduleId]: !(moduleVisibility[moduleId] ?? true),
-    };
-    persistModuleVisibility(nextVisibility);
+  const togglePublishModule = async (moduleId: string) => {
+    const target = modules.find((module) => module.id === moduleId);
+    if (!target) return;
+    const nextStatus = target.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED';
+    setModuleSaving(true);
+    setModuleError(null);
+    try {
+      const saved = await updateManagedModule(editorRole, { ...target, status: nextStatus });
+      applyModules(modules.map((module) => module.id === saved.id ? saved : module));
+      setEditorDraft(saved);
+    } catch (error) {
+      setModuleError(error instanceof Error ? error.message : 'Unable to change module status.');
+    } finally {
+      setModuleSaving(false);
+    }
   };
 
-  const bulkSetPublishState = (publish: boolean) => {
-    const nextVisibility = modules.reduce<Record<string, boolean>>((acc, module) => {
-      acc[module.id] = publish;
-      return acc;
-    }, {});
-    persistModuleVisibility(nextVisibility);
+  const bulkSetPublishState = async (publish: boolean) => {
+    setModuleSaving(true);
+    setModuleError(null);
+    try {
+      const targets = modules.filter((module) => module.status !== 'ARCHIVED');
+      const updated = await Promise.all(targets.map((module) => updateManagedModule(editorRole, {
+        ...module,
+        status: publish ? 'PUBLISHED' : 'DRAFT',
+      })));
+      const byId = new Map(updated.map((module) => [module.id, module]));
+      applyModules(modules.map((module) => byId.get(module.id) || module));
+    } catch (error) {
+      setModuleError(error instanceof Error ? error.message : 'Unable to update all modules.');
+      const refreshed = await fetchManagedModules(effectiveRole).catch(() => null);
+      if (refreshed) applyModules(refreshed);
+    } finally {
+      setModuleSaving(false);
+    }
   };
 
-  const moveModule = (direction: 'up' | 'down') => {
+  const moveModule = async (direction: 'up' | 'down') => {
     if (!editorDraft) return;
     const index = modules.findIndex((module) => module.id === editorDraft.id);
     if (index < 0) return;
@@ -230,7 +277,18 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
     const reordered = [...modules];
     const [item] = reordered.splice(index, 1);
     reordered.splice(targetIndex, 0, item);
-    persistModules(reordered);
+    const ordered = reordered.map((module, order) => ({ ...module, order }));
+    setModuleSaving(true);
+    setModuleError(null);
+    try {
+      const changed = await Promise.all([ordered[index], ordered[targetIndex]].map((module) => updateManagedModule(editorRole, module)));
+      const byId = new Map(changed.map((module) => [module.id, module]));
+      applyModules(ordered.map((module) => byId.get(module.id) || module));
+    } catch (error) {
+      setModuleError(error instanceof Error ? error.message : 'Unable to reorder modules.');
+    } finally {
+      setModuleSaving(false);
+    }
   };
 
   const cloneModule = () => {
@@ -239,19 +297,20 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
       ...editorDraft,
       id: `module-${Math.random().toString(36).slice(2, 10)}`,
       title: `${editorDraft.title} (Copy)`,
+      status: 'DRAFT',
+      isPublished: false,
       updatedAt: new Date().toISOString(),
     };
-    const nextModules = [cloned, ...modules];
-    persistModules(nextModules);
     setSelectedModuleId(cloned.id);
     setEditorDraft(cloned);
+    setModuleError(null);
   };
 
   if (!selectedModule && !isAdmin) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-        <p className="font-semibold text-slate-900 mb-2">No modules available yet.</p>
-        <p className="text-sm text-slate-600">Check back after the coordinator publishes the module library.</p>
+        <p className="font-semibold text-slate-900 mb-2">{modulesLoading ? 'Loading modules…' : 'No modules available yet.'}</p>
+        <p className="text-sm text-slate-600">{moduleError || 'Check back after the coordinator publishes the module library.'}</p>
       </div>
     );
   }
@@ -294,6 +353,12 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
               </button>
             )}
           </div>
+
+          {moduleError && (
+            <div role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {moduleError}
+            </div>
+          )}
 
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -395,8 +460,8 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="min-w-0 flex-1 truncate text-sm font-semibold">{module.title}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${(moduleVisibility[module.id] ?? true) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                        {(moduleVisibility[module.id] ?? true) ? 'Live' : 'Draft'}
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${module.status === 'PUBLISHED' ? 'bg-emerald-50 text-emerald-700' : module.status === 'ARCHIVED' ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-700'}`}>
+                        {module.status === 'PUBLISHED' ? 'Live' : module.status === 'ARCHIVED' ? 'Archived' : 'Draft'}
                       </span>
                     </div>
                     <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
@@ -438,23 +503,30 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                     <p className="text-xs text-slate-500">Learner completion</p>
                     <p className="text-xl font-bold text-slate-900">{moduleCompletionRate}%</p>
                   </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs text-slate-500">Archived</p>
+                    <p className="text-xl font-bold text-slate-900">{archivedModules.length}</p>
+                  </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => togglePublishModule(detailModule.id)}
+                    disabled={moduleSaving || detailModule.status === 'ARCHIVED' || !modules.some((module) => module.id === detailModule.id)}
                     className="module-btn clickable-button px-3 py-2"
                   >
-                    {moduleVisibility[detailModule.id] ?? true ? 'Unpublish module' : 'Publish module'}
+                    {detailModule.status === 'PUBLISHED' ? 'Unpublish module' : 'Publish module'}
                   </button>
                   <button
                     onClick={() => bulkSetPublishState(true)}
+                    disabled={moduleSaving}
                     className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
                   >
                     Publish all
                   </button>
                   <button
                     onClick={() => bulkSetPublishState(false)}
+                    disabled={moduleSaving}
                     className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100"
                   >
                     Set all to draft
@@ -491,13 +563,15 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={saveDraft}
+                    disabled={moduleSaving || detailModule.status === 'ARCHIVED'}
                     className="module-btn-primary clickable-button"
                   >
                     <Save className="w-4 h-4" />
-                    Save
+                    {moduleSaving ? 'Saving…' : modules.some((module) => module.id === detailModule.id) ? 'Save changes' : 'Save draft'}
                   </button>
                   <button
                     onClick={deleteModule}
+                    disabled={moduleSaving}
                     className="module-btn clickable-button border-rose-300 text-rose-700 hover:bg-rose-50"
                   >
                     <Trash2 className="w-4 h-4" />

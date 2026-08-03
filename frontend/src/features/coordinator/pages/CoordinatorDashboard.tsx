@@ -5,8 +5,9 @@ import {
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import {
-  BILIRAN_MUNICIPALITIES, createEmptyModule, loadAccounts, loadAssessments, loadModules, loadStudents, NSTP_COMPONENTS, NstpAccount, NstpModule, NstpStudent, saveAccounts, saveModules,
+  BILIRAN_MUNICIPALITIES, createEmptyModule, loadAccounts, loadAssessments, loadModules, loadStudents, NSTP_COMPONENTS, NstpAccount, NstpModule, NstpStudent, replaceModulesSnapshot, saveAccounts,
 } from '../../../data/nstpData';
+import { createManagedModule, fetchManagedModules, removeManagedModule, updateManagedModule } from '../../../services/modules';
 
 const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'C';
 
@@ -26,6 +27,8 @@ export default function CoordinatorDashboard({
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingModule, setEditingModule] = useState<NstpModule | null>(null);
+  const [moduleError, setModuleError] = useState<string | null>(null);
+  const [moduleSaving, setModuleSaving] = useState(false);
 
   const [facilitatorEditorOpen, setFacilitatorEditorOpen] = useState(false);
   const [editingFacilitator, setEditingFacilitator] = useState<NstpAccount | null>(null);
@@ -39,7 +42,12 @@ export default function CoordinatorDashboard({
     setStudents(loadStudents());
   };
 
-  useEffect(() => { refreshData(); }, []);
+  useEffect(() => {
+    refreshData();
+    fetchManagedModules('coordinator')
+      .then((records) => { replaceModulesSnapshot(records); setModules(records); setModuleError(null); })
+      .catch((error) => setModuleError(error instanceof Error ? error.message : 'Unable to load modules.'));
+  }, []);
 
   const scopedModules = useMemo(
     () => modules.filter((m) => m.component === userComponent || m.component === 'Common'),
@@ -80,7 +88,8 @@ export default function CoordinatorDashboard({
   ];
 
   const handleNewModule = () => {
-    setEditingModule(createEmptyModule());
+    setEditingModule({ ...createEmptyModule(), component: userComponent as NstpModule['component'], status: 'DRAFT' });
+    setModuleError(null);
     setEditorOpen(true);
   };
 
@@ -89,22 +98,45 @@ export default function CoordinatorDashboard({
     setEditorOpen(true);
   };
 
-  const handleSaveModule = () => {
+  const handleSaveModule = async () => {
     if (!editingModule) return;
-    const next = { ...editingModule, component: editingModule.component || userComponent, updatedAt: new Date().toISOString() };
-    const existing = loadModules();
-    const idx = existing.findIndex((m) => m.id === next.id);
-    const updated = idx >= 0 ? existing.map((m) => m.id === next.id ? next : m) : [next, ...existing];
-    saveModules(updated);
-    setModules(updated);
-    setEditorOpen(false);
-    setEditingModule(null);
+    if (!editingModule.title.trim() || !editingModule.description.trim() || editingModule.hours < 1) {
+      setModuleError('Enter a title, description, and valid duration before saving.');
+      return;
+    }
+    setModuleSaving(true);
+    setModuleError(null);
+    try {
+      const exists = modules.some((module) => module.id === editingModule.id);
+      const payload = { ...editingModule, component: userComponent as NstpModule['component'], status: editingModule.status || 'DRAFT' };
+      const saved = exists ? await updateManagedModule('coordinator', payload) : await createManagedModule('coordinator', payload);
+      const updated = exists ? modules.map((module) => module.id === saved.id ? saved : module) : [saved, ...modules];
+      replaceModulesSnapshot(updated);
+      setModules(updated);
+      setEditorOpen(false);
+      setEditingModule(null);
+    } catch (error) {
+      setModuleError(error instanceof Error ? error.message : 'Unable to save the module.');
+    } finally {
+      setModuleSaving(false);
+    }
   };
 
-  const handleDeleteModule = (id: string) => {
-    const updated = loadModules().filter((m) => m.id !== id);
-    saveModules(updated);
-    setModules(updated);
+  const handleDeleteModule = async (id: string) => {
+    const target = modules.find((module) => module.id === id);
+    if (!target || !window.confirm(`Delete "${target.title}"? Referenced modules will be archived.`)) return;
+    setModuleSaving(true);
+    try {
+      await removeManagedModule('coordinator', id);
+      const updated = await fetchManagedModules('coordinator');
+      replaceModulesSnapshot(updated);
+      setModules(updated);
+      setModuleError(null);
+    } catch (error) {
+      setModuleError(error instanceof Error ? error.message : 'Unable to remove the module.');
+    } finally {
+      setModuleSaving(false);
+    }
   };
 
   const handleNewFacilitator = () => {
@@ -223,6 +255,8 @@ export default function CoordinatorDashboard({
         </button>
       </div>
 
+      {moduleError && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{moduleError}</div>}
+
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[600px] text-sm">
@@ -232,6 +266,7 @@ export default function CoordinatorDashboard({
                 <th className="px-4 py-3">Hours</th>
                 <th className="px-4 py-3">Difficulty</th>
                 <th className="px-4 py-3">Component</th>
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
@@ -242,6 +277,7 @@ export default function CoordinatorDashboard({
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{mod.hours}h</td>
                   <td className="px-4 py-3"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{mod.difficulty}</span></td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{mod.component || 'Common'}</td>
+                  <td className="px-4 py-3"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{mod.status || 'DRAFT'}</span></td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button onClick={() => handleEditModule(mod)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-700 hover:bg-blue-50 dark:border-slate-700 dark:text-slate-100"><FileText className="h-4 w-4" /></button>
@@ -251,7 +287,7 @@ export default function CoordinatorDashboard({
                 </tr>
               ))}
               {filteredModules.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">No modules found. Create your first module.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">No modules found. Create your first module.</td></tr>
               )}
             </tbody>
           </table>
@@ -474,15 +510,14 @@ export default function CoordinatorDashboard({
               </label>
               <label className="block space-y-1.5 md:col-span-2">
                 <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Component</span>
-                <select value={editingModule.component || userComponent} onChange={(e) => setEditingModule({ ...editingModule, component: e.target.value as any })} className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                  <option value="Common">Common</option>
-                  {NSTP_COMPONENTS.map((c) => <option key={c} value={c}>{c}</option>)}
+                <select disabled value={userComponent} className="w-full rounded-xl border border-blue-200 bg-slate-50 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                  <option value={userComponent}>{userComponent}</option>
                 </select>
               </label>
             </div>
             <div className="mt-6 flex justify-end gap-3">
               <button onClick={() => { setEditorOpen(false); setEditingModule(null); }} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Cancel</button>
-              <button onClick={handleSaveModule} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800"><Save className="h-4 w-4" /> Save Module</button>
+              <button disabled={moduleSaving} onClick={handleSaveModule} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 disabled:opacity-60"><Save className="h-4 w-4" /> {moduleSaving ? 'Saving…' : 'Save Draft'}</button>
             </div>
           </div>
         </div>

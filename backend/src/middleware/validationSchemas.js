@@ -58,6 +58,46 @@ export const nstpBatchSchema = z.object({
   query: z.object({}).optional(),
 });
 
+const moduleFields = {
+  title: z.string().trim().min(1, 'Module title is required').max(200),
+  description: z.string().trim().min(1, 'Module description is required').max(10000),
+  component: z.enum(['Common', 'CWTS', 'LTS', 'MTS (Army)', 'MTS (Navy)', 'CWTS (Coast Guard)']),
+  hours: z.number().int().min(1).max(100),
+  difficulty: z.enum(['Beginner', 'Intermediate', 'Advanced']),
+  status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']),
+  order: z.number().int().min(0).max(10000),
+  courseCode: z.string().trim().max(50).optional(),
+  semester: z.string().trim().max(50).optional(),
+  schoolYear: z.string().trim().max(20).optional(),
+  sourceDocument: z.string().trim().max(2048).optional(),
+  outcomes: z.array(z.string().trim().min(1).max(500)).max(50).optional(),
+  videoUrl: z.string().trim().max(2048).optional(),
+  meetingLink: z.string().trim().max(2048).optional(),
+  documentLink: z.string().trim().max(2048).optional(),
+  speaker: z.string().trim().max(200).optional(),
+  speakerPosition: z.string().trim().max(200).optional(),
+  scheduledDate: z.string().trim().max(40).optional(),
+  scheduledTime: z.string().trim().max(100).optional(),
+};
+
+export const createModuleSchema = z.object({
+  body: z.object({
+    ...moduleFields,
+    component: moduleFields.component.default('Common'),
+    difficulty: moduleFields.difficulty.default('Beginner'),
+    status: z.literal('DRAFT').optional(),
+    order: moduleFields.order.default(0),
+  }).strict(),
+  params: z.object({}).optional(),
+  query: z.object({}).optional(),
+});
+
+export const updateModuleSchema = z.object({
+  body: z.object(moduleFields).partial().strict().refine((value) => Object.keys(value).length > 0, 'At least one module field is required'),
+  params: z.object({ id: z.string().min(1).max(200) }),
+  query: z.object({}).optional(),
+});
+
 export const createFollowSchema = z.object({
   body: z.object({
     targetUserId: z.string().min(1, 'Target user is required'),

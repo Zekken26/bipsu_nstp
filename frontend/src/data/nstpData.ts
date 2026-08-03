@@ -108,6 +108,9 @@ export type NstpModule = {
   sourceDocument?: string;
   outcomes?: string[];
   hours: number;
+  order?: number;
+  status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  isPublished?: boolean;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   videoUrl?: string;
   meetingLink?: string;
@@ -690,6 +693,12 @@ export async function saveModules(modules: NstpModule[]): Promise<boolean> {
   return ok;
 }
 
+export function replaceModulesSnapshot(modules: NstpModule[]) {
+  if (typeof window === 'undefined') return;
+  writeSensitive(MODULES_KEY, JSON.stringify(modules));
+  window.dispatchEvent(new CustomEvent('nstp-modules-updated'));
+}
+
 export function loadStudents(): NstpStudent[] {
   if (typeof window === 'undefined') return [];
   ensureNstpSeedData();
@@ -948,10 +957,13 @@ export function createEmptyStudent(): NstpStudent {
 export function createEmptyModule(): NstpModule {
   return {
     id: `module-${Math.random().toString(36).slice(2, 10)}`,
-    title: 'Untitled Module',
+    title: '',
     description: '',
     component: 'Common',
     hours: 3,
+    order: 0,
+    status: 'DRAFT',
+    isPublished: false,
     difficulty: 'Beginner',
     documentLink: '',
     speaker: '',
