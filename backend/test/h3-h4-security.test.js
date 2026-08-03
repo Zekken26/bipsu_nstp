@@ -143,6 +143,7 @@ test('socket handshakes reject missing credentials, invalid tokens, and unapprov
 });
 
 test('socket rooms are derived from verified role assignments only', async () => {
+  prisma.user.findUnique = async ({ where }) => ({ id: where.id, email: `${where.id}@example.test`, role: 'STUDENT', status: 'ACTIVE' });
   prisma.studentProfile.findUnique = async () => ({ sectionId: 'class-1', componentId: 'component-1' });
   const valid = await socketHandshake({ sessionToken: token('STUDENT', 'student-user') });
   assert.equal(valid.error, undefined);
@@ -153,6 +154,12 @@ test('socket rooms are derived from verified role assignments only', async () =>
   prisma.instructorProfile.findUnique = async () => ({ id: 'instructor-profile' });
   prisma.section.findMany = async () => [];
   assert.deepEqual(await resolveAuthorizedRooms({ id: 'instructor-user', role: 'INSTRUCTOR' }), ['user:instructor-user']);
+});
+
+test('suspended accounts cannot establish realtime connections', async () => {
+  prisma.user.findUnique = async ({ where }) => ({ id: where.id, email: `${where.id}@example.test`, role: 'COORDINATOR', status: 'SUSPENDED' });
+  const result = await socketHandshake({ sessionToken: token('COORDINATOR', 'suspended-coordinator') });
+  assert.ok(result.error);
 });
 
 test('websocket delivery is room-scoped and never uses a global sensitive broadcast', async () => {

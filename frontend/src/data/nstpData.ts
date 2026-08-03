@@ -2,6 +2,8 @@ import { ApiRequestError, apiGet, apiPost, apiDel } from '../services/apiClient'
 
 export type NstpRole = 'admin' | 'coordinator' | 'student' | 'facilitator';
 export type NstpComponent = 'CWTS' | 'LTS' | 'MTS (Army)' | 'MTS (Navy)' | 'CWTS (Coast Guard)';
+export type CoordinatorScope = 'CWTS' | 'MTS' | 'LTS';
+export type StaffAccountStatus = 'ACTIVE' | 'SUSPENDED';
 export type BiliranMunicipality = 'Almeria' | 'Biliran' | 'Cabucgayan' | 'Caibiran' | 'Culaba' | 'Kawayan' | 'Maripipi' | 'Naval';
 
 export type NstpAccount = {
@@ -41,6 +43,8 @@ export type NstpAccount = {
   componentId?: string;
   component?: NstpComponent;
   componentAccessStatus?: string;
+  coordinatorScope?: CoordinatorScope;
+  accountStatus?: StaffAccountStatus;
   _version?: number;
 };
 
@@ -348,9 +352,11 @@ export async function syncCollectionFromApi(localKey: string, query = ''): Promi
           id: a.id, name: a.name || '', email: a.email || '', password: '',
           role: (a.role || 'student').toLowerCase() as NstpRole,
           employeeNumber: (ip.employeeNumber as string) || (cp.employeeNumber as string) || (d.employeeNumber as string) || '',
-          componentId: (cp.componentId as string) || (d.componentId as string) || '',
-          component: (d.component as NstpComponent) || 'CWTS',
-          municipalities: (d.municipalities as string[]) || [],
+          componentId: (ip.componentId as string) || (cp.componentId as string) || (d.componentId as string) || '',
+          coordinatorScope: (cp.scope as CoordinatorScope) || (d.coordinatorScope as CoordinatorScope) || undefined,
+          accountStatus: (a.status as StaffAccountStatus) || 'ACTIVE',
+          component: ((ip.component as Record<string, unknown>)?.name as NstpComponent) || (d.component as NstpComponent) || 'CWTS',
+          municipalities: (ip.municipalities as string[]) || (d.municipalities as string[]) || [],
           title: (d.title as string) || '',
           contactNumber: (d.contactNumber as string) || '',
           studentId: (d.studentId as string) || '',

@@ -40,8 +40,12 @@ export async function resolveAuthorizedRooms(user) {
     }
   }
   if (user.role === 'COORDINATOR') {
-    const coordinator = await prisma.coordinatorProfile.findUnique({ where: { userId: user.id }, select: { componentId: true } });
-    if (coordinator?.componentId) rooms.push(`component:${coordinator.componentId}`);
+    const coordinator = await prisma.coordinatorProfile.findUnique({ where: { userId: user.id }, select: { componentId: true, scope: true } });
+    if (coordinator?.scope) {
+      const types = coordinator.scope === 'MTS' ? ['MTS_ARMY', 'MTS_NAVY'] : coordinator.scope === 'LTS' ? ['LTS'] : ['CWTS', 'CWTS_COAST_GUARD'];
+      const components = await prisma.nSTPComponent.findMany({ where: { type: { in: types } }, select: { id: true } });
+      components.forEach((component) => rooms.push(`component:${component.id}`));
+    } else if (coordinator?.componentId) rooms.push(`component:${coordinator.componentId}`);
   }
 
   return rooms;
@@ -53,7 +57,9 @@ export async function authenticateSocketHandshake(socket, next) {
     const token = readSessionToken(socket.handshake.headers.cookie);
     if (!token) return next(new Error('Unauthorized socket connection.'));
     const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
-    socket.user = { id: decoded.id, email: decoded.email, role: decoded.role };
+    const account = await prisma.user.findUnique({ where: { id: decoded.id }, select: { id: true, email: true, role: true, status: true } });
+    if (!account || (account.status && account.status !== 'ACTIVE') || (account.role && account.role !== decoded.role)) return next(new Error('Unauthorized socket connection.'));
+    socket.user = { id: account.id, email: account.email || decoded.email, role: account.role || decoded.role };
     socket.authorizedRooms = await resolveAuthorizedRooms(socket.user);
     return next();
   } catch {

@@ -5,10 +5,11 @@ import {
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import {
-  BILIRAN_MUNICIPALITIES, createEmptyModule, loadAccounts, loadModules, loadStudents, NSTP_COMPONENTS, NstpAccount, NstpModule, NstpStudent, replaceAssessmentsSnapshot, replaceModulesSnapshot, saveAccounts,
+  BILIRAN_MUNICIPALITIES, createEmptyModule, loadModules, loadStudents, NstpAccount, NstpModule, NstpStudent, replaceAssessmentsSnapshot, replaceModulesSnapshot, type CoordinatorScope,
 } from '../../../data/nstpData';
 import { createManagedModule, fetchManagedModules, removeManagedModule, updateManagedModule } from '../../../services/modules';
 import { fetchManagedAssessments } from '../../../services/assessments';
+import { COMPONENT_TYPE_LABELS, SCOPE_COMPONENT_TYPES, createMyFacilitator, fetchMyFacilitators, setMyFacilitatorStatus, updateMyFacilitator, type FacilitatorRecord } from '../../../services/staff';
 
 const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'C';
 
@@ -35,12 +36,22 @@ export default function CoordinatorDashboard({
   const [facilitatorEditorOpen, setFacilitatorEditorOpen] = useState(false);
   const [editingFacilitator, setEditingFacilitator] = useState<NstpAccount | null>(null);
   const [facilitatorError, setFacilitatorError] = useState<string | null>(null);
+  const [facilitatorSaving, setFacilitatorSaving] = useState(false);
 
-  const userComponent = user.component || 'CWTS';
+  const coordinatorScope = (user.coordinatorScope || (String(user.component).startsWith('MTS') ? 'MTS' : user.component === 'LTS' ? 'LTS' : 'CWTS')) as CoordinatorScope;
+  const allowedComponentTypes = SCOPE_COMPONENT_TYPES[coordinatorScope];
+  const allowedComponents = allowedComponentTypes.map((type) => COMPONENT_TYPE_LABELS[type]);
+  const userComponent = coordinatorScope;
+
+  const facilitatorToAccount = (facilitator: FacilitatorRecord): NstpAccount => ({
+    id: facilitator.id, name: facilitator.name, email: facilitator.email, password: '', role: 'facilitator',
+    employeeNumber: facilitator.employeeNumber, title: facilitator.title, contactNumber: facilitator.contactNumber,
+    componentId: facilitator.componentId, component: COMPONENT_TYPE_LABELS[facilitator.component],
+    municipalities: facilitator.municipalities, accountStatus: facilitator.status,
+  });
 
   const refreshData = () => {
     setModules(loadModules());
-    setFacilitators(loadAccounts().filter((a) => a.role === 'facilitator'));
     setStudents(loadStudents());
   };
 
@@ -52,16 +63,19 @@ export default function CoordinatorDashboard({
     fetchManagedAssessments('coordinator')
       .then((records) => { replaceAssessmentsSnapshot(records); setAssessmentCount(records.length); })
       .catch((error) => setModuleError(error instanceof Error ? error.message : 'Unable to load assessments.'));
+    fetchMyFacilitators()
+      .then((records) => { setFacilitators(records.map(facilitatorToAccount)); setFacilitatorError(null); })
+      .catch((error) => setFacilitatorError(error instanceof Error ? error.message : 'Unable to load facilitators.'));
   }, []);
 
   const scopedModules = useMemo(
-    () => modules.filter((m) => m.component === userComponent || m.component === 'Common'),
-    [modules, userComponent],
+    () => modules.filter((m) => allowedComponents.includes(m.component as any)),
+    [modules, allowedComponents.join('|')],
   );
 
   const scopedStudents = useMemo(
-    () => students.filter((s) => s.component === userComponent),
-    [students, userComponent],
+    () => students.filter((s) => allowedComponents.includes(s.component as any)),
+    [students, allowedComponents.join('|')],
   );
 
   const scopedFacilitators = useMemo(
@@ -81,7 +95,7 @@ export default function CoordinatorDashboard({
 
   const componentColors = ['#10b981', '#2563eb', '#f59e0b', '#8b5cf6', '#06b6d4'];
 
-  const componentData = NSTP_COMPONENTS.map((c) => ({
+  const componentData = allowedComponents.map((c) => ({
     name: c, value: scopedStudents.filter((s) => s.component === c).length,
   }));
 
@@ -93,7 +107,7 @@ export default function CoordinatorDashboard({
   ];
 
   const handleNewModule = () => {
-    setEditingModule({ ...createEmptyModule(), component: userComponent as NstpModule['component'], status: 'DRAFT' });
+    setEditingModule({ ...createEmptyModule(), component: allowedComponents[0], status: 'DRAFT' });
     setModuleError(null);
     setEditorOpen(true);
   };
@@ -113,7 +127,7 @@ export default function CoordinatorDashboard({
     setModuleError(null);
     try {
       const exists = modules.some((module) => module.id === editingModule.id);
-      const payload = { ...editingModule, component: userComponent as NstpModule['component'], status: editingModule.status || 'DRAFT' };
+      const payload = { ...editingModule, component: editingModule.component || allowedComponents[0], status: editingModule.status || 'DRAFT' };
       const saved = exists ? await updateManagedModule('coordinator', payload) : await createManagedModule('coordinator', payload);
       const updated = exists ? modules.map((module) => module.id === saved.id ? saved : module) : [saved, ...modules];
       replaceModulesSnapshot(updated);
@@ -147,11 +161,11 @@ export default function CoordinatorDashboard({
   const handleNewFacilitator = () => {
     setFacilitatorError(null);
     setEditingFacilitator({
-      id: `facilitator-${Math.random().toString(36).slice(2, 9)}`,
+      id: 'new-facilitator',
       name: '', email: '', password: '', role: 'facilitator',
       employeeNumber: `FAC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
       municipalities: [],
-      title: userComponent,
+      title: '', component: allowedComponents[0],
     } as NstpAccount);
     setFacilitatorEditorOpen(true);
   };
@@ -162,32 +176,45 @@ export default function CoordinatorDashboard({
     setFacilitatorEditorOpen(true);
   };
 
-  const handleSaveFacilitator = () => {
+  const handleSaveFacilitator = async () => {
     if (!editingFacilitator) return;
     const municipalities = editingFacilitator.municipalities || [];
     if (municipalities.length < 1 || municipalities.length > 3) {
       setFacilitatorError('Select between 1 and 3 municipalities for this facilitator.');
       return;
     }
-    const next = { ...editingFacilitator, role: 'facilitator' as const, title: editingFacilitator.title || userComponent };
-    const allAccounts = loadAccounts();
-    const otherAccounts = allAccounts.filter((a) => a.role !== 'facilitator');
-    const existingFacs = allAccounts.filter((a) => a.role === 'facilitator');
-    const updatedFacs = existingFacs.some((f) => f.id === next.id)
-      ? existingFacs.map((f) => f.id === next.id ? next : f)
-      : [next, ...existingFacs];
-    saveAccounts([...otherAccounts, ...updatedFacs]);
-    setFacilitators(updatedFacs);
-    setFacilitatorEditorOpen(false);
-    setEditingFacilitator(null);
+    if (!editingFacilitator.name.trim() || !editingFacilitator.email.trim() || !editingFacilitator.employeeNumber?.trim() || !editingFacilitator.component) {
+      setFacilitatorError('Name, email, employee number, and component are required.'); return;
+    }
+    const creating = editingFacilitator.id === 'new-facilitator';
+    if (creating && editingFacilitator.password.length < 8) { setFacilitatorError('Enter a provisioning password of at least 8 characters.'); return; }
+    const componentType = allowedComponentTypes.find((type) => COMPONENT_TYPE_LABELS[type] === editingFacilitator.component);
+    if (!componentType) { setFacilitatorError('The selected component is outside your coordinator program.'); return; }
+    setFacilitatorSaving(true);
+    try {
+      const payload = {
+        name: editingFacilitator.name.trim(), email: editingFacilitator.email.trim().toLowerCase(), employeeNumber: editingFacilitator.employeeNumber.trim(),
+        title: editingFacilitator.title?.trim() || '', contactNumber: editingFacilitator.contactNumber?.trim() || '',
+        component: componentType, municipalities: municipalities as any,
+        ...(editingFacilitator.password ? { password: editingFacilitator.password } : {}),
+      };
+      if (creating) await createMyFacilitator(payload as typeof payload & { password: string });
+      else await updateMyFacilitator(editingFacilitator.id, payload);
+      const records = await fetchMyFacilitators();
+      setFacilitators(records.map(facilitatorToAccount));
+      setFacilitatorEditorOpen(false); setEditingFacilitator(null); setFacilitatorError(null);
+    } catch (error) {
+      setFacilitatorError(error instanceof Error ? error.message : 'Unable to save facilitator.');
+    } finally { setFacilitatorSaving(false); }
   };
 
-  const handleDeleteFacilitator = (id: string) => {
-    const allAccounts = loadAccounts();
-    const otherAccounts = allAccounts.filter((a) => a.role !== 'facilitator');
-    const remainingFacs = allAccounts.filter((a) => a.role === 'facilitator' && a.id !== id);
-    saveAccounts([...otherAccounts, ...remainingFacs]);
-    setFacilitators(remainingFacs);
+  const handleFacilitatorStatus = async (facilitator: NstpAccount) => {
+    const nextStatus = facilitator.accountStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+    if (!window.confirm(`${nextStatus === 'ACTIVE' ? 'Reactivate' : 'Suspend'} ${facilitator.name}?`)) return;
+    try {
+      await setMyFacilitatorStatus(facilitator.id, nextStatus);
+      const records = await fetchMyFacilitators(); setFacilitators(records.map(facilitatorToAccount));
+    } catch (error) { setFacilitatorError(error instanceof Error ? error.message : 'Unable to update facilitator status.'); }
   };
 
   const renderDashboard = () => (
@@ -307,7 +334,7 @@ export default function CoordinatorDashboard({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Facilitator Management</p>
           <h2 className="text-2xl font-semibold text-slate-950 dark:text-white">Manage Facilitators</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Create and manage facilitators for {userComponent}.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Assign facilitators to {allowedComponents.join(' or ')} with one to three municipalities.</p>
         </div>
         <button onClick={handleNewFacilitator} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800">
           <Plus className="h-4 w-4" /> New Facilitator
@@ -321,7 +348,9 @@ export default function CoordinatorDashboard({
               <tr>
                 <th className="px-4 py-3">Facilitator</th>
                 <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Component</th>
                 <th className="px-4 py-3">Municipalities</th>
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
@@ -335,22 +364,24 @@ export default function CoordinatorDashboard({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{fac.email}</td>
+                  <td className="px-4 py-3"><span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">{fac.component}</span></td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {(fac.municipalities || []).slice(0, 3).map((m) => <span key={m} className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{m}</span>)}
                       {(fac.municipalities || []).length > 3 && <span className="text-xs text-slate-500">+{(fac.municipalities || []).length - 3}</span>}
                     </div>
                   </td>
+                  <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${fac.accountStatus === 'SUSPENDED' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-700'}`}>{fac.accountStatus === 'SUSPENDED' ? 'Suspended' : 'Active'}</span></td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button onClick={() => handleEditFacilitator(fac)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-700 hover:bg-blue-50 dark:border-slate-700 dark:text-slate-100"><FileText className="h-4 w-4" /></button>
-                      <button onClick={() => handleDeleteFacilitator(fac.id)} className="grid h-9 w-9 place-items-center rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => handleFacilitatorStatus(fac)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">{fac.accountStatus === 'SUSPENDED' ? 'Reactivate' : 'Suspend'}</button>
                     </div>
                   </td>
                 </tr>
               ))}
               {filteredFacilitators.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">No facilitators found. Create your first facilitator.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">No facilitators found. Create your first facilitator.</td></tr>
               )}
             </tbody>
           </table>
@@ -515,8 +546,8 @@ export default function CoordinatorDashboard({
               </label>
               <label className="block space-y-1.5 md:col-span-2">
                 <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Component</span>
-                <select disabled value={userComponent} className="w-full rounded-xl border border-blue-200 bg-slate-50 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                  <option value={userComponent}>{userComponent}</option>
+                <select value={editingModule.component || allowedComponents[0]} onChange={(event) => setEditingModule({ ...editingModule, component: event.target.value as NstpModule['component'] })} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                  {allowedComponents.map((component) => <option key={component} value={component}>{component}</option>)}
                 </select>
               </label>
             </div>
@@ -533,7 +564,7 @@ export default function CoordinatorDashboard({
           <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
             <div className="mb-5 flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{editingFacilitator.id.startsWith('facilitator-') ? 'Create' : 'Edit'} Facilitator</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{editingFacilitator.id === 'new-facilitator' ? 'Create' : 'Edit'} Facilitator</p>
                 <h3 className="text-xl font-semibold text-slate-950 dark:text-white">Facilitator Details</h3>
               </div>
               <button onClick={() => { setFacilitatorEditorOpen(false); setEditingFacilitator(null); }} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500"><X className="h-4 w-4" /></button>
@@ -548,12 +579,22 @@ export default function CoordinatorDashboard({
                 <input value={editingFacilitator.email} onChange={(e) => setEditingFacilitator({ ...editingFacilitator, email: e.target.value })} className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
               </label>
               <label className="block space-y-1.5">
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Password</span>
-                <input type="password" value={editingFacilitator.password} onChange={(e) => setEditingFacilitator({ ...editingFacilitator, password: e.target.value })} className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Employee Number</span>
+                <input value={editingFacilitator.employeeNumber || ''} onChange={(e) => setEditingFacilitator({ ...editingFacilitator, employeeNumber: e.target.value })} className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
               </label>
               <label className="block space-y-1.5">
                 <span className="text-sm font-bold text-slate-700 dark:text-slate-200">NSTP Component</span>
-                <input value={editingFacilitator.title || userComponent} disabled className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900" />
+                <select value={editingFacilitator.component || allowedComponents[0]} onChange={(event) => setEditingFacilitator({ ...editingFacilitator, component: event.target.value as NstpAccount['component'] })} className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900">
+                  {allowedComponents.map((component) => <option key={component} value={component}>{component}</option>)}
+                </select>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{editingFacilitator.id === 'new-facilitator' ? 'Provisioning Password' : 'New Password (optional)'}</span>
+                <input type="password" value={editingFacilitator.password} onChange={(e) => setEditingFacilitator({ ...editingFacilitator, password: e.target.value })} placeholder={editingFacilitator.id === 'new-facilitator' ? 'At least 8 characters' : 'Leave blank to keep current password'} className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Contact Number</span>
+                <input value={editingFacilitator.contactNumber || ''} onChange={(e) => setEditingFacilitator({ ...editingFacilitator, contactNumber: e.target.value })} className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
               </label>
               <div className="space-y-1.5 md:col-span-2">
                 <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Assigned Municipalities (select 1–3)</span>
@@ -577,7 +618,7 @@ export default function CoordinatorDashboard({
             </div>
             <div className="mt-6 flex justify-end gap-3">
               <button onClick={() => { setFacilitatorEditorOpen(false); setEditingFacilitator(null); }} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Cancel</button>
-              <button onClick={handleSaveFacilitator} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800"><Save className="h-4 w-4" /> Save Facilitator</button>
+              <button disabled={facilitatorSaving} onClick={handleSaveFacilitator} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"><Save className="h-4 w-4" /> {facilitatorSaving ? 'Saving…' : 'Save Facilitator'}</button>
             </div>
           </div>
         </div>

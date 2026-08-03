@@ -111,3 +111,21 @@ test('coordinators cannot modify modules outside their assigned component', asyn
     /outside your assigned component/i,
   );
 });
+
+test('coordinator module creation accepts only a component inside the broad program scope', async () => {
+  let createData;
+  useTransactionMock({
+    nSTPComponent: { findUnique: async ({ where }) => ({ id: where.type === 'MTS_NAVY' ? 'component-navy' : 'component-cwts' }) },
+    module: { create: async ({ data }) => { createData = data; return { id: 'module-navy', ...data, component: null }; } },
+  });
+  await createManagedModule('coordinator-1', {
+    title: 'Navy module', description: 'Scoped material', component: 'MTS (Navy)', hours: 2,
+    difficulty: 'Beginner', status: 'DRAFT', order: 0,
+  }, ['component-army', 'component-navy']);
+  assert.equal(createData.componentId, 'component-navy');
+
+  await assert.rejects(() => createManagedModule('coordinator-1', {
+    title: 'Blocked CWTS module', description: 'Outside scope', component: 'CWTS', hours: 2,
+    difficulty: 'Beginner', status: 'DRAFT', order: 0,
+  }, ['component-army', 'component-navy']), /outside your coordinator scope/i);
+});

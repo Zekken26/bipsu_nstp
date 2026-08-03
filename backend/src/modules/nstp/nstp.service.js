@@ -92,16 +92,33 @@ function moduleData(payload) {
     .map((field) => [field, payload[field]]));
 }
 
-async function resolveModuleComponent(client, component, forcedComponentId = null) {
-  if (forcedComponentId) return forcedComponentId;
-  if (!component || component === 'Common') return null;
+async function resolveModuleComponent(client, component, forcedComponentScope = null) {
+  if (typeof forcedComponentScope === 'string') return forcedComponentScope;
+  if (!component || component === 'Common') {
+    if (Array.isArray(forcedComponentScope) && forcedComponentScope.length) {
+      const error = new Error('Coordinators must select a component inside their program scope.');
+      error.statusCode = 403;
+      throw error;
+    }
+    return null;
+  }
   const record = await client.nSTPComponent.findUnique({ where: { type: toComponentType(component) }, select: { id: true } });
   if (!record) {
     const error = new Error('The selected NSTP component is not configured.');
     error.statusCode = 400;
     throw error;
   }
+  if (Array.isArray(forcedComponentScope) && forcedComponentScope.length && !forcedComponentScope.includes(record.id)) {
+    const error = new Error('The selected module component is outside your coordinator scope.');
+    error.statusCode = 403;
+    throw error;
+  }
   return record.id;
+}
+
+function outsideForcedScope(componentId, forcedComponentScope) {
+  if (!forcedComponentScope) return false;
+  return Array.isArray(forcedComponentScope) ? !forcedComponentScope.includes(componentId) : componentId !== forcedComponentScope;
 }
 
 function assertModulePublishable(payload) {
@@ -127,7 +144,7 @@ function moduleWriteData(payload, componentId) {
   };
 }
 
-export async function listManagedModules(componentId = null, instructorId = null, instructorComponentIds = []) {
+export async function listManagedModules(componentId = null, instructorId = null, instructorComponentIds = [], managedComponentIds = []) {
   return withDatabase('modules', async () => {
     const instructorScope = instructorId ? {
       OR: [
@@ -136,7 +153,7 @@ export async function listManagedModules(componentId = null, instructorId = null
       ],
     } : {};
     const modules = await prisma.module.findMany({
-      ...((componentId || instructorId) ? { where: { ...(componentId ? { componentId } : {}), ...instructorScope } } : {}),
+      ...((componentId || instructorId || managedComponentIds.length) ? { where: { ...(componentId ? { componentId } : {}), ...(managedComponentIds.length ? { componentId: { in: managedComponentIds } } : {}), ...instructorScope } } : {}),
       orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
       include: {
         component: { select: { id: true, name: true, type: true } },
@@ -189,7 +206,7 @@ export async function updateManagedModule(actorId, id, patch, forcedComponentId 
       error.statusCode = 404;
       throw error;
     }
-    if (forcedComponentId && existing.componentId !== forcedComponentId) {
+    if (outsideForcedScope(existing.componentId, forcedComponentId)) {
       const error = new Error('You cannot modify a module outside your assigned component.');
       error.statusCode = 403;
       throw error;
@@ -221,7 +238,7 @@ export async function removeManagedModule(actorId, id, forcedComponentId = null)
       error.statusCode = 404;
       throw error;
     }
-    if (forcedComponentId && existing.componentId !== forcedComponentId) {
+    if (outsideForcedScope(existing.componentId, forcedComponentId)) {
       const error = new Error('You cannot delete a module outside your assigned component.');
       error.statusCode = 403;
       throw error;
@@ -296,7 +313,7 @@ function toStudentAssessmentDto(quiz) {
 
 function assessmentModuleWhere(actor) {
   if (actor.role === 'ADMIN') return {};
-  if (actor.role === 'COORDINATOR') return { componentId: actor.componentId };
+  if (actor.role === 'COORDINATOR') return { componentId: { in: actor.componentIds || [] } };
   if (actor.role === 'INSTRUCTOR') return {
     OR: [
       { instructorId: actor.instructorId },
@@ -625,6 +642,11 @@ export async function upsertAdminResource(name, lookup, payload) {
 
   try {
     if (name === 'accounts') {
+      if (toUserRole(nextPayload.role) === 'COORDINATOR') {
+        const error = new Error('Coordinator accounts must be managed through the dedicated coordinator endpoint.');
+        error.statusCode = 400;
+        throw error;
+      }
       const profileData = nextPayload.data || {};
       const explicitFields = ['surname', 'firstName', 'middleName', 'school', 'department', 'degreeProgram', 'yearLevel', 'major', 'gender', 'birthdate', 'houseStreetPurok', 'barangay', 'municipality', 'municipalities', 'province', 'provincialAddress', 'contactNumber', 'currentAddress', 'cityAddress', 'title', 'bio', 'generalEducationComplete', 'preferredComponent', 'examTaken', 'examScore', 'component', 'componentAccessStatus'];
       for (const field of explicitFields) {

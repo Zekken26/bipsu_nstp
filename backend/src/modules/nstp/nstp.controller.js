@@ -100,23 +100,23 @@ export async function removeAdminModule(req, res) {
 }
 
 export async function listCoordinatorModules(req, res) {
-  return res.json(await listManagedModules(req.coordinator.componentId));
+  return res.json(await listManagedModules(null, null, [], req.coordinator.allowedComponentIds));
 }
 
 export async function createCoordinatorModule(req, res) {
-  const module = await createManagedModule(req.user.id, req.validated.body, req.coordinator.componentId);
+  const module = await createManagedModule(req.user.id, req.validated.body, req.coordinator.allowedComponentIds);
   emitCollectionChange('modules', 'created');
   return sendSuccess(res, module, 201);
 }
 
 export async function updateCoordinatorModule(req, res) {
-  const module = await updateManagedModule(req.user.id, req.params.id, req.validated.body, req.coordinator.componentId);
+  const module = await updateManagedModule(req.user.id, req.params.id, req.validated.body, req.coordinator.allowedComponentIds);
   emitCollectionChange('modules', 'updated');
   return sendSuccess(res, module);
 }
 
 export async function removeCoordinatorModule(req, res) {
-  const result = await removeManagedModule(req.user.id, req.params.id, req.coordinator.componentId);
+  const result = await removeManagedModule(req.user.id, req.params.id, req.coordinator.allowedComponentIds);
   emitCollectionChange('modules', result.archived ? 'archived' : 'deleted');
   return sendSuccess(res, result);
 }
@@ -130,7 +130,7 @@ export async function listInstructorModules(req, res) {
 }
 
 const adminActor = (req) => ({ userId: req.user.id, name: req.user.name || 'Administrator', role: 'ADMIN' });
-const coordinatorActor = (req) => ({ userId: req.user.id, name: req.user.name || 'Coordinator', role: 'COORDINATOR', componentId: req.coordinator.componentId });
+const coordinatorActor = (req) => ({ userId: req.user.id, name: req.user.name || 'Coordinator', role: 'COORDINATOR', componentIds: req.coordinator.allowedComponentIds });
 const instructorActor = (req) => ({
   userId: req.user.id,
   name: req.user.name || 'Facilitator',
@@ -355,13 +355,13 @@ export async function createInstructorGrade(req, res) {
 
 export async function listCoordinatorStudents(req, res) {
   const students = await prisma.studentProfile.findMany({
-    where: { componentId: req.coordinator.componentId },
+    where: { componentId: { in: req.coordinator.allowedComponentIds } },
     include: { user: { select: { id: true, name: true, email: true, data: true } } },
   });
   return sendSuccess(res, students);
 }
 
 export async function listCoordinatorClasses(req, res) {
-  const sections = await prisma.section.findMany({ where: { componentId: req.coordinator.componentId } });
+  const sections = await prisma.section.findMany({ where: { componentId: { in: req.coordinator.allowedComponentIds } } });
   return sendSuccess(res, sections);
 }

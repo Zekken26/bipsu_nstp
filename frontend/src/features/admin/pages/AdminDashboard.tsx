@@ -7,7 +7,7 @@ import ModulesPage from '../../../pages/ModulesPage';
 
 import CollapsibleRoleSidebar from '../../../components/layout/CollapsibleRoleSidebar';
 import StudentProfileModal from '../components/StudentProfileModal';
-import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncCollectionFromApi, syncToApi, AUDIT_LOG_KEY } from '../../../data/nstpData';
+import { createEmptyStudent, loadAssessments, loadAccounts, loadModules, loadPendingStudentRegistrations, loadStudents, saveAccounts, savePendingStudentRegistrations, saveStudents, safeJsonParse, PendingStudentRegistration, NstpStudent, NstpAccount, NstpComponent, NstpRole, loadGradeRecords, saveGradeRecords, NstpGradeRecord, BiliranMunicipality, BILIRAN_MUNICIPALITIES, NSTP_COMPONENTS, loadTrainingGroups, saveTrainingGroups, syncAllFromApi, syncCollectionFromApi, syncToApi, AUDIT_LOG_KEY, type CoordinatorScope } from '../../../data/nstpData';
 import { apiPost, apiPut, apiDel } from '../../../services/apiClient';
 import { toast } from 'sonner';
 import { useCurrentUser, useUpdateCurrentUser } from '../../../hooks/index';
@@ -18,6 +18,7 @@ import {
   publishProfileTemplate, recordProfileExport, saveProfileTemplateDraft, validateProfileConfiguration,
   type ProfileExportConfiguration, type ProfileTemplateVersion,
 } from '../../../services/profileTemplates';
+import { createCoordinator, fetchAdminCoordinators, setCoordinatorStatus, updateCoordinator, type CoordinatorRecord } from '../../../services/staff';
 
 type AdminAuditEntry = {
   id: string;
@@ -4215,61 +4216,92 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
   const [editingCoord, setEditingCoord] = useState<NstpAccount | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [managedCoordinators, setManagedCoordinators] = useState<CoordinatorRecord[]>([]);
+  const [coordinatorSearch, setCoordinatorSearch] = useState('');
+  const [coordinatorLoading, setCoordinatorLoading] = useState(true);
+  const [coordinatorSaving, setCoordinatorSaving] = useState(false);
+
+  const refreshCoordinators = async () => {
+    setCoordinatorLoading(true);
+    try {
+      const result = await fetchAdminCoordinators({ search: coordinatorSearch || undefined, pageSize: 100 });
+      setManagedCoordinators(result.items);
+      setSaveError(null);
+      onRefresh();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Unable to load coordinators.');
+    } finally {
+      setCoordinatorLoading(false);
+    }
+  };
+
+  useEffect(() => { void refreshCoordinators(); }, [coordinatorSearch]);
 
   const openNew = () => {
     setEditingCoord({
-      id: `coordinator-${Math.random().toString(36).slice(2, 9)}`,
+      id: 'new-coordinator',
       name: '', email: '', password: '', role: 'coordinator',
       employeeNumber: `COORD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
       contactNumber: '',
       title: '',
-      component: 'CWTS',
+      coordinatorScope: 'CWTS',
     } as NstpAccount);
     setEditorOpen(true);
   };
 
-  const openEdit = (c: NstpAccount) => {
-    const { municipalities: _municipalities, ...coordinator } = c;
-    setEditingCoord(coordinator as NstpAccount);
+  const openEdit = (c: CoordinatorRecord) => {
+    setEditingCoord({
+      id: c.id, name: c.name, email: c.email, password: '', role: 'coordinator',
+      employeeNumber: c.employeeNumber, contactNumber: c.contactNumber, title: c.title,
+      coordinatorScope: c.scope, accountStatus: c.status,
+    });
     setEditorOpen(true);
   };
 
   const handleSave = async () => {
     if (!editingCoord) return;
     setSaveError(null);
-    const { municipalities: _municipalities, ...coordinator } = editingCoord;
-    const next = { ...coordinator, role: 'coordinator' as const };
+    if (!editingCoord.name.trim() || !editingCoord.email.trim() || !editingCoord.employeeNumber?.trim() || !editingCoord.coordinatorScope) {
+      setSaveError('Name, email, employee number, and coordinator program are required.');
+      return;
+    }
+    const creating = editingCoord.id === 'new-coordinator';
+    if (creating && editingCoord.password.length < 8) {
+      setSaveError('Enter a provisioning password of at least 8 characters.');
+      return;
+    }
+    setCoordinatorSaving(true);
     try {
-      const result = await apiPost<any>('/nstp/admin/accounts', next, null);
-      if (result && !(result as any).error) {
-        const allAccounts = loadAccounts();
-        const others = allAccounts.filter((a) => a.role !== 'coordinator');
-        const existing = allAccounts.filter((a) => a.role === 'coordinator');
-        const updated = existing.some((c) => c.id === next.id)
-          ? existing.map((c) => c.id === next.id ? next : c)
-          : [next, ...existing];
-        saveAccounts([...others, ...updated]);
-        toast.success('Coordinator created successfully');
-        setEditorOpen(false);
-        setEditingCoord(null);
-        onRefresh();
-      } else {
-        const errMsg = (result as any)?.error || 'Server did not confirm the account was created.';
-        setSaveError(errMsg);
-      }
+      const payload = {
+        name: editingCoord.name.trim(), email: editingCoord.email.trim().toLowerCase(),
+        employeeNumber: editingCoord.employeeNumber.trim(), title: editingCoord.title?.trim() || '',
+        contactNumber: editingCoord.contactNumber?.trim() || '', scope: editingCoord.coordinatorScope,
+        ...(editingCoord.password ? { password: editingCoord.password } : {}),
+      };
+      if (creating) await createCoordinator(payload as typeof payload & { password: string });
+      else await updateCoordinator(editingCoord.id, payload);
+      toast.success(creating ? 'Coordinator created successfully.' : 'Coordinator updated successfully.');
+      setEditorOpen(false);
+      setEditingCoord(null);
+      await refreshCoordinators();
     } catch (e: any) {
       const msg = e?.response?.data?.error || e?.message || 'Failed to create account on server.';
       setSaveError(msg);
+    } finally {
+      setCoordinatorSaving(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    await apiDel(`/nstp/admin/accounts/${id}`, null);
-    const allAccounts = loadAccounts();
-    const others = allAccounts.filter((a) => a.role !== 'coordinator');
-    const remaining = allAccounts.filter((a) => a.role === 'coordinator' && a.id !== id);
-    await saveAccounts([...others, ...remaining]);
-    onRefresh();
+  const handleStatusChange = async (coordinator: CoordinatorRecord) => {
+    const nextStatus = coordinator.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+    if (!window.confirm(`${nextStatus === 'SUSPENDED' ? 'Suspend' : 'Reactivate'} ${coordinator.name}?`)) return;
+    try {
+      await setCoordinatorStatus(coordinator.id, nextStatus);
+      toast.success(`Coordinator ${nextStatus === 'ACTIVE' ? 'reactivated' : 'suspended'}.`);
+      await refreshCoordinators();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Unable to update coordinator status.');
+    }
   };
 
   return (
@@ -4285,18 +4317,24 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
         </button>
       </div>
 
+      <div className="relative max-w-xl">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input value={coordinatorSearch} onChange={(event) => setCoordinatorSearch(event.target.value)} placeholder="Search coordinators…" aria-label="Search coordinators" className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm dark:border-slate-700 dark:bg-slate-950" />
+      </div>
+
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <table className="w-full min-w-[700px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
             <tr>
               <th className="px-4 py-3">Coordinator</th>
               <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Component</th>
+              <th className="px-4 py-3">Program</th>
+              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {coordinators.map((c) => (
+            {managedCoordinators.map((c) => (
               <tr key={c.id} className="border-t border-slate-100 hover:bg-blue-50/60 dark:border-slate-800 dark:hover:bg-slate-900">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
@@ -4308,17 +4346,19 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
                 </td>
                 <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{c.email}</td>
                 <td className="px-4 py-3">
-                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{c.component || 'CWTS'}</span>
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">{c.scope}</span>
                 </td>
+                <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${c.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{c.status === 'ACTIVE' ? 'Active' : 'Suspended'}</span></td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
                     <button onClick={() => openEdit(c)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-700 hover:bg-blue-50 dark:border-slate-700 dark:text-slate-100"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => handleDelete(c.id)} className="grid h-9 w-9 place-items-center rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200"><Trash2 className="h-4 w-4" /></button>
+                    <button title={c.status === 'ACTIVE' ? 'Suspend coordinator' : 'Reactivate coordinator'} onClick={() => handleStatusChange(c)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">{c.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}</button>
                   </div>
                 </td>
               </tr>
             ))}
-            {coordinators.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">No coordinators found.</td></tr>}
+            {!coordinatorLoading && managedCoordinators.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">No coordinators found.</td></tr>}
+            {coordinatorLoading && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">Loading coordinators…</td></tr>}
           </tbody>
         </table>
       </div>
@@ -4328,7 +4368,7 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
           <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
             <div className="mb-5 flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{editingCoord.id.startsWith('coordinator-') ? 'Create' : 'Edit'} Coordinator</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">{editingCoord.id === 'new-coordinator' ? 'Create' : 'Edit'} Coordinator</p>
                 <h3 className="text-xl font-semibold text-slate-950 dark:text-white">Coordinator Details</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Set up login credentials and assign an NSTP component.</p>
               </div>
@@ -4358,10 +4398,10 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
                 </div>
               </label>
               <label className="block space-y-1.5">
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Password</span>
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{editingCoord.id === 'new-coordinator' ? 'Provisioning Password' : 'New Password (optional)'}</span>
                 <div className="relative">
                   <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input type={showPassword ? 'text' : 'password'} value={editingCoord.password} onChange={(e) => setEditingCoord({ ...editingCoord, password: e.target.value })} placeholder="Enter password" className="w-full rounded-xl border border-blue-200 px-4 py-3 pl-9 pr-12 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                  <input type={showPassword ? 'text' : 'password'} value={editingCoord.password} onChange={(e) => setEditingCoord({ ...editingCoord, password: e.target.value })} placeholder={editingCoord.id === 'new-coordinator' ? 'At least 8 characters' : 'Leave blank to keep current password'} className="w-full rounded-xl border border-blue-200 px-4 py-3 pl-9 pr-12 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   <button type="button" onClick={() => setShowPassword((p) => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" tabIndex={-1}>
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
@@ -4372,16 +4412,18 @@ function CoordinatorManagementView({ admin, coordinators, onRefresh }: { admin: 
                 <input value={editingCoord.contactNumber || ''} onChange={(e) => setEditingCoord({ ...editingCoord, contactNumber: e.target.value })} placeholder="09xxxxxxxxx" className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
               </label>
               <label className="block space-y-1.5">
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">NSTP Component</span>
-                <select value={editingCoord.component || 'CWTS'} onChange={(e) => setEditingCoord({ ...editingCoord, component: e.target.value as NstpComponent })} className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                  {NSTP_COMPONENTS.map((comp) => <option key={comp} value={comp}>{comp}</option>)}
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Coordinator Program</span>
+                <select value={editingCoord.coordinatorScope || 'CWTS'} onChange={(e) => setEditingCoord({ ...editingCoord, coordinatorScope: e.target.value as CoordinatorScope })} className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                  <option value="CWTS">CWTS — manages CWTS and CWTS Coast Guard</option>
+                  <option value="MTS">MTS — manages MTS Army and MTS Navy</option>
+                  <option value="LTS">LTS — manages LTS</option>
                 </select>
               </label>
             </div>
             {saveError && <p className="text-sm text-amber-600 dark:text-amber-400">{saveError}</p>}
             <div className="mt-6 flex justify-end gap-3">
               <button onClick={() => { setEditorOpen(false); setEditingCoord(null); }} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200">Cancel</button>
-              <button onClick={handleSave} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800"><Save className="h-4 w-4" /> Save Coordinator</button>
+              <button disabled={coordinatorSaving} onClick={handleSave} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"><Save className="h-4 w-4" /> {coordinatorSaving ? 'Saving…' : 'Save Coordinator'}</button>
             </div>
           </div>
         </div>

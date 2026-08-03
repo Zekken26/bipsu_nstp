@@ -5,13 +5,18 @@ export const adminAccountSelect = {
   name: true,
   email: true,
   role: true,
+  status: true,
   createdAt: true,
   updatedAt: true,
   instructorProfile: {
-    select: { id: true, employeeNumber: true, department: true, title: true },
+    select: {
+      id: true, employeeNumber: true, department: true, title: true,
+      coordinatorId: true, componentId: true, municipalities: true,
+      component: { select: { type: true, name: true } },
+    },
   },
   coordinatorProfile: {
-    select: { id: true, employeeNumber: true, componentId: true },
+    select: { id: true, employeeNumber: true, componentId: true, scope: true },
   },
 };
 
@@ -20,6 +25,7 @@ export const studentSelfSelect = {
   name: true,
   email: true,
   role: true,
+  status: true,
   data: true,
   createdAt: true,
   updatedAt: true,
@@ -29,6 +35,8 @@ export const studentSelfSelect = {
       sectionId: true, componentId: true, data: true, createdAt: true, updatedAt: true,
     },
   },
+  coordinatorProfile: { select: { id: true, employeeNumber: true, scope: true } },
+  instructorProfile: { select: { id: true, employeeNumber: true, componentId: true, municipalities: true, component: { select: { type: true, name: true } } } },
 };
 
 export const rosterUserSelect = {
@@ -67,6 +75,7 @@ export function toAdminAccountDto(user) {
     name: user.name,
     email: user.email,
     role: user.role,
+    ...(user.status ? { status: user.status } : {}),
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
     instructorProfile: user.instructorProfile || null,
@@ -81,8 +90,11 @@ export function toStudentSelfProfileDto(user) {
     name: user.name,
     email: user.email,
     role: user.role,
+    status: user.status,
     data: user.data || {},
     studentProfile: user.studentProfile || null,
+    coordinatorProfile: user.coordinatorProfile || null,
+    instructorProfile: user.instructorProfile || null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

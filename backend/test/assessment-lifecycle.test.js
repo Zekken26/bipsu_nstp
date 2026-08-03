@@ -85,6 +85,20 @@ test('instructors cannot connect assessments to unassigned modules', async () =>
   }), /does not exist or is not assigned/i);
 });
 
+test('coordinator assessments are restricted to every component in their program scope', async () => {
+  let observedWhere;
+  transactionMock({
+    module: { findFirst: async ({ where }) => { observedWhere = where; return null; } },
+    quiz: { create: async () => assert.fail('missing module must not create an assessment') },
+  });
+  const coordinator = { userId: 'coordinator-1', name: 'MTS Coordinator', role: 'COORDINATOR', componentIds: ['component-army', 'component-navy'] };
+  await assert.rejects(() => createManagedAssessment(coordinator, {
+    title: 'Scoped assessment', description: '', moduleId: 'other-module', type: 'quiz', timeLimit: 15,
+    passingScore: 70, questionsToShow: 1, questions: [{ prompt: 'Question?', options: ['A', 'B'], correctIndex: 0 }],
+  }), /does not exist or is not assigned/i);
+  assert.deepEqual(observedWhere, { id: 'other-module', componentId: { in: ['component-army', 'component-navy'] } });
+});
+
 test('an assessment cannot be published while its module is draft', async () => {
   let moduleCalls = 0;
   transactionMock({

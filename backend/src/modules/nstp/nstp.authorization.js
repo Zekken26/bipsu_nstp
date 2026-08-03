@@ -14,10 +14,10 @@ export async function getCurrentStudent(req, res, next) {
 export async function getCurrentInstructor(req, res, next) {
   const instructor = await prisma.instructorProfile.findUnique({
     where: { userId: req.user.id },
-    include: { sections: { select: { componentId: true } } },
+    include: { user: { select: { status: true } }, sections: { select: { componentId: true } } },
   });
 
-  if (!instructor) return sendError(res, 'Instructor profile not found.', 403);
+  if (!instructor || (instructor.user?.status && instructor.user.status !== 'ACTIVE')) return sendError(res, 'Instructor account is not active.', 403);
   req.instructor = instructor;
   return next();
 }
@@ -25,12 +25,19 @@ export async function getCurrentInstructor(req, res, next) {
 export async function getCurrentCoordinator(req, res, next) {
   const coordinator = await prisma.coordinatorProfile.findUnique({
     where: { userId: req.user.id },
+    include: { user: { select: { status: true } } },
   });
 
-  if (!coordinator?.componentId) {
-    return sendError(res, 'Coordinator component assignment not found.', 403);
+  if (!coordinator || (coordinator.user?.status && coordinator.user.status !== 'ACTIVE')) return sendError(res, 'Coordinator account is not active.', 403);
+  if (!coordinator.scope && coordinator.componentId) {
+    req.coordinator = { ...coordinator, allowedComponentIds: [coordinator.componentId], allowedComponentTypes: [] };
+    return next();
   }
-  req.coordinator = coordinator;
+  const scopeTypes = coordinator.scope === 'MTS' ? ['MTS_ARMY', 'MTS_NAVY']
+    : coordinator.scope === 'LTS' ? ['LTS'] : ['CWTS', 'CWTS_COAST_GUARD'];
+  const components = await prisma.nSTPComponent.findMany({ where: { type: { in: scopeTypes } }, select: { id: true, type: true } });
+  if (components.length !== scopeTypes.length) return sendError(res, 'Coordinator component scope is not fully configured.', 403);
+  req.coordinator = { ...coordinator, allowedComponentIds: components.map((component) => component.id), allowedComponentTypes: scopeTypes };
   return next();
 }
 

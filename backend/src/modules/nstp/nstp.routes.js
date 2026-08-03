@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import profileTemplatesRouter from '../profileTemplates/profileTemplates.routes.js';
+import staffRouter from '../staff/staff.routes.js';
 import { authenticate, requireRole } from '../../middleware/authenticate.js';
 import { strictWriteLimiter } from '../../middleware/rateLimit.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -31,6 +32,7 @@ import {
 } from './nstp.controller.js';
 
 const router = Router();
+router.use('/', staffRouter);
 router.use('/admin/profile-templates', profileTemplatesRouter);
 const admin = [authenticate, requireRole('ADMIN')];
 

@@ -6,8 +6,10 @@ import { studentSelfSelect, toStudentSelfProfileDto } from './user.dto.js';
 import { assertPlaintextPassword } from './passwords.js';
 
 const loginUserSelect = {
-  id: true, name: true, email: true, role: true, passwordHash: true, data: true,
+  id: true, name: true, email: true, role: true, status: true, passwordHash: true, data: true,
   studentProfile: { select: { studentNumber: true } },
+  coordinatorProfile: { select: { scope: true } },
+  instructorProfile: { select: { component: { select: { type: true, name: true } }, municipalities: true } },
 };
 
 function generateToken(user) {
@@ -244,6 +246,12 @@ export async function loginUser(identifier, password) {
     throw err;
   }
 
+  if (user.status && user.status !== 'ACTIVE') {
+    const err = new Error('This account is inactive. Contact an administrator.');
+    err.statusCode = 403;
+    throw err;
+  }
+
   const token = generateToken(user);
   const data = (user.data || {});
 
@@ -254,8 +262,11 @@ export async function loginUser(identifier, password) {
       name: user.name,
       email: user.email,
       role: user.role.toLowerCase(),
-      studentId: user.studentProfile?.studentNumber,
       ...data,
+      studentId: user.studentProfile?.studentNumber,
+      coordinatorScope: user.coordinatorProfile?.scope,
+      component: user.instructorProfile?.component?.name,
+      municipalities: user.instructorProfile?.municipalities,
     },
   };
 }

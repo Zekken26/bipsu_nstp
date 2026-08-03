@@ -143,7 +143,18 @@ test('coordinators are constrained to their assigned component', async () => {
   };
   const response = await request('/api/nstp/coordinators/component/students', { role: 'COORDINATOR' });
   assert.equal(response.status, 200);
-  assert.deepEqual(observedWhere, { componentId: 'component-a' });
+  assert.deepEqual(observedWhere, { componentId: { in: ['component-a'] } });
+});
+
+test('suspended coordinators cannot use coordinator APIs', async () => {
+  prisma.coordinatorProfile.findUnique = async () => ({ id: 'coordinator-profile', scope: 'CWTS', user: { status: 'SUSPENDED' } });
+  const response = await request('/api/nstp/coordinators/component/students', { role: 'COORDINATOR' });
+  assert.equal(response.status, 403);
+});
+
+test('students cannot provision coordinators or facilitators', async () => {
+  assert.equal((await request('/api/nstp/admin/coordinators', { role: 'STUDENT', method: 'POST', body: {} })).status, 403);
+  assert.equal((await request('/api/nstp/coordinators/facilitators', { role: 'STUDENT', method: 'POST', body: {} })).status, 403);
 });
 
 test('administrators can use explicit administrative routes', async () => {
