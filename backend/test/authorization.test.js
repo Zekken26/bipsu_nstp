@@ -94,6 +94,14 @@ test('students cannot create or modify modules', async () => {
   assert.equal((await request('/api/nstp/admin/modules/module-1', { role: 'STUDENT', method: 'DELETE' })).status, 403);
 });
 
+test('only administrators can manage student profile layouts', async () => {
+  const body = { name: 'Blocked layout', configuration: {} };
+  assert.equal((await request('/api/nstp/admin/profile-templates', { role: 'STUDENT', method: 'POST', body })).status, 403);
+  assert.equal((await request('/api/nstp/admin/profile-templates', { role: 'INSTRUCTOR', method: 'POST', body })).status, 403);
+  assert.equal((await request('/api/nstp/admin/profile-templates', { role: 'COORDINATOR', method: 'POST', body })).status, 403);
+  assert.equal((await request('/api/nstp/admin/profile-templates/export-events', { role: 'STUDENT', method: 'POST', body: { studentId: 'student-1', format: 'PDF' } })).status, 403);
+});
+
 test('students cannot modify grades or use the removed generic route', async () => {
   assert.equal((await request('/api/nstp/admin/grades', { role: 'STUDENT', method: 'POST', body: {} })).status, 403);
   assert.equal((await request('/api/nstp/accounts', { role: 'STUDENT' })).status, 404);

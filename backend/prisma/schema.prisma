@@ -66,6 +66,11 @@ enum AssessmentStatus {
   ARCHIVED
 }
 
+enum TemplateStatus {
+  DRAFT
+  PUBLISHED
+}
+
 model User {
   id                 String              @id @default(cuid())
   name               String
@@ -554,4 +559,23 @@ model AuditLogEntry {
   createdAt DateTime @default(now())
 
   @@map("audit_log_entry")
+}
+
+model ProfileExportTemplate {
+  id            String         @id @default(cuid())
+  templateKey   String         @default("student-profile")
+  name          String
+  version       Int
+  status        TemplateStatus @default(DRAFT)
+  isActive      Boolean        @default(false)
+  configuration Json
+  createdById   String
+  updatedById   String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([templateKey, version])
+  @@index([templateKey, status, createdAt])
+  @@index([templateKey, isActive])
+  @@map("profile_export_template")
 }

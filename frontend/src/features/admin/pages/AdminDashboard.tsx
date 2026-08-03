@@ -13,6 +13,11 @@ import { toast } from 'sonner';
 import { useCurrentUser, useUpdateCurrentUser } from '../../../hooks/index';
 import { parseStudentCsv, toCsv } from '../../../utils/spreadsheet';
 import { createRegistrationApprovalClient, getRegistrationApprovalErrorMessage } from '../services/registrationApproval';
+import {
+  activateProfileTemplate, createTemplateBackup, fetchProfileTemplates, parseTemplateBackup,
+  publishProfileTemplate, recordProfileExport, saveProfileTemplateDraft, validateProfileConfiguration,
+  type ProfileExportConfiguration, type ProfileTemplateVersion,
+} from '../../../services/profileTemplates';
 
 type AdminAuditEntry = {
   id: string;
@@ -31,34 +36,9 @@ type StudentFilterPreset = {
 };
 
 const FILTER_PRESETS_KEY = 'nstp-student-filter-presets';
-const FORM_TEMPLATE_KEY = 'nstp-official-profile-template';
 const SCHOOL_YEARS = ['SY 2024-2025', 'SY 2025-2026', 'SY 2026-2027'];
 
-type OfficialProfileTemplate = {
-  layout: 'classic' | 'compact' | 'formal';
-  pageSize: 'a4' | 'letter';
-  orientation: 'portrait' | 'landscape';
-  republicLine: string;
-  schoolName: string;
-  certificationLine: string;
-  officeName: string;
-  formTitle: string;
-  academicPeriod: string;
-  fieldHeader: string;
-  valueHeader: string;
-  accentColor: string;
-  leftCopyLabel: string;
-  rightCopyLabel: string;
-  studentSignatureLabel: string;
-  signatoryName: string;
-  signatoryTitle: string;
-  headerImageDataUrl?: string;
-  headerImageName?: string;
-  signatureSpacing: number;
-  fieldOrder: string[];
-  showFieldBorders: boolean;
-  repeatHeader: boolean;
-};
+type OfficialProfileTemplate = ProfileExportConfiguration;
 
 const PROFILE_FIELD_DEFINITIONS = [
   { key: 'surname', label: 'Surname' },
@@ -99,7 +79,7 @@ const DEFAULT_FORM_TEMPLATE: OfficialProfileTemplate = {
   leftCopyLabel: "OFFICE'S COPY",
   rightCopyLabel: "STUDENT'S COPY",
   studentSignatureLabel: 'Signature over Printed Name',
-  signatoryName: 'DR. REYNOLD GARCIA BUSTILLO',
+  signatoryName: 'Dr. Reynold G. Bustillo',
   signatoryTitle: 'NSTP DIRECTOR',
   signatureSpacing: 48,
   fieldOrder: DEFAULT_PROFILE_FIELD_ORDER,
@@ -184,10 +164,14 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const [headerCrop, setHeaderCrop] = useState({ x: 0, y: 0, width: 100, height: 38 });
   const [headerCropDrag, setHeaderCropDrag] = useState<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const [layoutDragStartY, setLayoutDragStartY] = useState<number | null>(null);
-  const [formTemplate, setFormTemplate] = useState<OfficialProfileTemplate>(() => ({
-    ...DEFAULT_FORM_TEMPLATE,
-    ...safeJsonParse<Partial<OfficialProfileTemplate>>(localStorage.getItem(FORM_TEMPLATE_KEY), {}),
-  }));
+  const [formTemplate, setFormTemplate] = useState<OfficialProfileTemplate>(DEFAULT_FORM_TEMPLATE);
+  const [activeProfileTemplate, setActiveProfileTemplate] = useState<ProfileTemplateVersion | null>(null);
+  const [profileTemplateVersions, setProfileTemplateVersions] = useState<ProfileTemplateVersion[]>([]);
+  const [savedProfileTemplateDraft, setSavedProfileTemplateDraft] = useState<ProfileTemplateVersion | null>(null);
+  const [profileTemplateName, setProfileTemplateName] = useState('Official Student Profile');
+  const [profileTemplateSaving, setProfileTemplateSaving] = useState(false);
+  const [profileTemplateError, setProfileTemplateError] = useState<string | null>(null);
+  const [profileTemplateDirty, setProfileTemplateDirty] = useState(false);
 
   useEffect(() => {
     setStudents(loadStudents());
@@ -196,7 +180,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     setGradeRecords(loadGradeRecords());
     setAuditLog(safeJsonParse<AdminAuditEntry[]>(localStorage.getItem(AUDIT_LOG_KEY), []));
     setFilterPresets(safeJsonParse<StudentFilterPreset[]>(localStorage.getItem(FILTER_PRESETS_KEY), []));
-    setFormTemplate({ ...DEFAULT_FORM_TEMPLATE, ...safeJsonParse<Partial<OfficialProfileTemplate>>(localStorage.getItem(FORM_TEMPLATE_KEY), {}) });
+    setFormTemplate(DEFAULT_FORM_TEMPLATE);
 
     // Sync with backend API on mount — backend data takes priority
     Promise.all([syncAllFromApi(), syncCollectionFromApi('nstp-student-roster'), syncCollectionFromApi('nstp-accounts', '?role=COORDINATOR'), syncCollectionFromApi('nstp-pending-student-registrations')]).then(() => {
@@ -206,15 +190,23 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
       setGradeRecords(loadGradeRecords());
       setAccountVersion((v) => v + 1);
     });
+    fetchProfileTemplates().then((collection) => {
+      setActiveProfileTemplate(collection.active);
+      setProfileTemplateVersions(collection.versions);
+      const editable = collection.latestDraft || collection.active;
+      setSavedProfileTemplateDraft(collection.latestDraft);
+      if (editable) {
+        setFormTemplate(validateProfileConfiguration(editable.configuration));
+        setProfileTemplateName(editable.name);
+      }
+      setProfileTemplateDirty(false);
+      setProfileTemplateError(null);
+    }).catch((error) => setProfileTemplateError(error instanceof Error ? error.message : 'Unable to load the official profile layout.'));
   }, []);
 
   useEffect(() => {
     setView(initialView);
   }, [initialView]);
-
-  useEffect(() => {
-    localStorage.setItem(FORM_TEMPLATE_KEY, JSON.stringify(formTemplate));
-  }, [formTemplate]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -516,8 +508,8 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     return [...ordered, ...missing];
   };
 
-  const getOfficialProfileRows = (profile: Partial<PendingStudentRegistration & NstpStudent>) => (
-    getTemplateFieldOrder().map((fieldKey) => [getProfileFieldLabel(fieldKey), getProfileFieldValue(profile, fieldKey)])
+  const getOfficialProfileRows = (profile: Partial<PendingStudentRegistration & NstpStudent>, template = formTemplate) => (
+    getTemplateFieldOrder(template).map((fieldKey) => [getProfileFieldLabel(fieldKey), getProfileFieldValue(profile, fieldKey)])
   );
 
   const getProfileFileName = (profile: Partial<PendingStudentRegistration & NstpStudent>, extension: 'pdf' | 'docx') => {
@@ -539,6 +531,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
 
   const updateFormTemplate = (field: keyof OfficialProfileTemplate, value: string | boolean | string[] | number) => {
     setFormTemplate((current) => ({ ...current, [field]: value }) as OfficialProfileTemplate);
+    setProfileTemplateDirty(true);
   };
 
   const clampHeaderCrop = (crop: typeof headerCrop) => {
@@ -559,23 +552,13 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const handleHeaderFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
-      window.alert('Please upload a PNG, JPG, or PDF file for the document header.');
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      window.alert('Please upload a PNG or JPG file for the document header.');
       event.target.value = '';
       return;
     }
-    if (file.type === 'application/pdf') {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setFormTemplate((current) => ({
-          ...current,
-          headerImageDataUrl: undefined,
-          headerImageName: file.name,
-        }));
-        window.alert('PDF header file recorded. For visual cropping and PDF embedding, upload a PNG or JPG header export.');
-        logAudit('Uploaded profile export PDF header reference', file.name);
-      };
-      reader.readAsDataURL(file);
+    if (file.size > 1_000_000) {
+      window.alert('Header images must be 1 MB or smaller.');
       event.target.value = '';
       return;
     }
@@ -610,6 +593,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
         headerImageDataUrl: canvas.toDataURL('image/png'),
         headerImageName: pendingHeaderCrop.name,
       }));
+      setProfileTemplateDirty(true);
       logAudit('Uploaded and cropped profile export header', pendingHeaderCrop.name);
       setPendingHeaderCrop(null);
     };
@@ -626,10 +610,11 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   };
 
   const exportFormTemplate = () => {
-    const blob = new Blob([JSON.stringify(formTemplate, null, 2)], { type: 'application/json' });
+    const backup = createTemplateBackup(validateProfileConfiguration(formTemplate), profileTemplateName);
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'nstp-profile-form-template.json';
+    link.download = 'nstp-profile-layout-backup.json';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -640,25 +625,108 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     const file = event.target.files?.[0];
     if (!file) return;
     try {
+      if (file.size > 1_000_000) throw new Error('Template backups must be 1 MB or smaller.');
       const text = await file.text();
-      const parsed = JSON.parse(text);
-      setFormTemplate({ ...DEFAULT_FORM_TEMPLATE, ...parsed });
-      logAudit('Imported profile form template', file.name);
-    } catch {
-      window.alert('Template import failed. Please upload a valid NSTP profile template JSON file.');
+      const parsed = parseTemplateBackup(JSON.parse(text));
+      setFormTemplate(parsed.configuration);
+      setProfileTemplateName(parsed.templateName);
+      setProfileTemplateDirty(true);
+      setProfileTemplateError(null);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Template import failed. Please upload a valid profile layout backup.');
     } finally {
       event.target.value = '';
     }
   };
 
+  const refreshProfileTemplateVersions = async (preferredId?: string) => {
+    const collection = await fetchProfileTemplates();
+    setActiveProfileTemplate(collection.active);
+    setProfileTemplateVersions(collection.versions);
+    const preferred = preferredId ? collection.versions.find((version) => version.id === preferredId) : null;
+    return preferred || collection.latestDraft || collection.active;
+  };
+
+  const saveProfileLayoutDraft = async () => {
+    setProfileTemplateSaving(true);
+    try {
+      const configuration = validateProfileConfiguration(formTemplate);
+      const saved = await saveProfileTemplateDraft(profileTemplateName.trim() || 'Official Student Profile', configuration);
+      await refreshProfileTemplateVersions(saved.id);
+      setSavedProfileTemplateDraft(saved);
+      setProfileTemplateDirty(false);
+      setProfileTemplateError(null);
+      toast.success(`Draft version ${saved.version} saved.`);
+      return saved;
+    } catch (error) {
+      setProfileTemplateError(error instanceof Error ? error.message : 'Unable to save the profile layout draft.');
+      return null;
+    } finally {
+      setProfileTemplateSaving(false);
+    }
+  };
+
+  const saveAndPublishProfileLayout = async () => {
+    setProfileTemplateSaving(true);
+    try {
+      const configuration = validateProfileConfiguration(formTemplate);
+      const draft = !profileTemplateDirty && savedProfileTemplateDraft
+        ? savedProfileTemplateDraft
+        : await saveProfileTemplateDraft(profileTemplateName.trim() || 'Official Student Profile', configuration);
+      setSavedProfileTemplateDraft(draft);
+      setProfileTemplateDirty(false);
+      const published = await publishProfileTemplate(draft.id);
+      await refreshProfileTemplateVersions(published.id);
+      setActiveProfileTemplate(published);
+      setSavedProfileTemplateDraft(null);
+      setFormTemplate(published.configuration);
+      setProfileTemplateDirty(false);
+      setProfileTemplateError(null);
+      toast.success(`Profile layout version ${published.version} is now active.`);
+    } catch (error) {
+      setProfileTemplateError(error instanceof Error ? error.message : 'Unable to publish the profile layout.');
+    } finally {
+      setProfileTemplateSaving(false);
+    }
+  };
+
+  const restoreProfileTemplateVersion = async (version: ProfileTemplateVersion) => {
+    setProfileTemplateSaving(true);
+    try {
+      const activated = await activateProfileTemplate(version.id);
+      await refreshProfileTemplateVersions(activated.id);
+      setActiveProfileTemplate(activated);
+      setSavedProfileTemplateDraft(null);
+      setFormTemplate(activated.configuration);
+      setProfileTemplateName(activated.name);
+      setProfileTemplateDirty(false);
+      setProfileTemplateError(null);
+      toast.success(`Version ${activated.version} restored as the active layout.`);
+    } catch (error) {
+      setProfileTemplateError(error instanceof Error ? error.message : 'Unable to restore this template version.');
+    } finally {
+      setProfileTemplateSaving(false);
+    }
+  };
+
+  const resetProfileLayout = () => {
+    if (!window.confirm('Restore the editor to the default profile layout? This will remain a draft until published.')) return;
+    setFormTemplate(DEFAULT_FORM_TEMPLATE);
+    setProfileTemplateName('Official Student Profile');
+    setProfileTemplateDirty(true);
+  };
+
   const printOfficialProfile = (profile: Partial<PendingStudentRegistration & NstpStudent>) => {
     const fullName = profile.name || [profile.firstName, profile.middleName, profile.surname].filter(Boolean).join(' ');
-    const rows = getOfficialProfileRows(profile);
-    const template = formTemplate;
+    const template = activeProfileTemplate?.configuration || DEFAULT_FORM_TEMPLATE;
+    const rows = getOfficialProfileRows(profile, template);
     const escapeHtml = (value: string) => String(value || '').replace(/[<>&"]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[char] || char));
     const layoutClass = template.layout === 'compact' ? 'compact' : template.layout === 'formal' ? 'formal' : 'classic';
     const win = window.open('', '_blank', 'width=900,height=1100');
     if (!win) return;
+    void recordProfileExport(String(profile.id || profile.studentId || 'unknown'), 'PRINT').catch(() => {
+      toast.error('The profile opened, but its export audit event could not be recorded.');
+    });
     const safeAccent = /^#[0-9a-fA-F]{3,8}$/.test(template.accentColor) ? template.accentColor : '#2563eb';
     win.document.write(`
       <html>
@@ -714,10 +782,15 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   };
 
   const exportOfficialProfilePdf = async (profile: Partial<PendingStudentRegistration & NstpStudent>) => {
+    try {
+      await recordProfileExport(String(profile.id || profile.studentId || 'unknown'), 'PDF');
+    } catch {
+      toast.error('The PDF export audit event could not be recorded.');
+    }
     const [jspdfModule, autoTableModule] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
     const JsPDF = jspdfModule.default;
     const autoTable = autoTableModule.default;
-    const template = formTemplate;
+    const template = activeProfileTemplate?.configuration || DEFAULT_FORM_TEMPLATE;
     const doc = new JsPDF({ unit: 'pt', format: template.pageSize || 'a4', orientation: template.orientation || 'portrait' });
     const fullName = profile.name || [profile.firstName, profile.middleName, profile.surname].filter(Boolean).join(' ');
     const accentRgb = hexToRgb(template.accentColor);
@@ -748,7 +821,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     autoTable(doc, {
       startY: tableY,
       head: [[template.fieldHeader, template.valueHeader]],
-      body: getOfficialProfileRows(profile),
+      body: getOfficialProfileRows(profile, template),
       styles: { fontSize: template.layout === 'compact' ? 9 : 10, cellPadding: tablePadding },
       headStyles: { fillColor: accentRgb },
       theme: template.showFieldBorders ? 'grid' : 'plain',
@@ -766,11 +839,16 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   };
 
   const exportOfficialProfileDocx = async (profile: Partial<PendingStudentRegistration & NstpStudent>) => {
+    try {
+      await recordProfileExport(String(profile.id || profile.studentId || 'unknown'), 'DOCX');
+    } catch {
+      toast.error('The DOCX export audit event could not be recorded.');
+    }
     const docx = await import('docx');
     const { AlignmentType, Document, ImageRun, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } = docx;
-    const rows = getOfficialProfileRows(profile);
+    const template = activeProfileTemplate?.configuration || DEFAULT_FORM_TEMPLATE;
+    const rows = getOfficialProfileRows(profile, template);
     const fullName = profile.name || [profile.firstName, profile.middleName, profile.surname].filter(Boolean).join(' ');
-    const template = formTemplate;
     const titleSize = template.layout === 'compact' ? 28 : 32;
     const afterHeader = template.layout === 'compact' ? 160 : template.layout === 'formal' ? 360 : 260;
     const headerNodes = template.headerImageDataUrl
@@ -1009,7 +1087,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
   const currentUserQuery = useCurrentUser();
   const adminProfile = currentUserQuery?.data?.data || null;
   const adminInitials = adminProfile?.name?.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() || 'AD';
-  const adminDisplayName = adminProfile?.data?.title || adminProfile?.name || 'Dr. Reynold Garcia Bustillo';
+  const adminDisplayName = adminProfile?.data?.title || adminProfile?.name || 'Dr. Reynold G. Bustillo';
   const adminDisplayRole = adminProfile?.data?.subtitle || 'NSTP Director';
 
   const updateFacilitatorMunicipality = (facilitatorId: string, municipality: BiliranMunicipality, checked: boolean) => {
@@ -1407,9 +1485,13 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
     <section className="space-y-5">
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 dark:border-slate-800 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-300">System Settings / Profile Export Layout</p>
-          <h2 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">Profile Export Layout</h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Design and customize the student profile PDF layout using drag and drop.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-300">System Settings / Student Profile Layout</p>
+          <h2 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">Student Profile Layout</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Create a draft, preview it, and publish a version used by official PDF, DOCX, and print exports.</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className={`rounded-full px-2.5 py-1 font-semibold ${profileTemplateDirty ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{profileTemplateDirty ? 'Unsaved changes' : 'Saved'}</span>
+            <span className="text-slate-500">Active version: {activeProfileTemplate ? `v${activeProfileTemplate.version}` : 'Default layout'}</span>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setPdfPreviewOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
@@ -1418,22 +1500,46 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
           </button>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
             <FileUp className="h-4 w-4" />
-            Import Template
+            Restore Layout Backup
             <input type="file" accept="application/json,.json" onChange={importFormTemplate} className="hidden" />
           </label>
           <button onClick={exportFormTemplate} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
             <FileDown className="h-4 w-4" />
-            Export Template
+            Download Layout Backup
           </button>
-          <button onClick={() => setFormTemplate(DEFAULT_FORM_TEMPLATE)} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-            Reset
+          <button onClick={resetProfileLayout} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            Restore Default Layout
           </button>
-          <button onClick={() => logAudit('Saved profile export template', 'Director updated export layout settings')} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-900/20 hover:bg-blue-800">
+          <button onClick={saveProfileLayoutDraft} disabled={profileTemplateSaving || !profileTemplateDirty} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-950 dark:text-blue-200">
             <Save className="h-4 w-4" />
-            Save Template
+            Save Draft
+          </button>
+          <button onClick={saveAndPublishProfileLayout} disabled={profileTemplateSaving} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-900/20 hover:bg-blue-800 disabled:opacity-50">
+            {profileTemplateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+            Save and Publish Layout
           </button>
         </div>
       </div>
+
+      {profileTemplateError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{profileTemplateError}</div>}
+
+      <section className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
+        <label className="space-y-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          <span>Layout name</span>
+          <input value={profileTemplateName} maxLength={120} onChange={(event) => { setProfileTemplateName(event.target.value); setProfileTemplateDirty(true); }} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900" />
+        </label>
+        <div>
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Published version history</p>
+          <div className="mt-2 flex max-h-28 flex-wrap gap-2 overflow-auto">
+            {profileTemplateVersions.filter((version) => version.status === 'PUBLISHED').map((version) => (
+              <button key={version.id} type="button" onClick={() => restoreProfileTemplateVersion(version)} disabled={version.isActive || profileTemplateSaving} className="rounded-xl border border-slate-200 px-3 py-2 text-left text-xs disabled:cursor-default disabled:bg-emerald-50 disabled:text-emerald-700 dark:border-slate-700">
+                <strong>v{version.version}</strong> · {version.name}{version.isActive ? ' · Active' : ' · Restore'}
+              </button>
+            ))}
+            {profileTemplateVersions.every((version) => version.status !== 'PUBLISHED') && <span className="text-xs text-slate-500">No published versions yet.</span>}
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-[18rem_minmax(820px,1fr)] 2xl:grid-cols-[20rem_minmax(980px,1fr)]">
         <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -1471,7 +1577,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 <p className="text-xs text-slate-500 dark:text-slate-400">Upload a header file that will appear at the top of every page.</p>
               </div>
               {formTemplate.headerImageDataUrl && (
-                <button onClick={() => setFormTemplate((current) => ({ ...current, headerImageDataUrl: undefined, headerImageName: undefined }))} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200">
+                <button onClick={() => { setFormTemplate((current) => ({ ...current, headerImageDataUrl: undefined, headerImageName: undefined })); setProfileTemplateDirty(true); }} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200">
                   <Trash2 className="inline h-4 w-4" />
                 </button>
               )}
@@ -1485,7 +1591,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 </span>
               </span>
               <span className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-blue-700 shadow-sm dark:bg-slate-950 dark:text-blue-200">Change File</span>
-              <input type="file" accept="image/png,image/jpeg,image/jpg,application/pdf,.pdf" onChange={handleHeaderFileUpload} className="hidden" />
+              <input type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={handleHeaderFileUpload} className="hidden" />
             </label>
           </section>
 
@@ -1599,18 +1705,18 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
         </aside>}
       </div>
 
-      <button onClick={() => setExportSettingsOpen(true)} className="fixed bottom-4 right-4 z-40 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-700 text-white shadow-2xl shadow-blue-900/30 transition hover:-translate-y-0.5 hover:bg-blue-800 max-sm:left-4 max-sm:w-auto sm:bottom-6 sm:right-6 sm:w-auto sm:px-5 lg:bottom-8 lg:right-8" title="Open template settings">
+      <button onClick={() => setExportSettingsOpen(true)} className="fixed bottom-4 right-4 z-40 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-700 text-white shadow-2xl shadow-blue-900/30 transition hover:-translate-y-0.5 hover:bg-blue-800 max-sm:left-4 max-sm:w-auto sm:bottom-6 sm:right-6 sm:w-auto sm:px-5 lg:bottom-8 lg:right-8" title="Open student profile layout settings">
         <Settings className="h-5 w-5" />
-        <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">Template Settings</span>
+        <span className="sr-only sm:not-sr-only sm:ml-2 sm:text-sm sm:font-semibold">Layout Settings</span>
       </button>
 
       {exportSettingsOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={() => setExportSettingsOpen(false)}>
-          <section onMouseDown={(event) => event.stopPropagation()} className="max-h-[92dvh] w-full max-w-3xl overflow-auto rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+          <section role="dialog" aria-modal="true" aria-labelledby="profile-layout-dialog-title" onMouseDown={(event) => event.stopPropagation()} className="max-h-[92dvh] w-full max-w-3xl overflow-auto rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
             <div className="mb-5 flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Template Settings</p>
-                <h3 className="text-2xl font-semibold text-slate-950 dark:text-white">Export Controls</h3>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">Student Profile Layout</p>
+                <h3 id="profile-layout-dialog-title" className="text-2xl font-semibold text-slate-950 dark:text-white">Layout controls</h3>
               </div>
               <button onClick={() => setExportSettingsOpen(false)} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300"><X className="h-4 w-4" /></button>
             </div>
@@ -1661,6 +1767,15 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                 <input type="checkbox" checked={formTemplate.repeatHeader ?? true} onChange={(event) => updateFormTemplate('repeatHeader', event.target.checked)} />
                 Repeat header on each page
               </label>
+              {profileTemplateError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">{profileTemplateError}</p>}
+              <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-white pt-4 dark:border-slate-800 dark:bg-slate-950">
+                <button type="button" disabled={profileTemplateSaving || !profileTemplateDirty} onClick={saveProfileLayoutDraft} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200">
+                  {profileTemplateSaving ? 'Saving…' : 'Save Draft'}
+                </button>
+                <button type="button" disabled={profileTemplateSaving} onClick={saveAndPublishProfileLayout} className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 hover:bg-blue-800">
+                  {profileTemplateSaving ? 'Publishing…' : 'Save and Publish'}
+                </button>
+              </div>
             </div>
           </section>
         </div>
@@ -1798,7 +1913,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     { label: 'Assessments', icon: ClipboardList, onClick: () => setView('assessments'), active: view === 'assessments' },
                     { label: 'Grades', icon: Award, onClick: () => setView('assignments'), active: view === 'assignments' },
                     { label: 'Reports', icon: BarChart3, onClick: () => setView('tools'), active: view === 'tools' },
-                    { label: 'Export Templates', icon: FileDown, onClick: () => setView('exports'), active: view === 'exports' },
+                    { label: 'Student Profile Layout', icon: FileDown, onClick: () => setView('exports'), active: view === 'exports' },
                     { label: 'Account Settings', icon: UserCog, onClick: () => setView('account'), active: view === 'account' },
                     { label: 'Settings', icon: Settings, onClick: () => setView('settings'), active: view === 'settings' },
                   ],
@@ -1864,7 +1979,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                   ) : (
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">Signed in</p>
-                      <p className="mt-2 font-semibold text-slate-950 dark:text-white">Dr. Reynold Garcia Bustillo</p>
+                      <p className="mt-2 font-semibold text-slate-950 dark:text-white">Dr. Reynold G. Bustillo</p>
                       <button onClick={() => setView('settings')} className="mt-3 w-full rounded-xl bg-blue-50 p-3 text-left text-sm font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">System Settings</button>
                       <button onClick={onLogout} className="mt-2 w-full rounded-xl bg-rose-50 p-3 text-left text-sm font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-200">Logout</button>
                     </div>
@@ -2672,7 +2787,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                           { label: 'Notification Digest', value: noticeDigest ? 'Director alerts enabled' : 'Digest disabled', icon: Bell, action: () => setNoticeDigest((state) => !state) },
                           { label: 'Auto Municipality Routing', value: autoAssignMunicipality ? 'Students route by municipality' : 'Manual review required', icon: Building2, action: () => setAutoAssignMunicipality((state) => !state) },
                           { label: 'Compact Cards', value: compactAdminCards ? 'Dense dashboard cards' : 'Comfortable dashboard spacing', icon: BarChart3, action: () => setCompactAdminCards((state) => !state) },
-                          { label: 'Profile Export Layout', value: 'Open full-screen PDF/DOCX builder', icon: FileDown, action: () => setView('exports') },
+                          { label: 'Student Profile Layout', value: 'Open the versioned PDF/DOCX layout editor', icon: FileDown, action: () => setView('exports') },
                           { label: 'Notice Center', value: 'Open announcements workspace', icon: Mail, action: () => onNavigateApp?.('announcements') },
                         ].map((setting) => {
                           const Icon = setting.icon;
@@ -2713,21 +2828,21 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Official Form Template</p>
-                          <h3 className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">Profile Export Layout</h3>
+                          <h3 className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">Student Profile Layout</h3>
                           <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">Change the header, academic period, signatories, layout style, and colors used by printed forms, PDF downloads, and DOCX downloads. Student data fields stay the same.</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-500/30 dark:bg-slate-950 dark:text-blue-200">
                             <FileUp className="h-4 w-4" />
-                            Import Template
+                            Restore Layout Backup
                             <input type="file" accept="application/json,.json" onChange={importFormTemplate} className="hidden" />
                           </label>
                           <button onClick={exportFormTemplate} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
                             <FileDown className="h-4 w-4" />
-                            Export Template
+                            Download Layout Backup
                           </button>
-                          <button onClick={() => setFormTemplate(DEFAULT_FORM_TEMPLATE)} className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-                            Reset
+                          <button onClick={resetProfileLayout} className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+                            Restore Default Layout
                           </button>
                         </div>
                       </div>
@@ -2764,7 +2879,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                                 <p className="text-xs text-slate-500 dark:text-slate-400">Upload a school header image that appears at the top of every exported profile.</p>
                               </div>
                               {formTemplate.headerImageDataUrl && (
-                                <button onClick={() => setFormTemplate((current) => ({ ...current, headerImageDataUrl: undefined, headerImageName: undefined }))} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200">
+                                <button onClick={() => { setFormTemplate((current) => ({ ...current, headerImageDataUrl: undefined, headerImageName: undefined })); setProfileTemplateDirty(true); }} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-200">
                                   Remove
                                 </button>
                               )}
