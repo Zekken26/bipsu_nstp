@@ -1791,6 +1791,7 @@ export default function AdminDashboard({ initialView = 'overview', onNavigateApp
                     { label: 'Dashboard', icon: Home, onClick: () => setView('overview'), active: view === 'overview' },
                     { label: 'Student Approvals', icon: UserCheck, onClick: () => setView('enrollment'), active: view === 'enrollment' },
                     { label: 'Coordinators', icon: UserCog, onClick: () => setView('coordinators'), active: view === 'coordinators' },
+                    { label: 'Facilitators', icon: Users, onClick: () => setView('facilitators'), active: view === 'facilitators' },
                     { label: 'NSTP Components', icon: Building2, onClick: () => setView('municipalities'), active: view === 'municipalities' },
                     { label: 'Students', icon: GraduationCap, onClick: () => setView('students'), active: view === 'students' },
                     { label: 'Modules', icon: BookOpen, onClick: () => setView('modules'), active: view === 'modules' },
