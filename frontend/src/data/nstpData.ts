@@ -422,6 +422,14 @@ export async function syncCollectionFromApi(localKey: string, query = ''): Promi
     return;
   }
   const apiData = await apiGet<any[]>(`/nstp/admin/${collection}`);
+  if (collection === 'modules') {
+    // Modules are official academic records. Replace the client snapshot with
+    // the exact database response, including an empty collection, so stale or
+    // failed client-only creations can never remain visible as real modules.
+    writeSensitive(localKey, JSON.stringify(Array.isArray(apiData) ? apiData : []));
+    window.dispatchEvent(new CustomEvent('nstp-modules-updated'));
+    return;
+  }
   if (collection === 'pending-registrations') {
     writeSensitive(localKey, JSON.stringify(Array.isArray(apiData) ? apiData : []));
     return;
@@ -669,11 +677,16 @@ export function loadModules(): NstpModule[] {
 
 export async function saveModules(modules: NstpModule[]): Promise<boolean> {
   if (typeof window === 'undefined') return false;
+  const previous = readSensitive(MODULES_KEY);
   const versioned = incrementVersions(modules);
   writeSensitive(MODULES_KEY, JSON.stringify(versioned));
   window.dispatchEvent(new CustomEvent('nstp-modules-updated'));
   const ok = await syncToApi(MODULES_KEY, versioned);
-  if (!ok) addToPendingSync(MODULES_KEY, versioned);
+  if (!ok) {
+    if (previous === null) removeSensitive(MODULES_KEY);
+    else writeSensitive(MODULES_KEY, previous);
+    window.dispatchEvent(new CustomEvent('nstp-modules-updated'));
+  }
   return ok;
 }
 

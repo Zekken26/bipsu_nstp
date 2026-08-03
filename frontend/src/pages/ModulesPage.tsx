@@ -16,19 +16,27 @@ export default function ModulesPage({ user, role = 'student', onBack }: { user: 
   const [editorDraft, setEditorDraft] = useState<NstpModule | null>(null);
 
   useEffect(() => {
-    const storedModules = loadModules();
-    setModules(storedModules);
-    const savedVisibility = safeJsonParse<Record<string, boolean>>(localStorage.getItem(MODULE_VISIBILITY_KEY), {});
-    const visibilityDefaults = storedModules.reduce<Record<string, boolean>>((acc, module) => {
-      acc[module.id] = savedVisibility[module.id] ?? true;
-      return acc;
-    }, {});
-    setModuleVisibility(visibilityDefaults);
-    localStorage.setItem(MODULE_VISIBILITY_KEY, JSON.stringify(visibilityDefaults));
-    if (storedModules.length > 0) {
-      setSelectedModuleId(storedModules[0].id);
-      setEditorDraft(storedModules[0]);
-    }
+    const reloadModules = () => {
+      const storedModules = loadModules();
+      setModules(storedModules);
+      const savedVisibility = safeJsonParse<Record<string, boolean>>(localStorage.getItem(MODULE_VISIBILITY_KEY), {});
+      const visibilityDefaults = storedModules.reduce<Record<string, boolean>>((acc, module) => {
+        acc[module.id] = savedVisibility[module.id] ?? true;
+        return acc;
+      }, {});
+      setModuleVisibility(visibilityDefaults);
+      localStorage.setItem(MODULE_VISIBILITY_KEY, JSON.stringify(visibilityDefaults));
+      setSelectedModuleId((current) => current && storedModules.some((module) => module.id === current)
+        ? current
+        : storedModules[0]?.id || null);
+      setEditorDraft((current) => current && storedModules.some((module) => module.id === current.id)
+        ? storedModules.find((module) => module.id === current.id) || null
+        : storedModules[0] || null);
+    };
+
+    reloadModules();
+    window.addEventListener('nstp-modules-updated', reloadModules);
+    return () => window.removeEventListener('nstp-modules-updated', reloadModules);
   }, []);
 
   useEffect(() => {
