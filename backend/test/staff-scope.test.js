@@ -98,6 +98,13 @@ test('migration backfills broad coordinator scopes and facilitator component own
   expectText(migration, '"municipalities" TEXT[]');
 });
 
+test('pre-migration orphan reporting skips relationship columns not yet deployed', async () => {
+  const report = await readFile(new URL('../scripts/report-orphans.mjs', import.meta.url), 'utf8');
+  expectText(report, 'information_schema.columns');
+  expectText(report, 'availableColumns.has(`${child}.${column}`)');
+  expectText(report, 'skippedChecks.push');
+});
+
 function expectText(source, text) {
   assert.equal(source.includes(text), true, `Expected migration to contain ${text}`);
 }

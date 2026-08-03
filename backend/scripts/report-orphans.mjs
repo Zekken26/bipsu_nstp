@@ -8,10 +8,17 @@ const prisma = new PrismaClient();
 try {
   const tables = await prisma.$queryRaw`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`;
   const available = new Set(tables.map(({ tablename }) => tablename));
+  const columns = await prisma.$queryRaw`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'`;
+  const availableColumns = new Set(columns.map(({ table_name, column_name }) => `${table_name}.${column_name}`));
   const findings = [];
   const warnings = [];
+  const skippedChecks = [];
   for (const [child, column, parent] of checks) {
     if (!available.has(child) || !available.has(parent)) continue;
+    if (!availableColumns.has(`${child}.${column}`)) {
+      skippedChecks.push({ relation: `${child}.${column} -> ${parent}.id`, reason: 'Column is not present in the current schema.' });
+      continue;
+    }
     const sample = await prisma.$queryRawUnsafe(`SELECT c."id", c."${column}" FROM "${child}" c LEFT JOIN "${parent}" p ON p."id" = c."${column}" WHERE c."${column}" IS NOT NULL AND p."id" IS NULL ORDER BY c."id" LIMIT 100`);
     if (sample.length) findings.push({ relation: `${child}.${column} -> ${parent}.id`, count: sample.length, sample });
   }
@@ -27,6 +34,6 @@ try {
       sample: embeddedQuestionDefinitions,
     });
   }
-  console.log(JSON.stringify({ checkedAt: new Date().toISOString(), findings, warnings }, null, 2));
+  console.log(JSON.stringify({ checkedAt: new Date().toISOString(), findings, warnings, skippedChecks }, null, 2));
   if (findings.length) process.exitCode = 1;
 } finally { await prisma.$disconnect(); }
