@@ -5,11 +5,10 @@ const schoolYear = z.string().regex(/^\d{4}-\d{4}$/, 'School year must use YYYY-
   return end === start + 1;
 }, 'School year must span exactly one year.');
 
-const gradeValues = {
-  percentGrade: z.number().int().min(0).max(100),
-  numericalGrade: z.number().min(1).max(5).multipleOf(0.1),
-  remarks: z.string().trim().max(500).optional(),
-};
+const gradeInput = z.object({
+  inputType: z.enum(['PERCENT', 'NUMERICAL']),
+  inputValue: z.number().finite(),
+}).strict();
 
 export const createSemesterGradeSchema = z.object({
   body: z.object({
@@ -17,14 +16,16 @@ export const createSemesterGradeSchema = z.object({
     componentId: z.string().trim().min(1).max(200),
     schoolYear,
     semester: z.enum(['FIRST', 'SECOND']),
-    ...gradeValues,
+    gradeInput,
+    remarks: z.string().trim().max(500).optional(),
   }).strict(),
   params: z.object({}).optional(),
   query: z.object({}).optional(),
 });
 
 export const updateSemesterGradeSchema = z.object({
-  body: z.object(gradeValues).partial().strict().refine((value) => Object.keys(value).length > 0, 'At least one grade field is required.'),
+  body: z.object({ gradeInput: gradeInput.optional(), remarks: z.string().trim().max(500).optional() }).strict()
+    .refine((value) => Object.keys(value).length > 0, 'At least one grade field is required.'),
   params: z.object({ id: z.string().trim().min(1).max(200) }),
   query: z.object({}).optional(),
 });
@@ -68,7 +69,8 @@ export const instructorSemesterGradeSchema = z.object({
     studentId: z.string().trim().min(1).max(200),
     schoolYear,
     semester: z.enum(['FIRST', 'SECOND']),
-    ...gradeValues,
+    gradeInput,
+    remarks: z.string().trim().max(500).optional(),
   }).strict(),
   params: z.object({ classId: z.string().trim().min(1).max(200) }),
   query: z.object({}).optional(),

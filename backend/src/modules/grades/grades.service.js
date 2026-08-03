@@ -1,5 +1,5 @@
 import prisma from '../../db/prisma.js';
-import { evaluateGrade } from './grade.policy.js';
+import { evaluateGrade, resolveGradeInput } from './grade.policy.js';
 
 const gradeInclude = {
   student: { select: { id: true, studentNumber: true, user: { select: { name: true, email: true } } } },
@@ -26,9 +26,29 @@ async function withGradeDatabase(operation) {
 }
 
 function dto(grade) {
+  let conversion = null;
+  if (grade.inputType && grade.inputValue !== null && grade.inputValue !== undefined) {
+    conversion = resolveGradeInput(grade.inputType, Number(grade.inputValue));
+  }
   return {
     ...grade,
+    inputValue: grade.inputValue === null || grade.inputValue === undefined ? null : Number(grade.inputValue),
+    percentGrade: grade.percentGrade === null || grade.percentGrade === undefined ? null : Number(grade.percentGrade),
     numericalGrade: grade.numericalGrade === null || grade.numericalGrade === undefined ? null : Number(grade.numericalGrade),
+    percentEquivalent: conversion?.percentEquivalent || (grade.percentGrade === null || grade.percentGrade === undefined ? '—' : `${grade.percentGrade}%`),
+    numericalEquivalent: conversion?.numericalEquivalent || (grade.numericalGrade === null || grade.numericalGrade === undefined ? '—' : Number(grade.numericalGrade).toFixed(1)),
+  };
+}
+
+function convertedGradeData(gradeInput) {
+  const conversion = resolveGradeInput(gradeInput.inputType, gradeInput.inputValue);
+  return {
+    inputType: conversion.inputType,
+    inputValue: conversion.inputValue,
+    gradeScaleVersion: conversion.gradeScaleVersion,
+    percentGrade: conversion.percentGrade,
+    numericalGrade: conversion.numericalGrade,
+    classification: conversion.classification,
   };
 }
 
@@ -143,12 +163,13 @@ async function requireStudentComponent(client, studentId, componentId) {
 }
 
 export async function createSemesterGrade(actorId, payload) {
-  const classification = evaluateGrade(payload.percentGrade, payload.numericalGrade);
+  const { gradeInput, ...identityAndRemarks } = payload;
+  const converted = convertedGradeData(gradeInput);
   return withGradeDatabase(() => prisma.$transaction(async (tx) => {
     await requireStudentComponent(tx, payload.studentId, payload.componentId);
     const existing = await tx.grade.findUnique({ where: gradeIdentity(payload), select: { id: true } });
     if (existing) throw httpError('A grade already exists for this student, component, school year, and semester.', 409);
-    const grade = await tx.grade.create({ data: { ...payload, classification, createdById: actorId, updatedById: actorId }, include: gradeInclude });
+    const grade = await tx.grade.create({ data: { ...identityAndRemarks, ...converted, createdById: actorId, updatedById: actorId }, include: gradeInclude });
     await audit(tx, actorId, 'SEMESTER_GRADE_CREATED', { gradeId: grade.id, studentId: grade.studentId, schoolYear: grade.schoolYear, semester: grade.semester });
     return dto(grade);
   }));
@@ -159,14 +180,13 @@ export async function updateSemesterGrade(actorId, id, patch, scope = {}) {
     const existing = await tx.grade.findFirst({ where: { id, ...(scope.componentIds ? { componentId: { in: scope.componentIds } } : {}) } });
     if (!existing || !existing.semester || !existing.schoolYear) throw httpError('Semester grade not found.', 404);
     if (existing.isReleased) throw httpError('Return the grade to hold before editing it.', 409);
-    const percentGrade = patch.percentGrade ?? existing.percentGrade;
-    const numericalGrade = patch.numericalGrade ?? Number(existing.numericalGrade);
-    const classification = evaluateGrade(percentGrade, numericalGrade);
-    const grade = await tx.grade.update({ where: { id }, data: { ...patch, classification, updatedById: actorId }, include: gradeInclude });
+    const { gradeInput, ...otherPatch } = patch;
+    const converted = gradeInput ? convertedGradeData(gradeInput) : {};
+    const grade = await tx.grade.update({ where: { id }, data: { ...otherPatch, ...converted, updatedById: actorId }, include: gradeInclude });
     await audit(tx, actorId, 'SEMESTER_GRADE_UPDATED', {
-      gradeId: id,
-      previous: { percentGrade: existing.percentGrade, numericalGrade: Number(existing.numericalGrade), classification: existing.classification, remarks: existing.remarks },
-      next: { percentGrade, numericalGrade, classification, remarks: grade.remarks },
+      gradeId: id, gradeScaleVersion: grade.gradeScaleVersion,
+      previous: { inputType: existing.inputType, inputValue: existing.inputValue === null ? null : Number(existing.inputValue), percentGrade: existing.percentGrade, numericalGrade: existing.numericalGrade === null ? null : Number(existing.numericalGrade), classification: existing.classification, remarks: existing.remarks },
+      next: { inputType: grade.inputType, inputValue: grade.inputValue === null ? null : Number(grade.inputValue), percentGrade: grade.percentGrade, numericalGrade: grade.numericalGrade === null ? null : Number(grade.numericalGrade), classification: grade.classification, remarks: grade.remarks },
     });
     return dto(grade);
   }));
@@ -177,7 +197,8 @@ export async function releaseSemesterGrade(actorId, id) {
     const existing = await tx.grade.findUnique({ where: { id } });
     if (!existing || !existing.semester || !existing.schoolYear) throw httpError('Semester grade not found.', 404);
     if (existing.isReleased) throw httpError('Grade is already released.', 409);
-    evaluateGrade(existing.percentGrade, Number(existing.numericalGrade));
+    if (existing.inputType && existing.inputValue !== null) resolveGradeInput(existing.inputType, Number(existing.inputValue));
+    else evaluateGrade(existing.percentGrade, Number(existing.numericalGrade));
     const enrollment = await tx.enrollment.findFirst({ where: { studentId: existing.studentId, componentId: existing.componentId, status: 'ACTIVE' }, select: { id: true } });
     if (!enrollment) throw httpError('An active enrollment is required before releasing this grade.', 409);
     const grade = await tx.grade.update({ where: { id }, data: { isReleased: true, releasedAt: new Date(), releasedById: actorId, updatedById: actorId }, include: gradeInclude });
@@ -199,14 +220,15 @@ export async function holdSemesterGrade(actorId, id) {
 
 export async function saveInstructorSemesterGrade(actorId, instructor, section, payload) {
   if (!instructor.componentId || instructor.componentId !== section.componentId) throw httpError('Your facilitator component does not match this class.', 403);
-  const values = { ...payload, componentId: section.componentId };
-  const classification = evaluateGrade(values.percentGrade, values.numericalGrade);
+  const { gradeInput, ...identityAndRemarks } = payload;
+  const values = { ...identityAndRemarks, componentId: section.componentId };
+  const converted = convertedGradeData(gradeInput);
   return withGradeDatabase(() => prisma.$transaction(async (tx) => {
     const existing = await tx.grade.findUnique({ where: gradeIdentity(values) });
     if (existing?.isReleased) throw httpError('Released grades cannot be changed by a facilitator.', 403);
     const grade = existing
-      ? await tx.grade.update({ where: { id: existing.id }, data: { percentGrade: values.percentGrade, numericalGrade: values.numericalGrade, classification, remarks: values.remarks, updatedById: actorId }, include: gradeInclude })
-      : await tx.grade.create({ data: { ...values, classification, createdById: actorId, updatedById: actorId }, include: gradeInclude });
+      ? await tx.grade.update({ where: { id: existing.id }, data: { ...converted, remarks: values.remarks, updatedById: actorId }, include: gradeInclude })
+      : await tx.grade.create({ data: { ...values, ...converted, createdById: actorId, updatedById: actorId }, include: gradeInclude });
     await audit(tx, actorId, existing ? 'FACILITATOR_SEMESTER_GRADE_UPDATED' : 'FACILITATOR_SEMESTER_GRADE_CREATED', { gradeId: grade.id, studentId: grade.studentId, classId: section.id });
     return dto(grade);
   }));

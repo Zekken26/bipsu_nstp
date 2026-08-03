@@ -7,8 +7,9 @@ import { apiGet } from '../services/apiClient';
 import { getCurrentAcademicYear } from '../utils/academicYear';
 
 type OfficialGrade = {
-  id: string; schoolYear: string; semester: 'FIRST' | 'SECOND'; percentGrade: number;
-  numericalGrade: number; classification: string; remarks?: string | null; isReleased: boolean; releasedAt?: string | null;
+  id: string; schoolYear: string; semester: 'FIRST' | 'SECOND'; percentGrade: number | null;
+  numericalGrade: number | null; percentEquivalent: string; numericalEquivalent: string;
+  classification: string; remarks?: string | null; isReleased: boolean; releasedAt?: string | null;
 };
 type Attempt = { quizId: string | null; score: number | null };
 
@@ -111,7 +112,7 @@ export default function GradesPage({ user }: { user: any }) {
               return <div key={String(label)} className="rounded-xl border border-slate-200 bg-white/75 p-4 dark:border-slate-700 dark:bg-slate-900/70">
                 <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{String(label)}</p>
                 {semesterGrade ? <>
-                  <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{semesterGrade.percentGrade}% <span className="text-base font-semibold text-blue-700">({semesterGrade.numericalGrade.toFixed(1)})</span></p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{semesterGrade.percentEquivalent} <span className="text-base font-semibold text-blue-700">({semesterGrade.numericalEquivalent})</span></p>
                   <p className="mt-1 text-xs font-semibold text-emerald-700">{semesterGrade.classification.replace(/_/g, ' ')}</p>
                   {semesterGrade.remarks && <p className="mt-1 text-xs text-slate-500">{semesterGrade.remarks}</p>}
                 </> : <p className="mt-2 text-sm font-semibold text-amber-700">Pending official release</p>}

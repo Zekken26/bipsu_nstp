@@ -98,6 +98,11 @@ enum GradeClassification {
   FAILED
 }
 
+enum GradeInputType {
+  PERCENT
+  NUMERICAL
+}
+
 model User {
   id                 String              @id @default(cuid())
   name               String
@@ -413,6 +418,9 @@ model Grade {
   percentGrade Float?
   numericalGrade Decimal?             @db.Decimal(2, 1)
   classification GradeClassification?
+  inputType GradeInputType?
+  inputValue Decimal?                  @db.Decimal(5, 2)
+  gradeScaleVersion String?
   score        Float?
   prelim       Float?
   midterm      Float?

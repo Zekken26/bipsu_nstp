@@ -1,14 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { previewClassification } from '../services/grades';
+import { previewGradeConversion } from '../services/grades';
 
 describe('semester grade workflow', () => {
-  it('previews the approved grading bands without accepting incompatible pairs', () => {
-    expect(previewClassification(95, 1)).toBe('EXCELLENT');
-    expect(previewClassification(92, 1.3)).toBe('OUTSTANDING');
-    expect(previewClassification(75, 3)).toBe('POOR');
-    expect(previewClassification(70, 5)).toBe('FAILED');
-    expect(previewClassification(92, 2)).toBeNull();
+  it('previews server-compatible BiPSU conversion from either input format', () => {
+    expect(previewGradeConversion('PERCENT', 90)).toEqual({ percentEquivalent: '90%', numericalEquivalent: '1.5', classification: 'OUTSTANDING' });
+    expect(previewGradeConversion('NUMERICAL', 1.3)).toEqual({ percentEquivalent: '92%', numericalEquivalent: '1.3', classification: 'OUTSTANDING' });
+    expect(previewGradeConversion('PERCENT', 72)).toEqual({ percentEquivalent: '72%', numericalEquivalent: '3.1–4.0', classification: 'CONDITIONAL' });
+    expect(previewGradeConversion('NUMERICAL', 3.5)).toEqual({ percentEquivalent: '71–74%', numericalEquivalent: '3.5', classification: 'CONDITIONAL' });
+    expect(previewGradeConversion('NUMERICAL', 4.5)).toBeNull();
   });
 
   it('uses a dedicated Admin grade screen with two semester choices and explicit saving', async () => {
@@ -19,6 +19,8 @@ describe('semester grade workflow', () => {
     expect(grades).toContain('Save Draft');
     expect(grades).toContain('Release');
     expect(grades).toContain('fetchAdminGradeRoster');
+    expect(grades).toContain('Automatic conversion');
+    expect(grades).toContain('gradeInput');
     expect(grades).not.toContain('prelim');
   });
 
