@@ -793,11 +793,6 @@
   min-height: 2.75rem;
 }
 
-:where(input:not([type='checkbox']):not([type='radio']), select, textarea):focus {
-  border-color: #0b4ea2;
-  box-shadow: 0 0 0 3px rgba(11, 78, 162, 0.18);
-}
-
 :where(.bg-gradient-to-r, .bg-gradient-to-br).from-blue-700,
 :where(.bg-gradient-to-r, .bg-gradient-to-br).from-\[\#06245c\],
 :where(.bg-gradient-to-r, .bg-gradient-to-br).from-\[\#0b4ea2\] {
